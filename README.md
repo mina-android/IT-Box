@@ -9,7 +9,7 @@
 [![Flutter](https://img.shields.io/badge/Flutter-3.3%2B-02569B?logo=flutter&logoColor=white)](https://flutter.dev)
 [![Dart](https://img.shields.io/badge/Dart-3.3%2B-0175C2?logo=dart&logoColor=white)](https://dart.dev)
 [![Android](https://img.shields.io/badge/Android-12%2B-3DDC84?logo=android&logoColor=white)](https://android.com)
-[![Version](https://img.shields.io/badge/Version-1.0.1-brightgreen)](https://github.com/mina-android/ITbox/releases)
+[![Version](https://img.shields.io/badge/Version-1.0.1-brightgreen)](https://github.com/mina-android/IT-Box/releases)
 [![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE)
 
 **IT Box** is a clean, fast, and fully offline inventory management app for IT departments, built with Flutter.  
@@ -99,8 +99,6 @@ Most inventory tools are web-based, require logins, or sync to the cloud. IT Box
 ---
 
 ## Screenshots
-
-> Place your screenshots in `screenshots/` with the filenames below.
 
 | Home | Inventory | Log |
 |------|-----------|-----|
@@ -204,7 +202,7 @@ Output: `build/app/outputs/flutter-apk/app-arm64-v8a-release.apk`
 
 ## Installation
 
-1. Go to [**Releases**](https://github.com/mina-android/ITbox/releases)
+1. Go to [**Releases**](https://github.com/mina-android/IT-Box/releases)
 2. Download `app-release.apk`
 3. On your phone: **Settings → Security → Install Unknown Apps** → enable for your file manager
 4. Open the APK and install
