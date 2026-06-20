@@ -4,9 +4,7 @@ import '../network_devices/network_devices_screen.dart';
 import '../mifis/mifis_screen.dart';
 import '../printers/printers_screen.dart';
 import '../electronics/electronics_screen.dart';
-import '../../services/theme_service.dart';
 import '../../services/company_service.dart';
-import '../settings/settings_screen.dart';
 
 class InventoryScreen extends StatefulWidget {
   const InventoryScreen({super.key});
@@ -28,12 +26,6 @@ class _InventoryScreenState extends State<InventoryScreen>
     return Scaffold(
       appBar: AppBar(
         title: Text(title, overflow: TextOverflow.ellipsis),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.settings_outlined),
-            onPressed: () => Navigator.push(context, MaterialPageRoute(
-              builder: (_) => SettingsScreen(themeService: ThemeService())))),
-        ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(56),
           child: TabBar(

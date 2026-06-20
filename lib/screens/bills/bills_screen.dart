@@ -2,9 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../database/database_helper.dart';
 import '../../models/bill.dart';
-import '../../services/theme_service.dart';
 import '../../widgets/common_widgets.dart';
-import '../settings/settings_screen.dart';
 import 'bill_form_screen.dart';
 
 const _billColor = Color(0xFF7C3AED);
@@ -109,17 +107,6 @@ class _BillsScreenState extends State<BillsScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Bills'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.settings_outlined),
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => SettingsScreen(themeService: ThemeService()),
-              ),
-            ),
-          ),
-        ],
       ),
       body: Column(
         children: [

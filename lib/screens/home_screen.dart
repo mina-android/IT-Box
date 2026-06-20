@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import '../services/theme_service.dart';
 import 'borrowed/borrowed_screen.dart';
 import 'expenses/expenses_screen.dart';
-import 'employees/employees_screen.dart';
 import 'inventory/inventory_screen.dart';
-import 'bills/bills_screen.dart';
 import 'emails/emails_screen.dart';
+import 'logs/logs_screen.dart';
+import 'more_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final ThemeService themeService;
@@ -17,22 +17,22 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _idx = 0;
 
-  static const _labels = ['Borrowed', 'Expenses', 'Employees', 'Inventory', 'Bills', 'Emails'];
-  static const _icons  = [
+  static const _labels = ['Borrowed', 'Expenses', 'Inventory', 'Emails', 'Log', 'More'];
+  static const _icons = [
     Icons.swap_horiz_outlined,
     Icons.receipt_long_outlined,
-    Icons.people_outline,
     Icons.inventory_2_outlined,
-    Icons.receipt_outlined,
     Icons.email_outlined,
+    Icons.history_outlined,
+    Icons.grid_view_outlined,
   ];
   static const _activeIcons = [
     Icons.swap_horiz,
     Icons.receipt_long,
-    Icons.people,
     Icons.inventory_2,
-    Icons.receipt,
     Icons.email,
+    Icons.history,
+    Icons.grid_view,
   ];
 
   @override
@@ -40,13 +40,13 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       body: IndexedStack(
         index: _idx,
-        children: const [
-          BorrowedScreen(),
-          ExpensesScreen(),
-          EmployeesScreen(),
-          InventoryScreen(),
-          BillsScreen(),
-          EmailsScreen(),
+        children: [
+          const BorrowedScreen(),
+          const ExpensesScreen(),
+          const InventoryScreen(),
+          const EmailsScreen(),
+          const LogsScreen(),
+          MoreScreen(themeService: widget.themeService),
         ],
       ),
       bottomNavigationBar: NavigationBar(

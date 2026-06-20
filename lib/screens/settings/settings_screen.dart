@@ -1,10 +1,8 @@
 import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../database/database_helper.dart';
-import '../../models/expense.dart';
 import '../../services/theme_service.dart';
 import '../../services/company_service.dart';
 import '../../services/excel_service.dart';
@@ -46,7 +44,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     try {
       final json = await _db.exportJson();
       final ts = DateTime.now().toString().replaceAll(RegExp(r'[: .]'), '-').substring(0, 19);
-      final fileName = 'inventorya_backup_$ts.json';
+      final fileName = 'itbox_backup_$ts.json';
 
       String? outputPath;
       try {
@@ -112,6 +110,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ['#', 'Person', 'Number', 'Category', 'Price (EGP)', 'Notes']),
     ('Email Accounts',  'email_accounts',  Icons.email_outlined,
       ['#', 'Employee', 'Email', 'Password']),
+    ('Log',             'log_entries',     Icons.history_outlined,
+      ['#', 'Date', 'Employee', 'Problem', 'Solution']),
   ];
 
   Future<void> _exportDevices() async {
@@ -142,7 +142,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final rows = _buildRows(def.$2, rawRows);
       await ExcelService.exportTable(
         sheetName: def.$1,
-        headers: def.$4 as List<String>,
+        headers: def.$4,
         rows: rows,
         fileLabel: def.$1.replaceAll(' ', '_'),
       );
@@ -165,6 +165,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'employees'       => [i, r['name'], r['phone_number']],
         'bills'           => [i, r['person'], r['number'], r['category'], r['price'], r['notes']],
         'email_accounts'  => [i, r['employee_name'], r['email'], '(hidden)'],
+        'log_entries'     => [i, r['date'], r['employee_name'], r['problem'], r['solution'] ?? ''],
         _                 => [i, ...r.values],
       };
     }).toList();
@@ -251,6 +252,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     ('Employees',       Icons.people_outline),
     ('Bills',           Icons.receipt_outlined),
     ('Email Accounts',  Icons.email_outlined),
+    ('Log',             Icons.history_outlined),
   ];
 
   Future<void> _importDevices() async {
@@ -264,7 +266,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const Text('Select Category to Import',
               style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
           const SizedBox(height: 4),
-          Text('Pick an Excel (.xlsx) file exported from Inventorya\nor following the same column format.',
+          Text('Pick an Excel (.xlsx) file exported from IT Box\nor following the same column format.',
               style: TextStyle(fontSize: 12, color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.5)),
               textAlign: TextAlign.center),
           const SizedBox(height: 14),
@@ -311,7 +313,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final database = await _db.db;
       final tableMap = [
         'laptops', 'network_devices', 'mifis', 'printers',
-        'electronics', 'employees', 'bills', 'email_accounts',
+        'electronics', 'employees', 'bills', 'email_accounts', 'log_entries',
       ];
       await database.delete(tableMap[categoryIdx]);
     }
@@ -328,6 +330,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         5 => await ExcelImportService.importEmployees(excel),
         6 => await ExcelImportService.importBills(excel),
         7 => await ExcelImportService.importEmailAccounts(excel),
+        8 => await ExcelImportService.importLogEntries(excel),
         _ => const ImportResult(inserted: 0, skipped: 0),
       };
     } catch (e) {
@@ -435,6 +438,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 _SC(icon: Icons.receipt_outlined,        label: 'Bills',       count: _counts['bills'] ?? 0,           color: const Color(0xFF7C3AED)),
                 _SC(icon: Icons.email_outlined,          label: 'Emails',      count: _counts['email_accounts'] ?? 0,  color: const Color(0xFF0EA5E9)),
                 _SC(icon: Icons.swap_horiz_outlined,     label: 'Borrowed',    count: _counts['active_borrows'] ?? 0,  color: AppColors.borrowed),
+                _SC(icon: Icons.history_outlined,         label: 'Log',         count: _counts['log_entries'] ?? 0,     color: const Color(0xFF6366F1)),
               ]),
             ),
             const SizedBox(height: 20),
@@ -476,7 +480,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 8),
           const _H('EXPORT'),
           _T(icon: Icons.table_chart_outlined, color: Colors.teal,
-            title: 'Export Devices', subtitle: 'Export a device category to Excel (.xlsx)',
+            title: 'Export', subtitle: 'Export a category to Excel (.xlsx)',
             onTap: _exportDevices),
           _T(icon: Icons.receipt_long_outlined, color: const Color(0xFF10B981),
             title: 'Export Expenses', subtitle: 'Export expenses by date range to Excel',
@@ -486,7 +490,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 8),
           const _H('IMPORT'),
           _T(icon: Icons.upload_file_outlined, color: const Color(0xFF3B82F6),
-            title: 'Import Devices', subtitle: 'Import from Excel — Laptops, Network, MiFis, Printers, Electronics, Employees, Bills, Emails',
+            title: 'Import', subtitle: 'Import from Excel — Laptops, Network, MiFis, Printers, Electronics, Employees, Bills, Emails, Log',
             onTap: _importDevices),
           _T(icon: Icons.playlist_add_outlined, color: const Color(0xFF10B981),
             title: 'Import Expenses', subtitle: 'Import expenses from an Excel file',
@@ -514,8 +518,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   child: Icon(Icons.inventory_2_outlined, size: 34,
                       color: theme.colorScheme.primary)))),
             const SizedBox(height: 8),
-            Text('Inventorya', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
-            Text('v1.0.0 · com.ma.inventorya', style: theme.textTheme.bodySmall?.copyWith(
+            Text('IT Box', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+            Text('v1.0.1 · com.ma.itbox', style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurface.withValues(alpha: 0.4))),
           ])),
           const SizedBox(height: 24),

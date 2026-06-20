@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../database/database_helper.dart';
 import '../../models/email_account.dart';
-import '../../services/theme_service.dart';
 import '../../widgets/common_widgets.dart';
-import '../settings/settings_screen.dart';
 import 'email_form_screen.dart';
 
 const _emailColor = Color(0xFF0EA5E9);
@@ -96,12 +94,6 @@ class _State extends State<EmailsScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Emails'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.settings_outlined),
-            onPressed: () => Navigator.push(context, MaterialPageRoute(
-              builder: (_) => SettingsScreen(themeService: ThemeService())))),
-        ],
       ),
       body: Column(children: [
         SearchBar2(controller: _search, hint: 'Search email or employee...'),

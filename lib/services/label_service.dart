@@ -81,7 +81,7 @@ class LabelService {
     final bytes = await pdf.save();
     final dir = await getTemporaryDirectory();
     final safeTitle = title.replaceAll(RegExp(r'[^a-zA-Z0-9_]'), '_');
-    final file = File('${dir.path}/inventorya_$safeTitle.pdf');
+    final file = File('${dir.path}/itbox_$safeTitle.pdf');
     await file.writeAsBytes(bytes);
 
     // Share via system share sheet

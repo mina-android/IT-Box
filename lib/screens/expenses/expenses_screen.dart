@@ -2,9 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../database/database_helper.dart';
 import '../../models/expense.dart';
-import '../../services/theme_service.dart';
 import '../../widgets/common_widgets.dart';
-import '../settings/settings_screen.dart';
 import 'expense_form_screen.dart';
 
 const _expenseColor = Color(0xFF10B981);
@@ -118,10 +116,6 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                 onChanged: (y) { if (y != null) _loadYear(y); },
               ),
             ),
-          IconButton(
-            icon: const Icon(Icons.settings_outlined),
-            onPressed: () => Navigator.push(context, MaterialPageRoute(
-              builder: (_) => SettingsScreen(themeService: ThemeService())))),
         ],
       ),
       body: _loading

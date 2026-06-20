@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../database/database_helper.dart';
 import '../../models/employee.dart';
-import '../../services/theme_service.dart';
 import '../../widgets/common_widgets.dart';
-import '../settings/settings_screen.dart';
 import 'employee_form_screen.dart';
 
 class EmployeesScreen extends StatefulWidget {
@@ -61,14 +59,6 @@ class _State extends State<EmployeesScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Employees'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.settings_outlined),
-            tooltip: 'Settings',
-            onPressed: () => Navigator.push(context, MaterialPageRoute(
-              builder: (_) => SettingsScreen(themeService: ThemeService()))),
-          ),
-        ],
       ),
       body: Column(children: [
         SearchBar2(controller: _search, hint: 'Search by name or phone...'),

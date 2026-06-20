@@ -34,17 +34,26 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             padding: const EdgeInsets.all(32),
             child: Column(mainAxisSize: MainAxisSize.min, children: [
               // Logo
-              Container(
-                width: 96, height: 96,
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.primary.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(28),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(24),
+                child: Image.asset(
+                  'assets/icon/app_icon.png',
+                  width: 96,
+                  height: 96,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => Container(
+                    width: 96, height: 96,
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primary.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(28),
+                    ),
+                    child: Icon(Icons.inventory_2_outlined,
+                        size: 52, color: theme.colorScheme.primary),
+                  ),
                 ),
-                child: Icon(Icons.inventory_2_outlined,
-                    size: 52, color: theme.colorScheme.primary),
               ),
               const SizedBox(height: 28),
-              Text('Welcome to Inventorya',
+              Text('Welcome to IT Box',
                   style: theme.textTheme.headlineSmall?.copyWith(
                       fontWeight: FontWeight.w900),
                   textAlign: TextAlign.center),

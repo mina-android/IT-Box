@@ -12,16 +12,16 @@ void main() async {
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(statusBarColor: Colors.transparent));
   // Pre-load services
   await CompanyService().load();
-  runApp(const InventoryaApp());
+  runApp(const ITBoxApp());
 }
 
-class InventoryaApp extends StatefulWidget {
-  const InventoryaApp({super.key});
+class ITBoxApp extends StatefulWidget {
+  const ITBoxApp({super.key});
   @override
-  State<InventoryaApp> createState() => _InventoryaAppState();
+  State<ITBoxApp> createState() => _ITBoxAppState();
 }
 
-class _InventoryaAppState extends State<InventoryaApp> {
+class _ITBoxAppState extends State<ITBoxApp> {
   final ThemeService _theme = ThemeService();
   bool _onboarded = CompanyService().onboarded;
 
@@ -41,7 +41,7 @@ class _InventoryaAppState extends State<InventoryaApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Inventorya',
+      title: 'IT Box',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),

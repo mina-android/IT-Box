@@ -10,6 +10,7 @@ import '../models/employee.dart';
 import '../models/bill.dart';
 import '../models/expense.dart';
 import '../models/email_account.dart';
+import '../models/log_entry.dart';
 
 /// Result of an import operation
 class ImportResult {
@@ -237,7 +238,6 @@ class ExcelImportService {
     final rows = _rows(sheet);
     int inserted = 0, skipped = 0;
     final errors = <String>[];
-    final validCats = Bill.categories.map((c) => c.toLowerCase()).toList();
 
     for (var i = 0; i < rows.length; i++) {
       final row = rows[i];
@@ -359,5 +359,35 @@ class ExcelImportService {
   static String _today() {
     final n = DateTime.now();
     return '${n.year}-${n.month.toString().padLeft(2,'0')}-${n.day.toString().padLeft(2,'0')}';
+  }
+
+  // ── LOG ENTRIES ───────────────────────────────────────────────
+  // Columns: Date, Employee, Problem, Solution
+  static Future<ImportResult> importLogEntries(Excel excel) async {
+    final sheet = excel.sheets.values.first;
+    final rows = _rows(sheet);
+    int inserted = 0, skipped = 0;
+    final errors = <String>[];
+
+    for (var i = 0; i < rows.length; i++) {
+      final row = rows[i];
+      try {
+        final date     = _normalizeDate(_str(row.isNotEmpty ? row[0] : null));
+        final employee = _str(row.length > 1 ? row[1] : null);
+        final problem  = _str(row.length > 2 ? row[2] : null);
+        if (problem.isEmpty) { skipped++; continue; }
+        final solution = _str(row.length > 3 ? row[3] : null);
+
+        final e = LogEntry(
+          date:         date,
+          employeeName: employee,
+          problem:      problem,
+          solution:     solution,
+        );
+        await _db.insertLogEntry(e);
+        inserted++;
+      } catch (e) { errors.add('Row ${i + 2}: $e'); skipped++; }
+    }
+    return ImportResult(inserted: inserted, skipped: skipped, errors: errors);
   }
 }

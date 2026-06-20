@@ -11,6 +11,7 @@ import '../models/mifi.dart';
 import '../models/expense.dart';
 import '../models/bill.dart';
 import '../models/email_account.dart';
+import '../models/log_entry.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper _i = DatabaseHelper._();
@@ -21,8 +22,8 @@ class DatabaseHelper {
   Future<Database> get db async { _db ??= await _open(); return _db!; }
 
   Future<Database> _open() async {
-    final path = p.join(await getDatabasesPath(), 'inventorya.db');
-    return openDatabase(path, version: 5, onCreate: _create, onUpgrade: _upgrade,
+    final path = p.join(await getDatabasesPath(), 'itbox.db');
+    return openDatabase(path, version: 6, onCreate: _create, onUpgrade: _upgrade,
       onConfigure: (db) async => db.execute('PRAGMA foreign_keys = ON'));
   }
 
@@ -58,6 +59,9 @@ class DatabaseHelper {
       price REAL DEFAULT 0.0,notes TEXT DEFAULT '')''');
     await db.execute('''CREATE TABLE email_accounts(id INTEGER PRIMARY KEY AUTOINCREMENT,
       employee_id INTEGER,employee_name TEXT DEFAULT '',email TEXT NOT NULL,password TEXT NOT NULL)''');
+    await db.execute('''CREATE TABLE log_entries(id INTEGER PRIMARY KEY AUTOINCREMENT,
+      date TEXT NOT NULL,employee_id INTEGER,employee_name TEXT DEFAULT '',
+      problem TEXT NOT NULL,solution TEXT DEFAULT '')''');
   }
 
   Future<void> _upgrade(Database db, int old, int next) async {
@@ -105,6 +109,11 @@ class DatabaseHelper {
       } catch (_) {
         // Table may not have had date column (fresh v4 install) — no-op
       }
+    }
+    if (old < 6) {
+      await db.execute('''CREATE TABLE IF NOT EXISTS log_entries(id INTEGER PRIMARY KEY AUTOINCREMENT,
+        date TEXT NOT NULL,employee_id INTEGER,employee_name TEXT DEFAULT '',
+        problem TEXT NOT NULL,solution TEXT DEFAULT '')''');
     }
   }
 
@@ -232,6 +241,27 @@ class DatabaseHelper {
   Future<int> deleteEmailAccount(int id) async =>
     (await db).delete('email_accounts',where:'id=?',whereArgs:[id]);
 
+  // Log Entries
+  Future<int> insertLogEntry(LogEntry e) async => (await db).insert('log_entries', e.toMap());
+  Future<List<LogEntry>> getLogEntries() async =>
+    ((await db).query('log_entries', orderBy: 'date DESC,id DESC')).then((r) => r.map(LogEntry.fromMap).toList());
+  Future<List<LogEntry>> getLogEntriesByYear(int year) async =>
+    ((await db).query('log_entries', where: "date LIKE '$year%'", orderBy: 'date DESC,id DESC'))
+      .then((r) => r.map(LogEntry.fromMap).toList());
+  Future<List<LogEntry>> getLogEntriesByMonth(int year, int month) async {
+    final prefix = '$year-${month.toString().padLeft(2, '0')}';
+    return ((await db).query('log_entries', where: "date LIKE '$prefix%'", orderBy: 'date DESC,id DESC'))
+      .then((r) => r.map(LogEntry.fromMap).toList());
+  }
+  Future<List<int>> getLogYears() async {
+    final rows = await (await db).rawQuery("SELECT DISTINCT substr(date,1,4) as y FROM log_entries ORDER BY y DESC");
+    return rows.map((r) => int.tryParse(r['y'] as String? ?? '') ?? 0).where((y) => y > 0).toList();
+  }
+  Future<int> updateLogEntry(LogEntry e) async =>
+    (await db).update('log_entries', e.toMap(), where: 'id=?', whereArgs: [e.id]);
+  Future<int> deleteLogEntry(int id) async =>
+    (await db).delete('log_entries', where: 'id=?', whereArgs: [id]);
+
   // Backup / Restore
   Future<String> exportJson() async {
     final database = await db;
@@ -247,6 +277,7 @@ class DatabaseHelper {
       'expenses':await database.query('expenses'),
       'bills':await database.query('bills'),
       'email_accounts':await database.query('email_accounts'),
+      'log_entries':await database.query('log_entries'),
     });
   }
 
@@ -255,7 +286,7 @@ class DatabaseHelper {
     final database = await db;
     await database.transaction((txn) async {
       for (final t in ['borrow_logs','laptops','network_devices','printers',
-          'electronics','employees','mifis','expenses','bills','email_accounts']) {
+          'electronics','employees','mifis','expenses','bills','email_accounts','log_entries']) {
         await txn.delete(t);
         final rows = data[t] as List<dynamic>? ?? [];
         for (final row in rows) {
@@ -279,6 +310,7 @@ class DatabaseHelper {
       'bills':c(await database.rawQuery('SELECT COUNT(*) FROM bills')),
       'email_accounts':c(await database.rawQuery('SELECT COUNT(*) FROM email_accounts')),
       'active_borrows':c(await database.rawQuery('SELECT COUNT(*) FROM borrow_logs WHERE is_returned=0')),
+      'log_entries':c(await database.rawQuery('SELECT COUNT(*) FROM log_entries')),
     };
   }
 }

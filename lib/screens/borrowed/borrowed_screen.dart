@@ -2,10 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../database/database_helper.dart';
 import '../../models/borrow_log.dart';
-import '../../services/theme_service.dart';
 import '../../widgets/common_widgets.dart';
 import '../../theme/app_theme.dart';
-import '../settings/settings_screen.dart';
 import 'add_borrow_screen.dart';
 
 class BorrowedScreen extends StatefulWidget {
@@ -69,12 +67,6 @@ class _BorrowedScreenState extends State<BorrowedScreen>
     return Scaffold(
       appBar: AppBar(
         title: const Text('Borrowed Devices'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.settings_outlined),
-            onPressed: () => Navigator.push(context, MaterialPageRoute(
-              builder: (_) => SettingsScreen(themeService: ThemeService())))),
-        ],
         bottom: TabBar(
           controller: _tabs,
           tabs: [
