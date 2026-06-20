@@ -1,24 +1,13 @@
 # Changelog
 
 All notable changes to IT Box are documented here.
-This project follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) conventions.
 
 > IT Box is the continuation of **Inventorya**. Version 1.0.0 documents the original Inventorya release; 1.0.1 covers the rename and rebranding; the Unreleased section tracks work in progress.
 
 ---
 
-## [Unreleased]
 
-### Added
-- **Log tab** — IT issue log with Date, User (employee dropdown), Problem, and Solution fields
-- **Import Log** — Import log entries from Excel (.xlsx) with Append or Replace mode
-- **Export Log** — Export log entries to Excel (.xlsx)
-- Import dialog now includes a **Log** category (formerly "Import Devices")
-- Export dialog now includes a **Log** category (formerly "Export Devices")
-
----
-
-## [1.0.1] — 2026-05-24 *(Inventorya → IT Box)*
+## [1.0.1] — 2026-06-20 *(Inventorya → IT Box)*
 
 ### Changed
 - **App renamed** from Inventorya to **IT Box**
@@ -32,6 +21,7 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) co
 - Settings label "Import Devices" renamed to **Import**
 - Import hint text updated to reference IT Box instead of Inventorya
 - About section updated to reflect new app name and package
+- 
 
 ### Added
 - **More screen** (new bottom tab) — hub for Employees, Bills, and Settings, replacing the individual bottom-bar entries for those sections
@@ -45,6 +35,12 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) co
 - Full **backup/restore coverage** for `log_entries` (included in JSON backup, counted in backup stats)
 - `ExcelImportService.importLogEntries()` — parses Date, Employee, Problem, Solution columns; skips blank problem rows; reports per-row errors
 - Export support for `log_entries` in `ExcelService` (columns: #, Date, Employee, Problem, Solution)
+- **Log tab** — IT issue log with Date, User (employee dropdown), Problem, and Solution fields
+- **Import Log** — Import log entries from Excel (.xlsx) with Append or Replace mode
+- **Export Log** — Export log entries to Excel (.xlsx)
+- Import dialog now includes a **Log** category (formerly "Import Devices")
+- Export dialog now includes a **Log** category (formerly "Export Devices")
+
 
 ### Technical
 - **Database schema version:** 6 (up from 5)
