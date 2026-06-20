@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/icon/app_icon.png" alt="IT Box Logo" width="120" height="120" style="border-radius: 24px"/>
+<img src="assets/icon/app_icon_raw.png" alt="IT Box Logo" width="120" height="120" style="border-radius: 24px"/>
 
 # IT Box
 
