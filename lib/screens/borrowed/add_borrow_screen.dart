@@ -5,6 +5,7 @@ import '../../models/borrow_log.dart';
 import '../../models/electronic.dart';
 import '../../models/mifi.dart';
 import '../../models/employee.dart';
+import '../../services/notification_service.dart';
 import '../../widgets/common_widgets.dart';
 import '../../theme/app_theme.dart';
 
@@ -28,6 +29,7 @@ class _State extends State<AddBorrowScreen> {
   MiFi?       _selMi;
   Employee?   _selEmp;
   DateTime    _outDate = DateTime.now();
+  DateTime?   _dueDate;
   final _reason = TextEditingController();
 
   @override
@@ -54,6 +56,17 @@ class _State extends State<AddBorrowScreen> {
       firstDate: DateTime(2020),
       lastDate: DateTime.now().add(const Duration(days: 365)));
     if (picked != null && mounted) setState(() => _outDate = picked);
+  }
+
+  Future<void> _pickDueDate() async {
+    final initial = _dueDate ?? _outDate.add(const Duration(days: 7));
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: _outDate,
+      lastDate: DateTime.now().add(const Duration(days: 1000)),
+    );
+    if (picked != null && mounted) setState(() => _dueDate = picked);
   }
 
   Future<void> _save() async {
@@ -96,8 +109,17 @@ class _State extends State<AddBorrowScreen> {
         employeeName: _selEmp!.name,
         reason:       _reason.text.trim(),
         outDate:      DateFormat('yyyy-MM-dd').format(_outDate),
+        dueDate:      _dueDate != null ? DateFormat('yyyy-MM-dd').format(_dueDate!) : null,
       );
-      await _db.insertBorrowLog(log);
+      final id = await _db.insertBorrowLog(log);
+      if (_dueDate != null) {
+        await NotificationService().scheduleOverdueReminder(
+          borrowId: id,
+          deviceName: deviceName,
+          employeeName: _selEmp!.name,
+          dueDate: _dueDate!,
+        );
+      }
       if (!mounted) return;
       showSnack(context, 'Borrow entry saved');
       Navigator.pop(context, true);
@@ -249,6 +271,36 @@ class _State extends State<AddBorrowScreen> {
                   child: Text(
                     DateFormat('dd MMMM yyyy').format(_outDate),
                     style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500)),
+                ),
+              ),
+
+              const SectionLabel('DUE DATE (OPTIONAL)'),
+              InkWell(
+                onTap: _pickDueDate,
+                borderRadius: BorderRadius.circular(12),
+                child: InputDecorator(
+                  decoration: InputDecoration(
+                    prefixIcon: const Icon(Icons.event_busy_outlined),
+                    labelText: 'Due Date / Expected Return',
+                    suffixIcon: _dueDate != null
+                        ? IconButton(
+                            icon: const Icon(Icons.clear, size: 18),
+                            onPressed: () => setState(() => _dueDate = null),
+                          )
+                        : null,
+                  ),
+                  child: Text(
+                    _dueDate != null
+                        ? DateFormat('dd MMMM yyyy').format(_dueDate!)
+                        : 'No due date set (Tap to set)',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: _dueDate != null ? FontWeight.w600 : FontWeight.w400,
+                      color: _dueDate != null
+                          ? theme.colorScheme.onSurface
+                          : theme.colorScheme.onSurface.withValues(alpha: 0.45),
+                    ),
+                  ),
                 ),
               ),
 

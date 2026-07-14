@@ -129,7 +129,9 @@ class AppTheme {
 
   static PageTransitionsTheme get _fastTransitions => const PageTransitionsTheme(
     builders: {
-      TargetPlatform.android: FadeUpwardsPageTransitionsBuilder(),
+      TargetPlatform.android: ZoomPageTransitionsBuilder(
+        allowEnterRouteSnapshotting: false,
+      ),
       TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
     },
   );

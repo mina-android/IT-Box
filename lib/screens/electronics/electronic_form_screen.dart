@@ -27,7 +27,11 @@ class _State extends State<ElectronicFormScreen> {
     setState(() => _saving = true);
     try {
       final e = Electronic(id: widget.electronic?.id, deviceNumber: _num.text.trim(), deviceName: _name.text.trim(), details: _details.text.trim(), status: widget.electronic?.status ?? 'Available');
-      if (widget.electronic == null) await _db.insertElectronic(e); else await _db.updateElectronic(e);
+      if (widget.electronic == null) {
+        await _db.insertElectronic(e);
+      } else {
+        await _db.updateElectronic(e);
+      }
       if (!mounted) { return; }
       Navigator.pop(context, true);
     } catch (e) { if (!mounted) { return; }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../database/database_helper.dart';
 import '../../models/email_account.dart';
 import '../../widgets/common_widgets.dart';
@@ -70,6 +71,14 @@ class _State extends State<EmailsScreen> {
                 if (acc.employeeName.isNotEmpty)
                   Text(acc.employeeName, style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5))),
               ])),
+              IconButton(
+                icon: const Icon(Icons.copy_outlined, size: 20, color: _emailColor),
+                tooltip: 'Copy Email',
+                onPressed: () {
+                  Clipboard.setData(ClipboardData(text: acc.email));
+                  showSnack(ctx, 'Email copied to clipboard');
+                },
+              ),
               IconButton(icon: const Icon(Icons.edit_outlined), onPressed: () { Navigator.pop(ctx); _openForm(acc); }),
               IconButton(icon: Icon(Icons.delete_outline, color: Theme.of(context).colorScheme.error), onPressed: () { Navigator.pop(ctx); _delete(acc); }),
             ]),
@@ -81,6 +90,14 @@ class _State extends State<EmailsScreen> {
               Expanded(child: Text(showPass ? acc.password : '••••••••', style: const TextStyle(fontWeight: FontWeight.w500))),
               GestureDetector(onTap: () => setS(() => showPass = !showPass),
                 child: Icon(showPass ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 18, color: Colors.grey)),
+              const SizedBox(width: 12),
+              GestureDetector(
+                onTap: () {
+                  Clipboard.setData(ClipboardData(text: acc.password));
+                  showSnack(ctx, 'Password copied to clipboard');
+                },
+                child: const Icon(Icons.copy_outlined, size: 18, color: _emailColor),
+              ),
             ]),
           ]),
         ),
@@ -100,7 +117,7 @@ class _State extends State<EmailsScreen> {
         Expanded(
           child: _loading ? const Center(child: CircularProgressIndicator())
             : _filtered.isEmpty
-              ? EmptyState(icon: Icons.email_outlined, title: 'No Emails', subtitle: 'Tap + to add an email account')
+              ? const EmptyState(icon: Icons.email_outlined, title: 'No Emails', subtitle: 'Tap + to add an email account')
               : RefreshIndicator(
                   onRefresh: _load,
                   child: ListView.builder(
@@ -120,7 +137,27 @@ class _State extends State<EmailsScreen> {
                                 const SizedBox(width: 4),
                                 Text(acc.employeeName, style: const TextStyle(fontSize: 12))])
                             : Text('No employee linked', style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurface.withValues(alpha: 0.4))),
-                          trailing: const Icon(Icons.key_outlined, color: Colors.grey, size: 18),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.copy_outlined, size: 18, color: Colors.grey),
+                                tooltip: 'Copy Email',
+                                onPressed: () {
+                                  Clipboard.setData(ClipboardData(text: acc.email));
+                                  showSnack(context, 'Email copied to clipboard');
+                                },
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.key_outlined, color: _emailColor, size: 18),
+                                tooltip: 'Copy Password',
+                                onPressed: () {
+                                  Clipboard.setData(ClipboardData(text: acc.password));
+                                  showSnack(context, 'Password copied to clipboard');
+                                },
+                              ),
+                            ],
+                          ),
                         ),
                       );
                     },

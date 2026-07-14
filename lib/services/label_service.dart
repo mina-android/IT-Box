@@ -8,6 +8,7 @@ import 'package:share_plus/share_plus.dart';
 class LabelService {
   /// Generates a 3-column label PDF and opens the share sheet.
   /// Uses only [pdf] + [share_plus] — no [printing] dependency needed.
+  /// Labels may contain '\n' for two-line labels (e.g. device number + phone).
   static Future<void> printLabels({
     required List<String> labels,
     required String title,
@@ -53,21 +54,59 @@ class LabelService {
               return pw.TableRow(
                 children: row.map((cell) {
                   final isEmpty = cell.isEmpty;
+                  final hasSecondLine = cell.contains('\n');
                   return pw.Container(
                     height: 55,
                     alignment: pw.Alignment.center,
                     padding: const pw.EdgeInsets.all(6),
                     color: isEmpty ? PdfColors.grey100 : PdfColors.white,
-                    child: pw.Text(
-                      isEmpty ? '—' : cell,
-                      style: pw.TextStyle(
-                        fontSize: isEmpty ? 10 : 12,
-                        fontWeight: pw.FontWeight.bold,
-                        color: isEmpty ? PdfColors.grey400 : PdfColors.black,
-                        letterSpacing: 0.3,
-                      ),
-                      textAlign: pw.TextAlign.center,
-                    ),
+                    child: isEmpty
+                        ? pw.Text(
+                            '—',
+                            style: pw.TextStyle(
+                              fontSize: 10,
+                              fontWeight: pw.FontWeight.bold,
+                              color: PdfColors.grey400,
+                              letterSpacing: 0.3,
+                            ),
+                            textAlign: pw.TextAlign.center,
+                          )
+                        : hasSecondLine
+                            ? pw.Column(
+                                mainAxisAlignment: pw.MainAxisAlignment.center,
+                                children: [
+                                  pw.Text(
+                                    cell.split('\n')[0],
+                                    style: pw.TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: pw.FontWeight.bold,
+                                      color: PdfColors.black,
+                                      letterSpacing: 0.3,
+                                    ),
+                                    textAlign: pw.TextAlign.center,
+                                  ),
+                                  pw.SizedBox(height: 2),
+                                  pw.Text(
+                                    cell.split('\n')[1],
+                                    style: pw.TextStyle(
+                                      fontSize: 9,
+                                      fontWeight: pw.FontWeight.normal,
+                                      color: PdfColors.grey700,
+                                    ),
+                                    textAlign: pw.TextAlign.center,
+                                  ),
+                                ],
+                              )
+                            : pw.Text(
+                                cell,
+                                style: pw.TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: pw.FontWeight.bold,
+                                  color: PdfColors.black,
+                                  letterSpacing: 0.3,
+                                ),
+                                textAlign: pw.TextAlign.center,
+                              ),
                   );
                 }).toList(),
               );

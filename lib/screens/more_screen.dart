@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../services/theme_service.dart';
 import 'employees/employees_screen.dart';
 import 'bills/bills_screen.dart';
+import 'subscriptions/subscriptions_screen.dart';
+import 'emails/emails_screen.dart';
 import 'settings/settings_screen.dart';
 
 class MoreScreen extends StatelessWidget {
@@ -15,7 +17,7 @@ class MoreScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
         children: [
-          _SectionLabel('MANAGEMENT'),
+          const _SectionLabel('MANAGEMENT'),
           _NavCard(
             icon: Icons.people_outline,
             activeIcon: Icons.people,
@@ -35,8 +37,28 @@ class MoreScreen extends StatelessWidget {
             onTap: () => Navigator.push(context,
               MaterialPageRoute(builder: (_) => const BillsScreen())),
           ),
+          const SizedBox(height: 10),
+          _NavCard(
+            icon: Icons.subscriptions_outlined,
+            activeIcon: Icons.subscriptions,
+            color: const Color(0xFFE11D48),
+            title: 'Subscriptions',
+            subtitle: 'Manage recurring services & software licenses',
+            onTap: () => Navigator.push(context,
+              MaterialPageRoute(builder: (_) => const SubscriptionsScreen())),
+          ),
+          const SizedBox(height: 10),
+          _NavCard(
+            icon: Icons.email_outlined,
+            activeIcon: Icons.email,
+            color: const Color(0xFF3B82F6),
+            title: 'Emails',
+            subtitle: 'Employee company email accounts & passwords',
+            onTap: () => Navigator.push(context,
+              MaterialPageRoute(builder: (_) => const EmailsScreen())),
+          ),
           const SizedBox(height: 24),
-          _SectionLabel('APP'),
+          const _SectionLabel('APP'),
           _NavCard(
             icon: Icons.settings_outlined,
             activeIcon: Icons.settings,

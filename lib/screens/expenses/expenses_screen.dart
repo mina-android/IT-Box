@@ -1,7 +1,10 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:fl_chart/fl_chart.dart';
 import '../../database/database_helper.dart';
 import '../../models/expense.dart';
+import '../../services/pdf_report_service.dart';
 import '../../widgets/common_widgets.dart';
 import 'expense_form_screen.dart';
 
@@ -22,6 +25,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
 
   double _monthlyTotal = 0;
   double _yearlyTotal = 0;
+  List<double> _monthlyTrend = List.filled(12, 0.0);
   Map<String, List<Expense>> _grouped = {};
   List<String> _monthKeys = [];
 
@@ -56,17 +60,32 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     final curMonth = '${now.year}-${now.month.toString().padLeft(2, '0')}';
     final curYear = '${now.year}';
     _monthlyTotal = 0; _yearlyTotal = 0; _grouped = {};
+    _monthlyTrend = List.filled(12, 0.0);
 
     for (final e in _expenses) {
       if (e.date.startsWith(curMonth)) _monthlyTotal += e.price;
       if (e.date.startsWith(curYear))  _yearlyTotal  += e.price;
       try {
         final d = DateTime.parse(e.date);
+        if (d.year == (_selectedYear ?? now.year)) {
+          _monthlyTrend[d.month - 1] += e.price;
+        }
         final key = DateFormat('MMMM yyyy').format(d);
         _grouped.putIfAbsent(key, () => []).add(e);
       } catch (_) {}
     }
     _monthKeys = _grouped.keys.toList();
+  }
+
+  Future<void> _exportPdfReport() async {
+    final bills = await _db.getBills();
+    final subs = await _db.getSubscriptions();
+    await PdfReportService.generateAndShareMonthlyReport(
+      periodLabel: '${_selectedYear ?? DateTime.now().year}',
+      expenses: _expenses,
+      bills: bills,
+      subscriptions: subs,
+    );
   }
 
   Future<void> _openForm([Expense? e]) async {
@@ -101,6 +120,11 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
       appBar: AppBar(
         title: const Text('Expenses'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.picture_as_pdf_outlined),
+            tooltip: 'Export Financial PDF Report',
+            onPressed: _exportPdfReport,
+          ),
           // Year selector
           if (allYears.isNotEmpty)
             Padding(
@@ -127,12 +151,18 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                  child: Row(children: [
-                    Expanded(child: _SummaryCard(label: 'This Month', amount: _monthlyTotal,
-                      icon: Icons.calendar_today_outlined, color: _expenseColor)),
-                    const SizedBox(width: 12),
-                    Expanded(child: _SummaryCard(label: '$_selectedYear Total', amount: _yearlyTotal,
-                      icon: Icons.calendar_month_outlined, color: theme.colorScheme.primary)),
+                  child: Column(children: [
+                    Row(children: [
+                      Expanded(child: _SummaryCard(label: 'This Month', amount: _monthlyTotal,
+                        icon: Icons.calendar_today_outlined, color: _expenseColor)),
+                      const SizedBox(width: 12),
+                      Expanded(child: _SummaryCard(label: '$_selectedYear Total', amount: _yearlyTotal,
+                        icon: Icons.calendar_month_outlined, color: theme.colorScheme.primary)),
+                    ]),
+                    if (_expenses.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      _MonthlyChartCard(monthlyTrend: _monthlyTrend, year: _selectedYear ?? DateTime.now().year),
+                    ],
                   ]),
                 ),
               ),
@@ -218,4 +248,95 @@ class _SummaryCard extends StatelessWidget {
       Text('EGP', style: TextStyle(fontSize: 10, color: color.withValues(alpha: 0.7), fontWeight: FontWeight.w600)),
     ]),
   );
+}
+
+class _MonthlyChartCard extends StatelessWidget {
+  final List<double> monthlyTrend;
+  final int year;
+  const _MonthlyChartCard({required this.monthlyTrend, required this.year});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final maxVal = monthlyTrend.fold(0.0, (m, v) => max(m, v));
+    final maxY = (maxVal * 1.25).clamp(100.0, double.infinity);
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: theme.colorScheme.outlineVariant.withValues(alpha: 0.4)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          Row(children: [
+            const Icon(Icons.bar_chart, size: 18, color: _expenseColor),
+            const SizedBox(width: 6),
+            Text('$year Monthly Trend', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
+          ]),
+          Text('Max: ${NumberFormat('#,##0').format(maxVal)} EGP', style: TextStyle(fontSize: 11, color: theme.colorScheme.onSurface.withValues(alpha: 0.5))),
+        ]),
+        const SizedBox(height: 18),
+        SizedBox(
+          height: 140,
+          child: BarChart(
+            BarChartData(
+              alignment: BarChartAlignment.spaceAround,
+              maxY: maxY,
+              barTouchData: BarTouchData(
+                touchTooltipData: BarTouchTooltipData(
+                  getTooltipColor: (_) => theme.colorScheme.inverseSurface,
+                  getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                    return BarTooltipItem(
+                      '${months[group.x.toInt()]}\n${NumberFormat('#,##0.00').format(rod.toY)} EGP',
+                      TextStyle(color: theme.colorScheme.onInverseSurface, fontWeight: FontWeight.bold, fontSize: 11),
+                    );
+                  },
+                ),
+              ),
+              titlesData: FlTitlesData(
+                show: true,
+                bottomTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    reservedSize: 24,
+                    getTitlesWidget: (value, meta) {
+                      const months = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
+                      final idx = value.toInt();
+                      if (idx < 0 || idx >= 12) return const SizedBox.shrink();
+                      return SideTitleWidget(
+                        meta: meta,
+                        child: Text(months[idx], style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: theme.colorScheme.onSurface.withValues(alpha: 0.6))),
+                      );
+                    },
+                  ),
+                ),
+                leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+              ),
+              gridData: const FlGridData(show: false),
+              borderData: FlBorderData(show: false),
+              barGroups: List.generate(12, (i) {
+                final val = monthlyTrend[i];
+                return BarChartGroupData(
+                  x: i,
+                  barRods: [
+                    BarChartRodData(
+                      toY: val,
+                      color: val > 0 ? _expenseColor : _expenseColor.withValues(alpha: 0.2),
+                      width: 12,
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                    ),
+                  ],
+                );
+              }),
+            ),
+          ),
+        ),
+      ]),
+    );
+  }
 }

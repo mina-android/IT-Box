@@ -53,7 +53,11 @@ class _State extends State<ExpenseFormScreen> {
         price: price,
         details: _details.text.trim(),
       );
-      if (widget.expense == null) await _db.insertExpense(e); else await _db.updateExpense(e);
+      if (widget.expense == null) {
+        await _db.insertExpense(e);
+      } else {
+        await _db.updateExpense(e);
+      }
       if (!mounted) return;
       Navigator.pop(context, true);
     } catch (e) {

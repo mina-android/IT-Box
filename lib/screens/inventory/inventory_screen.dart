@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../laptops/laptops_screen.dart';
 import '../network_devices/network_devices_screen.dart';
 import '../mifis/mifis_screen.dart';
+import '../access_points/access_points_screen.dart';
 import '../printers/printers_screen.dart';
 import '../electronics/electronics_screen.dart';
 import '../../services/company_service.dart';
@@ -14,7 +15,7 @@ class InventoryScreen extends StatefulWidget {
 
 class _InventoryScreenState extends State<InventoryScreen>
     with SingleTickerProviderStateMixin {
-  late final TabController _tabs = TabController(length: 5, vsync: this);
+  late final TabController _tabs = TabController(length: 6, vsync: this);
 
   @override
   void dispose() { _tabs.dispose(); super.dispose(); }
@@ -33,12 +34,14 @@ class _InventoryScreenState extends State<InventoryScreen>
             isScrollable: false,
             indicatorSize: TabBarIndicatorSize.tab,
             dividerColor: Colors.transparent,
+            labelPadding: EdgeInsets.zero,
             labelStyle: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700),
             unselectedLabelStyle: const TextStyle(fontSize: 10),
             tabs: const [
               Tab(icon: Icon(Icons.laptop_outlined,         size: 20), text: 'Laptops'),
-              Tab(icon: Icon(Icons.router_outlined,         size: 20), text: 'Network'),
+              Tab(icon: Icon(Icons.router_outlined,         size: 20), text: 'Routers'),
               Tab(icon: Icon(Icons.wifi_tethering_outlined, size: 20), text: 'MiFis'),
+              Tab(icon: Icon(Icons.cell_tower_outlined,     size: 20), text: 'APs'),
               Tab(icon: Icon(Icons.print_outlined,          size: 20), text: 'Printers'),
               Tab(icon: Icon(Icons.devices_other_outlined,  size: 20), text: 'Electronics'),
             ],
@@ -51,6 +54,7 @@ class _InventoryScreenState extends State<InventoryScreen>
           LaptopsScreen(),
           NetworkDevicesScreen(),
           MiFisScreen(),
+          AccessPointsScreen(),
           PrintersScreen(),
           ElectronicsScreen(),
         ],

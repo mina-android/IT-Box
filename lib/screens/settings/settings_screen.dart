@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../database/database_helper.dart';
 import '../../services/theme_service.dart';
 import '../../services/company_service.dart';
@@ -9,6 +10,7 @@ import '../../services/excel_service.dart';
 import '../../services/excel_import_service.dart';
 import '../../widgets/common_widgets.dart';
 import '../../theme/app_theme.dart';
+import '../../services/pdf_report_service.dart';
 import 'label_export_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -96,10 +98,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   static const _exportDefs = [
     ('Laptops',         'laptops',         Icons.laptop_outlined,
       ['#', 'Laptop No.', 'Model', 'CPU', 'GPU', 'RAM', 'Storage', 'Condition', 'User']),
-    ('Network Devices', 'network_devices', Icons.router_outlined,
+    ('Routers',         'network_devices', Icons.router_outlined,
       ['#', 'Device No.', 'Model', 'Phone No.', 'Location', 'Provider', 'WiFi Name', 'Status']),
     ('MiFis',           'mifis',           Icons.wifi_tethering_outlined,
       ['#', 'Device No.', 'Model', 'Phone No.', 'WiFi Name', 'Quota', 'Provider', 'Status']),
+    ('APs',             'access_points',   Icons.cell_tower_outlined,
+      ['#', 'Device No.', 'Model', 'Port No.', 'Location']),
     ('Printers',        'printers',        Icons.print_outlined,
       ['#', 'Printer No.', 'Model', 'Condition', 'Location']),
     ('Electronics',     'electronics',     Icons.devices_other_outlined,
@@ -112,6 +116,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ['#', 'Employee', 'Email', 'Password']),
     ('Log',             'log_entries',     Icons.history_outlined,
       ['#', 'Date', 'Employee', 'Problem', 'Solution']),
+    ('Subscriptions',   'subscriptions',   Icons.subscriptions_outlined,
+      ['#', 'Service Name', 'Billing Interval', 'Price (EGP)', 'Renewal Date', 'Notes']),
   ];
 
   Future<void> _exportDevices() async {
@@ -166,6 +172,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'bills'           => [i, r['person'], r['number'], r['category'], r['price'], r['notes']],
         'email_accounts'  => [i, r['employee_name'], r['email'], '(hidden)'],
         'log_entries'     => [i, r['date'], r['employee_name'], r['problem'], r['solution'] ?? ''],
+        'subscriptions'   => [i, r['service'], r['type'], r['price'], r['renewal_date'], r['notes']],
+        'access_points'   => [i, r['device_number'], r['model'], r['port_number'], r['location']],
         _                 => [i, ...r.values],
       };
     }).toList();
@@ -225,6 +233,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Future<void> _exportPdfReport() async {
+    final expenses = await _db.getExpenses();
+    final bills = await _db.getBills();
+    final subs = await _db.getSubscriptions();
+    if (!mounted) return;
+    await PdfReportService.generateAndShareMonthlyReport(
+      periodLabel: 'Full Catalog (${DateTime.now().year})',
+      expenses: expenses,
+      bills: bills,
+      subscriptions: subs,
+    );
+  }
+
   Widget _dateRow(BuildContext ctx, IconData icon, String label, VoidCallback onTap) =>
     InkWell(
       onTap: onTap,
@@ -245,14 +266,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // ── Import Devices ────────────────────────────────────────────
   static const _importDefs = [
     ('Laptops',         Icons.laptop_outlined),
-    ('Network Devices', Icons.router_outlined),
+    ('Routers',         Icons.router_outlined),
     ('MiFis',           Icons.wifi_tethering_outlined),
+    ('APs',             Icons.cell_tower_outlined),
     ('Printers',        Icons.print_outlined),
     ('Electronics',     Icons.devices_other_outlined),
     ('Employees',       Icons.people_outline),
     ('Bills',           Icons.receipt_outlined),
     ('Email Accounts',  Icons.email_outlined),
     ('Log',             Icons.history_outlined),
+    ('Subscriptions',   Icons.subscriptions_outlined),
   ];
 
   Future<void> _importDevices() async {
@@ -312,8 +335,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (mode == 'replace') {
       final database = await _db.db;
       final tableMap = [
-        'laptops', 'network_devices', 'mifis', 'printers',
-        'electronics', 'employees', 'bills', 'email_accounts', 'log_entries',
+        'laptops', 'network_devices', 'mifis', 'access_points', 'printers',
+        'electronics', 'employees', 'bills', 'email_accounts', 'log_entries', 'subscriptions',
       ];
       await database.delete(tableMap[categoryIdx]);
     }
@@ -325,12 +348,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
         0 => await ExcelImportService.importLaptops(excel),
         1 => await ExcelImportService.importNetworkDevices(excel),
         2 => await ExcelImportService.importMiFis(excel),
-        3 => await ExcelImportService.importPrinters(excel),
-        4 => await ExcelImportService.importElectronics(excel),
-        5 => await ExcelImportService.importEmployees(excel),
-        6 => await ExcelImportService.importBills(excel),
-        7 => await ExcelImportService.importEmailAccounts(excel),
-        8 => await ExcelImportService.importLogEntries(excel),
+        3 => await ExcelImportService.importAccessPoints(excel),
+        4 => await ExcelImportService.importPrinters(excel),
+        5 => await ExcelImportService.importElectronics(excel),
+        6 => await ExcelImportService.importEmployees(excel),
+        7 => await ExcelImportService.importBills(excel),
+        8 => await ExcelImportService.importEmailAccounts(excel),
+        9 => await ExcelImportService.importLogEntries(excel),
+        10 => await ExcelImportService.importSubscriptions(excel),
         _ => const ImportResult(inserted: 0, skipped: 0),
       };
     } catch (e) {
@@ -429,8 +454,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               height: 88,
               child: ListView(scrollDirection: Axis.horizontal, children: [
                 _SC(icon: Icons.laptop_outlined,         label: 'Laptops',     count: _counts['laptops'] ?? 0,         color: theme.colorScheme.primary),
-                _SC(icon: Icons.router_outlined,         label: 'Network',     count: _counts['network_devices'] ?? 0, color: AppColors.networkColor),
+                _SC(icon: Icons.router_outlined,         label: 'Routers',     count: _counts['network_devices'] ?? 0, color: AppColors.networkColor),
                 _SC(icon: Icons.wifi_tethering_outlined, label: 'MiFis',       count: _counts['mifis'] ?? 0,           color: const Color(0xFF0EA5E9)),
+                _SC(icon: Icons.cell_tower_outlined,     label: 'APs',         count: _counts['access_points'] ?? 0,   color: const Color(0xFF0891B2)),
                 _SC(icon: Icons.print_outlined,          label: 'Printers',    count: _counts['printers'] ?? 0,        color: AppColors.printerColor),
                 _SC(icon: Icons.devices_other_outlined,  label: 'Electronics', count: _counts['electronics'] ?? 0,     color: AppColors.electronicColor),
                 _SC(icon: Icons.people_outline,          label: 'Employees',   count: _counts['employees'] ?? 0,       color: const Color(0xFF0EA5E9)),
@@ -439,6 +465,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 _SC(icon: Icons.email_outlined,          label: 'Emails',      count: _counts['email_accounts'] ?? 0,  color: const Color(0xFF0EA5E9)),
                 _SC(icon: Icons.swap_horiz_outlined,     label: 'Borrowed',    count: _counts['active_borrows'] ?? 0,  color: AppColors.borrowed),
                 _SC(icon: Icons.history_outlined,         label: 'Log',         count: _counts['log_entries'] ?? 0,     color: const Color(0xFF6366F1)),
+                _SC(icon: Icons.subscriptions_outlined,   label: 'Subs',        count: _counts['subscriptions'] ?? 0,   color: const Color(0xFFE11D48)),
               ]),
             ),
             const SizedBox(height: 20),
@@ -485,12 +512,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _T(icon: Icons.receipt_long_outlined, color: const Color(0xFF10B981),
             title: 'Export Expenses', subtitle: 'Export expenses by date range to Excel',
             onTap: _exportExpenses),
+          _T(icon: Icons.picture_as_pdf_outlined, color: const Color(0xFFE11D48),
+            title: 'Export Financial Summary Report (PDF)', subtitle: 'Generate PDF report for Expenses, Bills & Subscriptions',
+            onTap: _exportPdfReport),
 
           // Import
           const SizedBox(height: 8),
           const _H('IMPORT'),
-          _T(icon: Icons.upload_file_outlined, color: const Color(0xFF3B82F6),
-            title: 'Import', subtitle: 'Import from Excel — Laptops, Network, MiFis, Printers, Electronics, Employees, Bills, Emails, Log',
+          _T(icon: Icons.download_outlined, color: const Color(0xFF3B82F6),
+            title: 'Import', subtitle: 'Import from Excel — Laptops, Routers, MiFis, APs, Printers, Electronics, Employees, Bills, Emails, Log, Subscriptions',
             onTap: _importDevices),
           _T(icon: Icons.playlist_add_outlined, color: const Color(0xFF10B981),
             title: 'Import Expenses', subtitle: 'Import expenses from an Excel file',
@@ -505,6 +535,74 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 MaterialPageRoute(builder: (_) => const LabelExportScreen()))),
 
           // About
+          const SizedBox(height: 16),
+          const _H('ABOUT'),
+          _T(
+            icon: Icons.info_outline_rounded,
+            color: theme.colorScheme.primary,
+            title: 'Version',
+            subtitle: 'com.ma.itbox',
+            trailing: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primaryContainer,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                'v1.0.2',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: theme.colorScheme.primary,
+                ),
+              ),
+            ),
+          ),
+          const _T(
+            icon: Icons.shield_outlined,
+            color: Color(0xFF10B981),
+            title: 'Privacy',
+            subtitle: 'All data stored locally — 100% offline',
+            trailing: Icon(
+              Icons.check_circle_outline,
+              color: Color(0xFF2E7D32),
+            ),
+          ),
+          _T(
+            icon: Icons.code_rounded,
+            color: const Color(0xFF3B82F6),
+            title: 'GitHub',
+            subtitle: 'View source code',
+            trailing: Icon(
+              Icons.open_in_new_rounded,
+              size: 18,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
+            ),
+            onTap: () async {
+              final uri = Uri.parse('https://github.com/mina-android/IT-Box');
+              if (await canLaunchUrl(uri)) {
+                await launchUrl(uri, mode: LaunchMode.externalApplication);
+              }
+            },
+          ),
+          _T(
+            icon: Icons.person_outline_rounded,
+            color: const Color(0xFF8B5CF6),
+            title: 'Developer',
+            subtitle: 'Discover more projects by Mina Android',
+            trailing: Icon(
+              Icons.open_in_new_rounded,
+              size: 18,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
+            ),
+            onTap: () async {
+              final uri = Uri.parse('https://github.com/mina-android');
+              if (await canLaunchUrl(uri)) {
+                await launchUrl(uri, mode: LaunchMode.externalApplication);
+              }
+            },
+          ),
+
           const SizedBox(height: 32),
           Center(child: Column(children: [
             ClipRRect(
@@ -519,10 +617,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       color: theme.colorScheme.primary)))),
             const SizedBox(height: 8),
             Text('IT Box', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
-            Text('v1.0.1 · com.ma.itbox', style: theme.textTheme.bodySmall?.copyWith(
+            Text('v1.0.2 · com.ma.itbox', style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurface.withValues(alpha: 0.4))),
           ])),
-          const SizedBox(height: 24),
+          const SizedBox(height: 32),
         ],
       ),
     );

@@ -49,7 +49,11 @@ class _State extends State<MiFiFormScreen> {
         gateway: _gateway.text.trim(),
         adminPassword: _adminPass.text,
       );
-      if (widget.mifi == null) await _db.insertMiFi(m); else await _db.updateMiFi(m);
+      if (widget.mifi == null) {
+        await _db.insertMiFi(m);
+      } else {
+        await _db.updateMiFi(m);
+      }
       if (!mounted) return;
       Navigator.pop(context, true);
     } catch (e) {

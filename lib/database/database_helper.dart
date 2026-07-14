@@ -12,6 +12,9 @@ import '../models/expense.dart';
 import '../models/bill.dart';
 import '../models/email_account.dart';
 import '../models/log_entry.dart';
+import '../models/subscription.dart';
+import '../models/access_point.dart';
+import '../services/company_service.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper _i = DatabaseHelper._();
@@ -23,7 +26,7 @@ class DatabaseHelper {
 
   Future<Database> _open() async {
     final path = p.join(await getDatabasesPath(), 'itbox.db');
-    return openDatabase(path, version: 6, onCreate: _create, onUpgrade: _upgrade,
+    return openDatabase(path, version: 8, onCreate: _create, onUpgrade: _upgrade,
       onConfigure: (db) async => db.execute('PRAGMA foreign_keys = ON'));
   }
 
@@ -46,7 +49,7 @@ class DatabaseHelper {
     await db.execute('''CREATE TABLE borrow_logs(id INTEGER PRIMARY KEY AUTOINCREMENT,
       device_type TEXT NOT NULL,device_id INTEGER NOT NULL,device_name TEXT NOT NULL,
       device_number TEXT NOT NULL,employee_id INTEGER NOT NULL,employee_name TEXT NOT NULL,
-      reason TEXT DEFAULT '',out_date TEXT NOT NULL,back_date TEXT,is_returned INTEGER DEFAULT 0)''');
+      reason TEXT DEFAULT '',out_date TEXT NOT NULL,back_date TEXT,due_date TEXT,is_returned INTEGER DEFAULT 0)''');
     await db.execute('''CREATE TABLE mifis(id INTEGER PRIMARY KEY AUTOINCREMENT,
       device_number TEXT NOT NULL,model TEXT NOT NULL,phone_number TEXT DEFAULT '',
       wifi_name TEXT DEFAULT '',wifi_password TEXT DEFAULT '',quota TEXT DEFAULT '',
@@ -62,6 +65,11 @@ class DatabaseHelper {
     await db.execute('''CREATE TABLE log_entries(id INTEGER PRIMARY KEY AUTOINCREMENT,
       date TEXT NOT NULL,employee_id INTEGER,employee_name TEXT DEFAULT '',
       problem TEXT NOT NULL,solution TEXT DEFAULT '')''');
+    await db.execute('''CREATE TABLE subscriptions(id INTEGER PRIMARY KEY AUTOINCREMENT,
+      service TEXT NOT NULL,type TEXT NOT NULL,price REAL DEFAULT 0.0,
+      renewal_date TEXT DEFAULT '',notes TEXT DEFAULT '')''');
+    await db.execute('''CREATE TABLE access_points(id INTEGER PRIMARY KEY AUTOINCREMENT,
+      device_number TEXT NOT NULL,model TEXT NOT NULL,port_number TEXT DEFAULT '',location TEXT DEFAULT '')''');
   }
 
   Future<void> _upgrade(Database db, int old, int next) async {
@@ -115,6 +123,18 @@ class DatabaseHelper {
         date TEXT NOT NULL,employee_id INTEGER,employee_name TEXT DEFAULT '',
         problem TEXT NOT NULL,solution TEXT DEFAULT '')''');
     }
+    if (old < 7) {
+      try {
+        await db.execute("ALTER TABLE borrow_logs ADD COLUMN due_date TEXT");
+      } catch (_) {}
+      await db.execute('''CREATE TABLE IF NOT EXISTS subscriptions(id INTEGER PRIMARY KEY AUTOINCREMENT,
+        service TEXT NOT NULL,type TEXT NOT NULL,price REAL DEFAULT 0.0,
+        renewal_date TEXT DEFAULT '',notes TEXT DEFAULT '')''');
+    }
+    if (old < 8) {
+      await db.execute('''CREATE TABLE IF NOT EXISTS access_points(id INTEGER PRIMARY KEY AUTOINCREMENT,
+        device_number TEXT NOT NULL,model TEXT NOT NULL,port_number TEXT DEFAULT '',location TEXT DEFAULT '')''');
+    }
   }
 
   // Laptops
@@ -150,8 +170,10 @@ class DatabaseHelper {
   // Electronics
   Future<int> insertElectronic(Electronic e) async =>
     (await db).insert('electronics',e.toMap());
-  Future<List<Electronic>> getElectronics() async =>
-    ((await db).query('electronics',orderBy:'device_number ASC')).then((r)=>r.map(Electronic.fromMap).toList());
+  Future<List<Electronic>> getElectronics() async {
+    await syncDeviceStatuses();
+    return ((await db).query('electronics',orderBy:'device_number ASC')).then((r)=>r.map(Electronic.fromMap).toList());
+  }
   Future<int> updateElectronic(Electronic e) async =>
     (await db).update('electronics',e.toMap(),where:'id=?',whereArgs:[e.id]);
   Future<int> updateElectronicStatus(int id,String s) async =>
@@ -171,8 +193,10 @@ class DatabaseHelper {
 
   // MiFis
   Future<int> insertMiFi(MiFi m) async => (await db).insert('mifis',m.toMap());
-  Future<List<MiFi>> getMiFis() async =>
-    ((await db).query('mifis',orderBy:'device_number ASC')).then((r)=>r.map(MiFi.fromMap).toList());
+  Future<List<MiFi>> getMiFis() async {
+    await syncDeviceStatuses();
+    return ((await db).query('mifis',orderBy:'device_number ASC')).then((r)=>r.map(MiFi.fromMap).toList());
+  }
   Future<int> updateMiFi(MiFi m) async =>
     (await db).update('mifis',m.toMap(),where:'id=?',whereArgs:[m.id]);
   Future<int> updateMiFiStatus(int id,String s) async =>
@@ -200,8 +224,50 @@ class DatabaseHelper {
       case 'mifi': await updateMiFiStatus(deviceId,'Available');
     }
   }
-  Future<int> deleteBorrowLog(int id) async =>
-    (await db).delete('borrow_logs',where:'id=?',whereArgs:[id]);
+  Future<int> deleteBorrowLog(int id) async {
+    final database = await db;
+    final logRows = await database.query('borrow_logs',where:'id=?',whereArgs:[id]);
+    if (logRows.isNotEmpty) {
+      final log = BorrowLog.fromMap(logRows.first);
+      final count = await database.delete('borrow_logs',where:'id=?',whereArgs:[id]);
+      if (!log.isReturned) {
+        final remaining = await database.query('borrow_logs',
+            where:'device_type=? AND device_id=? AND is_returned=0',
+            whereArgs:[log.deviceType,log.deviceId]);
+        if (remaining.isEmpty) {
+          if (log.deviceType == 'electronic') {
+            await updateElectronicStatus(log.deviceId,'Available');
+          } else if (log.deviceType == 'mifi') {
+            await updateMiFiStatus(log.deviceId,'Available');
+          }
+        }
+      }
+      return count;
+    }
+    return await database.delete('borrow_logs',where:'id=?',whereArgs:[id]);
+  }
+
+  Future<void> syncDeviceStatuses() async {
+    final database = await db;
+    await database.rawUpdate('''
+      UPDATE mifis
+      SET status = 'Available'
+      WHERE status = 'Borrowed'
+        AND id NOT IN (
+          SELECT device_id FROM borrow_logs
+          WHERE device_type = 'mifi' AND is_returned = 0
+        )
+    ''');
+    await database.rawUpdate('''
+      UPDATE electronics
+      SET status = 'Available'
+      WHERE status = 'Borrowed'
+        AND id NOT IN (
+          SELECT device_id FROM borrow_logs
+          WHERE device_type = 'electronic' AND is_returned = 0
+        )
+    ''');
+  }
 
   // Expenses
   Future<int> insertExpense(Expense e) async => (await db).insert('expenses',e.toMap());
@@ -262,11 +328,30 @@ class DatabaseHelper {
   Future<int> deleteLogEntry(int id) async =>
     (await db).delete('log_entries', where: 'id=?', whereArgs: [id]);
 
+  // Subscriptions
+  Future<int> insertSubscription(Subscription s) async => (await db).insert('subscriptions', s.toMap());
+  Future<List<Subscription>> getSubscriptions() async =>
+    ((await db).query('subscriptions', orderBy: 'id DESC')).then((r) => r.map(Subscription.fromMap).toList());
+  Future<int> updateSubscription(Subscription s) async =>
+    (await db).update('subscriptions', s.toMap(), where: 'id=?', whereArgs: [s.id]);
+  Future<int> deleteSubscription(int id) async =>
+    (await db).delete('subscriptions', where: 'id=?', whereArgs: [id]);
+
+  // Access Points
+  Future<int> insertAccessPoint(AccessPoint a) async => (await db).insert('access_points', a.toMap());
+  Future<List<AccessPoint>> getAccessPoints() async =>
+    ((await db).query('access_points', orderBy: 'device_number ASC')).then((r) => r.map(AccessPoint.fromMap).toList());
+  Future<int> updateAccessPoint(AccessPoint a) async =>
+    (await db).update('access_points', a.toMap(), where: 'id=?', whereArgs: [a.id]);
+  Future<int> deleteAccessPoint(int id) async =>
+    (await db).delete('access_points', where: 'id=?', whereArgs: [id]);
+
   // Backup / Restore
   Future<String> exportJson() async {
     final database = await db;
     return jsonEncode({
-      'version':4,'exported_at':DateTime.now().toIso8601String(),
+      'version':6,'exported_at':DateTime.now().toIso8601String(),
+      'company_name':CompanyService().name,
       'laptops':await database.query('laptops'),
       'network_devices':await database.query('network_devices'),
       'printers':await database.query('printers'),
@@ -278,6 +363,8 @@ class DatabaseHelper {
       'bills':await database.query('bills'),
       'email_accounts':await database.query('email_accounts'),
       'log_entries':await database.query('log_entries'),
+      'subscriptions':await database.query('subscriptions'),
+      'access_points':await database.query('access_points'),
     });
   }
 
@@ -286,7 +373,7 @@ class DatabaseHelper {
     final database = await db;
     await database.transaction((txn) async {
       for (final t in ['borrow_logs','laptops','network_devices','printers',
-          'electronics','employees','mifis','expenses','bills','email_accounts','log_entries']) {
+          'electronics','employees','mifis','expenses','bills','email_accounts','log_entries','subscriptions','access_points']) {
         await txn.delete(t);
         final rows = data[t] as List<dynamic>? ?? [];
         for (final row in rows) {
@@ -294,6 +381,12 @@ class DatabaseHelper {
         }
       }
     });
+    if (data.containsKey('company_name') && data['company_name'] != null) {
+      final name = data['company_name'].toString();
+      if (name.isNotEmpty) {
+        await CompanyService().completeOnboarding(name);
+      }
+    }
   }
 
   Future<Map<String,int>> getCounts() async {
@@ -310,7 +403,10 @@ class DatabaseHelper {
       'bills':c(await database.rawQuery('SELECT COUNT(*) FROM bills')),
       'email_accounts':c(await database.rawQuery('SELECT COUNT(*) FROM email_accounts')),
       'active_borrows':c(await database.rawQuery('SELECT COUNT(*) FROM borrow_logs WHERE is_returned=0')),
+      'overdue_borrows':c(await database.rawQuery("SELECT COUNT(*) FROM borrow_logs WHERE is_returned=0 AND due_date IS NOT NULL AND due_date != '' AND due_date < date('now')")),
       'log_entries':c(await database.rawQuery('SELECT COUNT(*) FROM log_entries')),
+      'subscriptions':c(await database.rawQuery('SELECT COUNT(*) FROM subscriptions')),
+      'access_points':c(await database.rawQuery('SELECT COUNT(*) FROM access_points')),
     };
   }
 }

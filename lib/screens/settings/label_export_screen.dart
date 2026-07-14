@@ -17,12 +17,13 @@ class _LabelExportScreenState extends State<LabelExportScreen> {
   bool _dataLoaded = false;
 
   final _categories = const [
-    {'key': 'laptops',     'label': 'Laptops',         'icon': Icons.laptop_outlined},
-    {'key': 'network',     'label': 'Network Devices',  'icon': Icons.router_outlined},
-    {'key': 'mifis',       'label': 'MiFis',            'icon': Icons.wifi_tethering_outlined},
-    {'key': 'printers',    'label': 'Printers',         'icon': Icons.print_outlined},
-    {'key': 'electronics', 'label': 'Electronics',      'icon': Icons.devices_other_outlined},
-    {'key': 'all',         'label': 'All Devices',      'icon': Icons.inventory_2_outlined},
+    {'key': 'laptops',       'label': 'Laptops',          'icon': Icons.laptop_outlined},
+    {'key': 'network',       'label': 'Routers',          'icon': Icons.router_outlined},
+    {'key': 'mifis',         'label': 'MiFis',            'icon': Icons.wifi_tethering_outlined},
+    {'key': 'access_points', 'label': 'APs',              'icon': Icons.cell_tower_outlined},
+    {'key': 'printers',      'label': 'Printers',         'icon': Icons.print_outlined},
+    {'key': 'electronics',   'label': 'Electronics',      'icon': Icons.devices_other_outlined},
+    {'key': 'all',           'label': 'All Devices',      'icon': Icons.inventory_2_outlined},
   ];
 
   @override
@@ -35,20 +36,27 @@ class _LabelExportScreenState extends State<LabelExportScreen> {
     final laptops     = await _db.getLaptops();
     final nets        = await _db.getNetworkDevices();
     final mifis       = await _db.getMiFis();
+    final aps         = await _db.getAccessPoints();
     final printers    = await _db.getPrinters();
     final electronics = await _db.getElectronics();
     if (!mounted) return;
     setState(() {
       _labels = {
-        'laptops':     laptops.map((l) => l.laptopNumber).toList(),
-        'network':     nets.map((d) => d.deviceNumber).toList(),
-        'mifis':       mifis.map((m) => m.deviceNumber).toList(),
-        'printers':    printers.map((p) => p.printerNumber).toList(),
-        'electronics': electronics.map((e) => e.deviceNumber).toList(),
+        'laptops':       laptops.map((l) => l.laptopNumber).toList(),
+        'network':       nets.map((d) => d.phoneNumber.isNotEmpty
+            ? '${d.deviceNumber}\n${d.phoneNumber}' : d.deviceNumber).toList(),
+        'mifis':         mifis.map((m) => m.phoneNumber.isNotEmpty
+            ? '${m.deviceNumber}\n${m.phoneNumber}' : m.deviceNumber).toList(),
+        'access_points': aps.map((a) => a.deviceNumber).toList(),
+        'printers':      printers.map((p) => p.printerNumber).toList(),
+        'electronics':   electronics.map((e) => e.deviceNumber).toList(),
         'all': [
           ...laptops.map((l) => l.laptopNumber),
-          ...nets.map((d) => d.deviceNumber),
-          ...mifis.map((m) => m.deviceNumber),
+          ...nets.map((d) => d.phoneNumber.isNotEmpty
+              ? '${d.deviceNumber}\n${d.phoneNumber}' : d.deviceNumber),
+          ...mifis.map((m) => m.phoneNumber.isNotEmpty
+              ? '${m.deviceNumber}\n${m.phoneNumber}' : m.deviceNumber),
+          ...aps.map((a) => a.deviceNumber),
           ...printers.map((p) => p.printerNumber),
           ...electronics.map((e) => e.deviceNumber),
         ],
@@ -155,26 +163,62 @@ class _LabelExportScreenState extends State<LabelExportScreen> {
                               verticalAlignment:
                                   TableCellVerticalAlignment.middle,
                               child: Container(
-                                height: 44,
+                                height: cell.contains('\n') ? 54 : 44,
                                 color: cell.isEmpty
                                     ? theme.colorScheme
                                         .surfaceContainerHighest
                                     : null,
                                 alignment: Alignment.center,
                                 padding: const EdgeInsets.all(6),
-                                child: Text(
-                                  cell.isEmpty ? '—' : cell,
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: cell.isEmpty ? 12 : 11,
-                                    color: cell.isEmpty
-                                        ? theme.colorScheme.onSurface
-                                            .withValues(alpha: 0.3)
-                                        : theme.colorScheme.onSurface,
-                                    letterSpacing: 0.2,
-                                  ),
-                                ),
+                                child: cell.isEmpty
+                                    ? Text(
+                                        '—',
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 12,
+                                          color: theme.colorScheme.onSurface
+                                              .withValues(alpha: 0.3),
+                                          letterSpacing: 0.2,
+                                        ),
+                                      )
+                                    : cell.contains('\n')
+                                        ? Column(
+                                            mainAxisAlignment: MainAxisAlignment.center,
+                                            children: [
+                                              Text(
+                                                cell.split('\n')[0],
+                                                textAlign: TextAlign.center,
+                                                style: TextStyle(
+                                                  fontWeight: FontWeight.w800,
+                                                  fontSize: 11,
+                                                  color: theme.colorScheme.onSurface,
+                                                  letterSpacing: 0.2,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 1),
+                                              Text(
+                                                cell.split('\n')[1],
+                                                textAlign: TextAlign.center,
+                                                style: TextStyle(
+                                                  fontWeight: FontWeight.w600,
+                                                  fontSize: 9,
+                                                  color: theme.colorScheme.onSurface
+                                                      .withValues(alpha: 0.55),
+                                                ),
+                                              ),
+                                            ],
+                                          )
+                                        : Text(
+                                            cell,
+                                            textAlign: TextAlign.center,
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.w800,
+                                              fontSize: 11,
+                                              color: theme.colorScheme.onSurface,
+                                              letterSpacing: 0.2,
+                                            ),
+                                          ),
                               ),
                             );
                           }).toList(),

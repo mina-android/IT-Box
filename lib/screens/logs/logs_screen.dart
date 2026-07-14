@@ -53,11 +53,9 @@ class _LogsScreenState extends State<LogsScreen> {
 
       // Keep selected year if it still exists; default to current year
       final now = DateTime.now().year;
-      if (_selectedYear == null) {
-        _selectedYear = _availableYears.isNotEmpty
-          ? (_availableYears.contains(now) ? now : _availableYears.first)
-          : now;
-      }
+      _selectedYear ??= _availableYears.isNotEmpty
+        ? (_availableYears.contains(now) ? now : _availableYears.first)
+        : now;
 
       await _fetchEntries();
     } finally {
@@ -363,7 +361,7 @@ class _LogCard extends StatelessWidget {
                 style: TextStyle(fontSize: 11, color: theme.colorScheme.onSurface.withValues(alpha: 0.5))),
               if (entry.employeeName.isNotEmpty)
                 Row(children: [
-                  Icon(Icons.person_outline, size: 12, color: _logColor),
+                  const Icon(Icons.person_outline, size: 12, color: _logColor),
                   const SizedBox(width: 3),
                   Text(entry.employeeName,
                     style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _logColor)),

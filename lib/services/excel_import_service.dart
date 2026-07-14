@@ -11,6 +11,8 @@ import '../models/bill.dart';
 import '../models/expense.dart';
 import '../models/email_account.dart';
 import '../models/log_entry.dart';
+import '../models/subscription.dart';
+import '../models/access_point.dart';
 
 /// Result of an import operation
 class ImportResult {
@@ -278,7 +280,7 @@ class ExcelImportService {
         final col0 = _str(row.isNotEmpty ? row[0] : null);
         if (col0.toUpperCase() == 'TOTAL') { skipped++; continue; }
 
-        final date = _str(row.length > 0 ? row[0] : null);
+        final date = _str(row.isNotEmpty ? row[0] : null);
         final item = _str(row.length > 1 ? row[1] : null);
         if (item.isEmpty) { skipped++; continue; }
 
@@ -319,6 +321,65 @@ class ExcelImportService {
           password:     pass,
         );
         await _db.insertEmailAccount(e);
+        inserted++;
+      } catch (e) { errors.add('Row ${i + 2}: $e'); skipped++; }
+    }
+    return ImportResult(inserted: inserted, skipped: skipped, errors: errors);
+  }
+
+  // ── SUBSCRIPTIONS ─────────────────────────────────────────────
+  // Columns: #, Service Name, Billing Interval, Price (EGP), Renewal Date, Notes
+  static Future<ImportResult> importSubscriptions(Excel excel) async {
+    final sheet = excel.sheets.values.first;
+    final rows = _rows(sheet);
+    int inserted = 0, skipped = 0;
+    final errors = <String>[];
+
+    for (var i = 0; i < rows.length; i++) {
+      final row = rows[i];
+      try {
+        final service = _str(row.length > 1 ? row[1] : null);
+        if (service.isEmpty) { skipped++; continue; }
+        final rawType = _str(row.length > 2 ? row[2] : null);
+        final typeMatch = Subscription.types.firstWhere(
+          (t) => t.toLowerCase() == rawType.toLowerCase(),
+          orElse: () => 'Monthly',
+        );
+        final s = Subscription(
+          service:     service,
+          type:        typeMatch,
+          price:       _dbl(row.length > 3 ? row[3] : null),
+          renewalDate: _normalizeDate(_str(row.length > 4 ? row[4] : null)),
+          notes:       _str(row.length > 5 ? row[5] : null),
+        );
+        await _db.insertSubscription(s);
+        inserted++;
+      } catch (e) { errors.add('Row ${i + 2}: $e'); skipped++; }
+    }
+    return ImportResult(inserted: inserted, skipped: skipped, errors: errors);
+  }
+
+  // ── ACCESS POINTS ─────────────────────────────────────────────
+  // Columns: #, Device No., Model, Port No., Location
+  static Future<ImportResult> importAccessPoints(Excel excel) async {
+    final sheet = excel.sheets.values.first;
+    final rows = _rows(sheet);
+    int inserted = 0, skipped = 0;
+    final errors = <String>[];
+
+    for (var i = 0; i < rows.length; i++) {
+      final row = rows[i];
+      try {
+        final num   = _str(row.length > 1 ? row[1] : null);
+        final model = _str(row.length > 2 ? row[2] : null);
+        if (num.isEmpty || model.isEmpty) { skipped++; continue; }
+        final a = AccessPoint(
+          deviceNumber: num,
+          model:        model,
+          portNumber:   _str(row.length > 3 ? row[3] : null),
+          location:     _str(row.length > 4 ? row[4] : null),
+        );
+        await _db.insertAccessPoint(a);
         inserted++;
       } catch (e) { errors.add('Row ${i + 2}: $e'); skipped++; }
     }

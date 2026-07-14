@@ -29,7 +29,11 @@ class _State extends State<PrinterFormScreen> {
     setState(() => _saving = true);
     try {
       final p = Printer(id: widget.printer?.id, printerNumber: _num.text.trim(), model: _model.text.trim(), condition: _condition, location: _loc.text.trim());
-      if (widget.printer == null) await _db.insertPrinter(p); else await _db.updatePrinter(p);
+      if (widget.printer == null) {
+        await _db.insertPrinter(p);
+      } else {
+        await _db.updatePrinter(p);
+      }
       if (!mounted) { return; }
       Navigator.pop(context, true);
     } catch (e) { if (!mounted) { return; }

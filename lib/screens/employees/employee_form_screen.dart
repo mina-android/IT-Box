@@ -26,7 +26,11 @@ class _State extends State<EmployeeFormScreen> {
     setState(() => _saving = true);
     try {
       final e = Employee(id: widget.employee?.id, name: _name.text.trim(), phoneNumber: _phone.text.trim());
-      if (widget.employee == null) await _db.insertEmployee(e); else await _db.updateEmployee(e);
+      if (widget.employee == null) {
+        await _db.insertEmployee(e);
+      } else {
+        await _db.updateEmployee(e);
+      }
       if (!mounted) { return; }
       Navigator.pop(context, true);
     } catch (e) { if (!mounted) { return; }

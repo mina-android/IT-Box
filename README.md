@@ -1,21 +1,20 @@
 <div align="center">
 
-<img src="assets/icon/app_icon_raw.png" alt="IT Box Logo" width="120" height="120" style="border-radius: 24px"/>
+<img src="assets/icon/app_icon.png" alt="IT Box Logo" width="120" height="120" style="border-radius: 24px"/>
 
 # IT Box
 
-### Your offline IT department inventory, all in one place
+### Your offline IT department inventory & operations hub, all in one place
 
 [![Flutter](https://img.shields.io/badge/Flutter-3.3%2B-02569B?logo=flutter&logoColor=white)](https://flutter.dev)
-[![Dart](https://img.shields.io/badge/Dart-3.3%2B-0175C2?logo=dart&logoColor=white)](https://dart.dev)
-[![Android](https://img.shields.io/badge/Android-12%2B-3DDC84?logo=android&logoColor=white)](https://android.com)
-[![Version](https://img.shields.io/badge/Version-1.0.1-brightgreen)](https://github.com/mina-android/IT-Box/releases)
+[![Platform](https://img.shields.io/badge/Platform-Android-3DDC84?logo=android&logoColor=white)](https://android.com)
+[![Version](https://img.shields.io/badge/Version-1.0.2-brightgreen)](https://github.com/mina-android/IT-Box/releases)
 [![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE)
 
-**IT Box** is a clean, fast, and fully offline inventory management app for IT departments, built with Flutter.  
-No accounts. No cloud. No ads. Everything lives on your device — always.
+**IT Box** is a clean, lightning-fast, and 100% offline IT operations management app built with Flutter.  
+No cloud sync. No subscription logins. No ads. Everything lives securely on your device — always.
 
-[**Download APK**](#installation) · [**Features**](#features) · [**Screenshots**](#screenshots) · [**Build It**](#building-from-source)
+[**Download**](#-installation) · [**Features**](#-features) · [**Screenshots**](#-screenshots) · [**Build from Source**](#-build-from-source)
 
 </div>
 
@@ -23,352 +22,125 @@ No accounts. No cloud. No ads. Everything lives on your device — always.
 
 ## Why IT Box?
 
-Most inventory tools are web-based, require logins, or sync to the cloud. IT Box does none of that. It stores everything locally using SQLite, works completely offline, and is designed specifically for the day-to-day needs of IT staff: tracking devices, logging issues, managing borrowed equipment, recording expenses, and more — all from a single Android app.
+Most inventory and IT management tools are clunky web portals that require recurring subscriptions, complex cloud setups, or continuous network connectivity. **IT Box** does none of that. It stores everything locally using high-performance SQLite, operates completely offline, and is tailored specifically for the day-to-day workflow of IT administrators: tracking hardware assets, managing borrowed equipment with automated overdue alarms, logging department expenses, recording recurring software subscriptions, and generating instant PDF/Excel executive reports — all from a single, beautifully designed Android application.
 
 ---
 
-## Features
+## ✨ Features
 
-### 📦 Inventory
-- Track **Laptops**, **Network Devices**, **MiFis**, **Printers**, and **Electronics** across 5 sub-tabs
-- **Laptops** — full specs (CPU, GPU, RAM, Storage), condition, and assigned employee
-- **Network Devices** — routers with WiFi name, WiFi password, gateway, and admin credentials
-- **MiFis** — mobile WiFi devices with quota, service provider, and full credential set
-- **Printers** — condition and location tracking
-- **Electronics** — general devices with borrow status
-- Tap to view details, edit inline, or delete with confirmation
-
-### 🔄 Borrowed Devices
-- Track which **Electronics** and **MiFis** are borrowed, by whom, and when
-- Split into **Active** and **History** tabs
-- Assign borrowing to any employee with a reason and out-date
-- Mark as returned to close the borrow log
-- Device status (Available / Borrowed) syncs automatically across Inventory screens
-
-### 💸 Expenses
-- Log expenses with date, item name, price, and optional details
-- Grouped by **month** with a running total per month
-- **Yearly filter** in the AppBar to jump between years
-- All values displayed in **EGP**
-- Export a custom date range to **Excel (.xlsx)**
-
-### 🏷️ Bills
-- Track recurring bills by category: MiFis, 4G Internet, Landline Internet, Landline Phone, Mobile Phone
-- Fields: person, number, price, and optional notes
-- No date column — designed for steady recurring entries, not one-off payments
-
-### 📧 Emails
-- Email accounts linked to employees
-- Show/hide **password toggle** per entry
-- Quick reference for shared or service accounts
-
-### 🪵 Log *(bottom bar tab)*
-- Log IT issues with **Date**, **User** (employee dropdown), **Problem**, and **Solution**
-- Entries grouped by **month**
-- **Year and month filters** in the AppBar to narrow down the view
-- **Search by problem** or **search by employee** — toggle between modes with one tap
-- Add, edit, and delete log entries; empty solution field shows "No solution yet" badge
-- Full **backup and export** coverage
-
-### 👥 Employees
-- Central employee directory used across the whole app (Laptops, Borrowed, Log, Emails)
-- Add, edit, and delete employees
-- Accessible from the **More** tab
-
-### 📊 More Tab
-- Hub screen for **Employees**, **Bills**, and **Settings**
-- Card-style navigation with section grouping
-
-### ⚙️ Settings
-
-- **Dark mode** toggle — on by default, persisted between sessions
-- **Company name** — set on first launch (onboarding), editable anytime; shown in the Inventory tab header
-- **Backup** — full JSON export of every table; save anywhere via the Android file picker (SAF)
-- **Restore** — import from any `.json` backup file
-- **Export** — export any category (Laptops, Network Devices, MiFis, Printers, Electronics, Employees, Bills, Emails, Expenses, Log) to Excel (.xlsx)
-- **Import** — import from Excel with **Append or Replace** mode for all categories
-- **Label PDF** — generate a 3-column device label sheet for any category; saved to temp dir and shared via the system share sheet
-- Live **backup item counts** before exporting (all tables including Log)
-
-### 🖨️ App Icon
-- Blue IT toolbox illustration
-- **Adaptive icon** — correct shape on all Android launchers (circle, squircle, rounded square, square)
-- **Themed icon (Android 13+)** — monochrome silhouette recoloured to match your wallpaper palette
-- Notification icon at all screen densities (mdpi → xxxhdpi)
+- **📊 Interactive Dashboard (`tab [0]`)** — Landing overview with real-time operational metrics (active borrowed count, monthly EGP expense totals, employees headcount), a 4-button quick action grid (`Borrow Device`, `Emails`, `Bills`, `Subscriptions`), and interactive `fl_chart` trend graphs.
+- **📦 Hardware Inventory (`tab [1]`)** — Track and manage **Laptops** (CPU/GPU/RAM specs & assigned employee), **Routers** (network devices with WiFi & admin credentials), **MiFis** (data quotas & SIM details), **Access Points (APs)** (port assignments & physical locations), **Printers**, and general **Electronics** across 6 instant sub-tabs with edge-to-edge equal spacing (`isScrollable: false`).
+- **🔄 Borrowed Devices & Overdue Alarms (`tab [2]`)** — Track checkout logs for electronics and MiFis across Active and History tabs. Includes optional **Due Dates**, automatic local Android background notifications when items become overdue, red **OVERDUE** visual badges, and self-healing status synchronization (`syncDeviceStatuses`).
+- **💸 Expenses & PDF Executive Reports (`tab [3]`)** — Log department purchases with running monthly totals and yearly filters in **EGP**. Export custom date ranges to **Excel (`.xlsx`)** or generate multi-page **PDF Summary Reports** with automatic subtotals.
+- **🪵 IT Issue Logs (`tab [4]`)** — Record IT problems and solutions linked to employees with date pickers, monthly grouping, and one-tap problem/employee search.
+- **📱 More Management Hub (`tab [5]`)** — Centralized hub to manage **Employees**, recurring **Bills**, software **Subscriptions**, employee **Email Accounts** (with 1-tap Email & Password clipboard copy), and comprehensive app **Settings**.
+- **🎟️ Subscriptions Tracking Module** — Dedicated manager for SaaS licenses, cloud hosting, and service renewals with cycle filtering (`All`, `Yearly`, `Monthly`, `Weekly`) and real-time total expenditure breakdowns.
+- **🚀 Guided Onboarding & Full Interoperability** — Initial setup screen lets new users **Start Fresh** or **Restore Backup (`.json`)** instantly. Import from and export to Excel (`.xlsx`) with Append or Replace modes across all categories, with company name persistence.
+- **🖨️ Barcode / Device Label Generator** — Generate professional 3-column device label sheets (`.pdf`) for any category and print or share directly from your device.
+- **🎨 Material You & Pixel-Perfect 100% Full-Bleed Icons** — Equipped with a prominent **100% full-bleed colored adaptive app icon** alongside a meticulously scaled **monochrome themed icon** supporting Android 13+ dynamic wallpaper tinting without edge clipping.
 
 ---
 
-## Screenshots
+## 📸 Screenshots
 
-| Home | Inventory | Log |
-|------|-----------|-----|
-| ![](screenshots/home.png) | ![](screenshots/inventory.png) | ![](screenshots/log.png) |
+| Dashboard & Summary | Hardware Inventory | Borrowed & Overdue Alarms |
+|------|-------------|-----------|
+| ![Dashboard](screenshots/home.png) | ![Inventory](screenshots/inventory.png) | ![Borrowed](screenshots/borrowed.png) |
 
-| Borrowed | Expenses | More |
-|----------|----------|------|
-| ![](screenshots/borrowed.png) | ![](screenshots/expenses.png) | ![](screenshots/more.png) |
-
----
-
-## Project Structure
-
-```
-lib/
-├── main.dart                        # App entry point, theme wiring, onboarding check
-├── theme/
-│   └── app_theme.dart               # Material You light & dark themes
-├── models/                          # Pure data classes (no Flutter dependency)
-│   ├── laptop.dart
-│   ├── network_device.dart
-│   ├── mifi.dart
-│   ├── printer.dart
-│   ├── electronic.dart
-│   ├── employee.dart
-│   ├── borrow_log.dart
-│   ├── expense.dart
-│   ├── bill.dart
-│   ├── email_account.dart
-│   └── log_entry.dart
-├── database/
-│   └── database_helper.dart         # Singleton SQLite helper (sqflite), schema v6
-├── services/
-│   ├── theme_service.dart           # Dark/light mode, SharedPreferences, singleton
-│   ├── company_service.dart         # Company name persistence, onboarding flag
-│   ├── excel_service.dart           # Excel export via excel package + share_plus
-│   ├── excel_import_service.dart    # Excel import with Append/Replace, per-row error reporting
-│   └── label_service.dart           # PDF label generation via pdf package
-├── widgets/
-│   └── common_widgets.dart          # StatusBadge, ConditionBadge, IconBox, EmptyState,
-│                                    # SearchBar2, DetailRow, SectionLabel,
-│                                    # showConfirmDialog, showSnack
-└── screens/
-    ├── home_screen.dart             # Root: 6-tab NavigationBar
-    ├── more_screen.dart             # More hub: Employees, Bills, Settings
-    ├── onboarding/                  # First-launch company name screen
-    ├── inventory/                   # 5-tab TabBar host (Laptops→Electronics)
-    ├── laptops/
-    ├── network_devices/
-    ├── mifis/
-    ├── printers/
-    ├── electronics/
-    ├── employees/
-    ├── borrowed/
-    ├── expenses/
-    ├── bills/
-    ├── emails/
-    ├── logs/                        # Log tab — LogsScreen + LogFormScreen
-    └── settings/                    # Settings, label export
-```
+| Expense & PDF Reports | Subscriptions Tracking | More Management Hub |
+|------|-------------|-----------|
+| ![Expenses](screenshots/expenses.png) | ![Subscriptions](screenshots/subscriptions.png) | ![More](screenshots/more.png) |
 
 ---
 
-## Building from Source
-
-### Prerequisites
-
-| Tool | Version | Download |
-|------|---------|---------|
-| Flutter SDK | 3.3+ | [flutter.dev](https://flutter.dev/docs/get-started/install) |
-| Android Studio | Latest | [developer.android.com/studio](https://developer.android.com/studio) |
-| Java JDK | 17+ | [adoptium.net](https://adoptium.net/) |
-
-```bash
-flutter doctor
-```
-
-### Steps
-
-```bash
-# 1. Clone
-git clone https://github.com/mina-android/ITbox.git
-cd ITbox
-
-# 2. Install dependencies
-flutter pub get
-
-# 3. Run in development
-flutter run
-
-# 4. Build release APK
-flutter build apk --release
-
-# Split by CPU architecture (smaller files, recommended)
-flutter build apk --split-per-abi --release
-```
-
-Output: `build/app/outputs/flutter-apk/app-arm64-v8a-release.apk`
-
----
-
-## Installation
+## 📲 Installation
 
 1. Go to [**Releases**](https://github.com/mina-android/IT-Box/releases)
-2. Download `app-release.apk`
-3. On your phone: **Settings → Security → Install Unknown Apps** → enable for your file manager
-4. Open the APK and install
+2. Download the split APK matching your device architecture (`app-arm64-v8a-release.apk` for modern 64-bit phones, `app-armeabi-v7a-release.apk` for 32-bit devices, or `app-x86_64-release.apk` for emulators/WSA)
+3. Enable **Install from unknown sources** on your Android device when prompted
+4. Open the APK file and install
 
-> Minimum Android: **12 (API 31)**
-
----
-
-## Gradle / Build Config
-
-| Component | Version |
-|-----------|---------|
-| Gradle | **8.9** |
-| Android Gradle Plugin | **8.6.0** |
-| Kotlin JVM Target | 17 |
-| Java | 17 |
-| Package | `com.ma.itbox` |
-| Min SDK | 31 (Android 12) |
-| Target SDK | 36 |
-| Compile SDK | 36 |
-| NDK | 28.2.13676358 |
+> Requires **Android 8.0 (API 26)** or higher.
 
 ---
 
-## Database Schema
+## 🛠 Build from Source
 
-SQLite database (`itbox.db`), **version 6**.
+**Prerequisites:** Flutter SDK (`^3.19.0` or higher), Dart SDK (`^3.3.0`), Android Studio / Android SDK (`API 34`), and JDK 17+.
 
-| Table | Key Columns |
-|-------|-------------|
-| `laptops` | laptop_number, model, cpu, gpu, ram, storage, condition, user, password |
-| `network_devices` | device_number, model, phone_number, device_location, service_provider, wifi_name, wifi_password, gateway, admin_password, status |
-| `mifis` | device_number, model, phone_number, wifi_name, wifi_password, quota, service_provider, gateway, admin_password, status |
-| `printers` | printer_number, model, condition, location |
-| `electronics` | device_number, device_name, details, status |
-| `employees` | name, phone_number |
-| `borrow_logs` | device_type ('electronic'\|'mifi'), device_id, device_name, device_number, employee_id, employee_name, reason, out_date, back_date, is_returned |
-| `expenses` | date (yyyy-MM-dd), item, price (REAL), details |
-| `bills` | person, number, category, price (REAL), notes |
-| `email_accounts` | employee_id, employee_name, email, password |
-| `log_entries` | date (yyyy-MM-dd), employee_id, employee_name, problem, solution |
-
-Migration history: v1→v2 (network_devices rebuild) · v2→v3 (mifis.status) · v3→v4 (bills, email_accounts) · v4→v5 (bills date removed) · v5→v6 (log_entries added)
-
----
-
-## Android Permissions
-
-| Permission | Purpose |
-|-----------|---------|
-| `READ_EXTERNAL_STORAGE` | File picker on Android ≤ 12 |
-| `WRITE_EXTERNAL_STORAGE` | File save on Android ≤ 9 |
-| `READ_MEDIA_IMAGES` | File picker on Android 13+ |
-
-IT Box requests no network permissions — all data is local and all exports go through the system file picker.
-
----
-
-## Dependencies
-
-| Package | Purpose |
-|---------|---------|
-| `sqflite` | Local SQLite database |
-| `path_provider` | App directory paths |
-| `path` | Path utilities |
-| `intl` | Date & number formatting |
-| `share_plus` | Share files via system sheet |
-| `file_picker` | Open/save file dialogs |
-| `pdf` | PDF label generation |
-| `excel` | Excel (.xlsx) export & import |
-| `shared_preferences` | Theme & company name persistence |
-
----
-
-## Data & Privacy
-
-- ✅ All data stored locally in SQLite — never leaves your device
-- ✅ No network requests of any kind
-- ✅ No analytics, no crash reporting, no telemetry
-- ✅ No ads
-- ✅ Backup is a plain JSON file you fully control
-- ✅ Uninstalling deletes all data — nothing left behind
-
----
-
-## Troubleshooting
-
-**`flutter pub get` fails**
 ```bash
-flutter clean && flutter pub get
+# Clone the repository
+git clone https://github.com/mina-android/IT-Box.git
+cd IT-Box
+
+# Fetch Flutter dependencies
+flutter pub get
+
+# Run on a connected device or emulator
+flutter run
+
+# Build split release APKs (~30 MB per architecture)
+flutter build apk --split-per-abi
 ```
 
-**Accept Android SDK licenses**
-```bash
-flutter doctor --android-licenses
-```
+Output lands in `build/app/outputs/flutter-apk/`:
+- `app-arm64-v8a-release.apk`
+- `app-armeabi-v7a-release.apk`
+- `app-x86_64-release.apk`
 
-**Items not showing after adding**  
-Every list screen manages its own Scaffold + FAB. If you're adding a new screen, follow the same pattern — `setState` inside the screen's own `_load()` call after returning from the form.
+<details>
+<summary><strong>Build troubleshooting & stability notes</strong></summary>
 
-**Bills screen stuck on loading**  
-The `bills` table has no `date` column (removed in DB v5). Never use `ORDER BY date DESC` in `getBills()` — use `ORDER BY id DESC` instead.
+- **JVM OutOfMemoryError / EXCEPTION_ACCESS_VIOLATION during Gradle build:** This project is pre-configured in `android/gradle.properties` with `-Xmx3072m -XX:+UseParallelGC` to guarantee stability and prevent OpenJDK/JBR 21 G1 GC memory access crashes on Windows.
+- **Missing local assets:** Ensure `assets/icon/app_icon.png` exists before running asset builds.
+- **Cleaning lingering build artifacts:** If you encounter unexpected cache lockups, run `cd android && ./gradlew --stop && ./gradlew clean` (or `.\gradlew.bat --stop` on Windows).
+
+</details>
 
 ---
 
-## .gitignore
+## 🔒 Privacy
 
-```gitignore
-.dart_tool/
-.flutter-plugins
-.flutter-plugins-dependencies
-.packages
-.pub-cache/
-.pub/
-build/
-*.iml
-android/.gradle/
-android/local.properties
-android/key.properties
-*.jks
-*.keystore
-.idea/
-.vscode/
-.DS_Store
-```
+- **All data stored locally** — your SQLite database (`itbox.db`) never leaves your device
+- **Zero network calls** — the app operates 100% offline without telemetry or tracking APIs
+- **No analytics, no crash reporting, no ads** — complete digital sovereignty
+- **Uninstalling deletes everything** — unless you manually export a `.json` or `.xlsx` backup to your device storage
 
 ---
 
-## Roadmap
+## 🗺 Roadmap
 
-- [x] Inventory management (Laptops, Network, MiFis, Printers, Electronics)
-- [x] Borrow tracking for Electronics and MiFis
-- [x] Expenses with yearly filter and Excel export
-- [x] Bills and Email accounts
-- [x] JSON Backup & Restore
-- [x] Excel Export & Import (all categories)
-- [x] Label PDF generation
-- [x] IT Issue Log with search and month/year filtering
-- [ ] iOS support
-- [ ] Multiple languages / localisation
-- [ ] Log export to PDF
-- [ ] Home screen widget (device count summary)
+- [x] Launch full offline inventory tracking (`Laptops`, `Routers`, `MiFis`, `APs`, `Printers`, `Electronics`)
+- [x] Integrate recurring `Bills` and employee `Email Accounts` tracking
+- [x] Add `Log` tab for IT department troubleshooting & problem resolution
+- [x] Add interactive `Dashboard` with summary metrics, `fl_chart` graphs, and side navigation `AppDrawer`
+- [x] Add `Subscriptions` module (`Yearly`, `Monthly`, `Weekly`) with real-time expenditure calculations
+- [x] Integrate `flutter_local_notifications` (`v21`) for automatic overdue borrowed device reminders
+- [x] Implement multi-page `PDF` Executive Expense & Bills Summary Reports alongside Excel (`.xlsx`) export
+- [x] Polish 100% full-bleed colored adaptive app icons & Material You monochrome themed icons
+- [ ] Add encrypted password vault protection for sensitive network/admin credentials
+- [ ] Add custom tagging and asset barcode generation (`Code128` / `QR`) for physical label printing
 
 ---
 
-## Contributing
+## 🤝 Contributing
 
-1. Fork the repository
-2. Create a branch: `git checkout -b feature/my-feature`
-3. Commit: `git commit -m "Add my feature"`
-4. Push: `git push origin feature/my-feature`
-5. Open a Pull Request
+1. Fork the repo
+2. Create a feature branch: `git checkout -b feature/my-new-feature`
+3. Commit and push your changes: `git commit -m 'Add some feature' && git push origin feature/my-new-feature`
+4. Open a Pull Request
 
-Code style: no `withOpacity()` (use `withValues(alpha:)`), `enableSuggestions: false` on all `TextFormField`s, `InputDecorator + DropdownButton` instead of `DropdownButtonFormField`, always `if (!mounted) return` after `await`, `flutter analyze` must pass.
+*Please ensure code adheres to standard Flutter/Dart lint formatting (`flutter analyze`) and preserves existing architectural patterns (`setState + async/await`, no external state management frameworks).*
 
 ---
 
 ## License
 
-MIT License — see [LICENSE](LICENSE) for full text.  
-Copyright © 2026 [Mina Android](https://github.com/mina-android)
-
----
+MIT License — see [LICENSE](LICENSE) for details.  
+Copyright © 2026 [Mina](https://github.com/mina-android)
 
 <div align="center">
 
-Made with ❤️ and Flutter · [**More projects by Mina Android**](https://github.com/mina-android) · [**⬆ Back to top**](#it-box)
+Made with ❤️ for IT Professionals · [**More projects**](https://github.com/mina-android)
 
 </div>

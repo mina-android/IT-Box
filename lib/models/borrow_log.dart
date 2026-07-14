@@ -9,6 +9,7 @@ class BorrowLog {
   final String reason;
   final String outDate;
   final String? backDate;
+  final String? dueDate;
   final bool isReturned;
 
   const BorrowLog({
@@ -22,6 +23,7 @@ class BorrowLog {
     required this.reason,
     required this.outDate,
     this.backDate,
+    this.dueDate,
     this.isReturned = false,
   });
 
@@ -36,6 +38,7 @@ class BorrowLog {
     'reason': reason,
     'out_date': outDate,
     'back_date': backDate,
+    'due_date': dueDate,
     'is_returned': isReturned ? 1 : 0,
   };
 
@@ -50,13 +53,14 @@ class BorrowLog {
     reason: (m['reason'] ?? '') as String,
     outDate: (m['out_date'] ?? '') as String,
     backDate: m['back_date'] as String?,
+    dueDate: m['due_date'] as String?,
     isReturned: (m['is_returned'] as int? ?? 0) == 1,
   );
 
   BorrowLog copyWith({
     int? id, String? deviceType, int? deviceId, String? deviceName, String? deviceNumber,
     int? employeeId, String? employeeName, String? reason, String? outDate,
-    String? backDate, bool? isReturned,
+    String? backDate, String? dueDate, bool? isReturned,
   }) => BorrowLog(
     id: id ?? this.id,
     deviceType: deviceType ?? this.deviceType,
@@ -68,6 +72,8 @@ class BorrowLog {
     reason: reason ?? this.reason,
     outDate: outDate ?? this.outDate,
     backDate: backDate ?? this.backDate,
+    dueDate: dueDate ?? this.dueDate,
     isReturned: isReturned ?? this.isReturned,
   );
 }
+
