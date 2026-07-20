@@ -43,13 +43,17 @@ Most inventory and IT management tools are clunky web portals that require recur
 
 ## 📸 Screenshots
 
-| Dashboard & Summary | Hardware Inventory | Borrowed & Overdue Alarms |
-|------|-------------|-----------|
-| ![Dashboard](screenshots/home.png) | ![Inventory](screenshots/inventory.png) | ![Borrowed](screenshots/borrowed.png) |
+<p align="center">
+  <img src="screenshots/homa.png" width="32%" alt="Dashboard & Summary" />
+  <img src="screenshots/inventory.png" width="32%" alt="Hardware Inventory" /> 
+  <img src="screenshots/borrowed.png" width="32%" alt="Borrowed & Overdue Alarms" />
+</p>
 
-| Expense & PDF Reports | Subscriptions Tracking | More Management Hub |
-|------|-------------|-----------|
-| ![Expenses](screenshots/expenses.png) | ![Subscriptions](screenshots/subscriptions.png) | ![More](screenshots/more.png) |
+<p align="center">
+  <img src="screenshots/expenses.png" width="32%" alt="Expense & PDF Reports" />
+  <img src="screenshots/log.png" width="32%" alt="IT Issue Logs" />
+  <img src="screenshots/more.png" width="32%" alt="More Management Hub" />
+</p>
 
 ---
 
