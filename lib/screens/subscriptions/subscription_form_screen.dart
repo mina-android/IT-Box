@@ -4,25 +4,32 @@ import '../../database/database_helper.dart';
 import '../../models/subscription.dart';
 import '../../widgets/common_widgets.dart';
 
+const Color _subColor = Color(0xFFF43F5E);
+
 class SubscriptionFormScreen extends StatefulWidget {
   final Subscription? subscription;
   const SubscriptionFormScreen({super.key, this.subscription});
   @override
-  State<SubscriptionFormScreen> createState() => _SubscriptionFormScreenState();
+  State<SubscriptionFormScreen> createState() =>
+      _SubscriptionFormScreenState();
 }
 
 class _SubscriptionFormScreenState extends State<SubscriptionFormScreen> {
   final _key = GlobalKey<FormState>();
+  final _shakeKey = GlobalKey<ShakeWidgetState>();
   final _db = DatabaseHelper();
   bool _saving = false;
 
-  late final _service = TextEditingController(text: widget.subscription?.service ?? '');
+  late final _service =
+      TextEditingController(text: widget.subscription?.service ?? '');
   late final _price = TextEditingController(
       text: widget.subscription == null || widget.subscription!.price == 0
           ? ''
           : widget.subscription!.price.toString());
-  late final _renewalDate = TextEditingController(text: widget.subscription?.renewalDate ?? '');
-  late final _notes = TextEditingController(text: widget.subscription?.notes ?? '');
+  late final _renewalDate =
+      TextEditingController(text: widget.subscription?.renewalDate ?? '');
+  late final _notes =
+      TextEditingController(text: widget.subscription?.notes ?? '');
   late String _type = widget.subscription?.type ?? 'Monthly';
 
   @override
@@ -46,12 +53,17 @@ class _SubscriptionFormScreenState extends State<SubscriptionFormScreen> {
       lastDate: DateTime(2035),
     );
     if (picked != null) {
-      _renewalDate.text = DateFormat('yyyy-MM-dd').format(picked);
+      setState(() {
+        _renewalDate.text = DateFormat('yyyy-MM-dd').format(picked);
+      });
     }
   }
 
   Future<void> _save() async {
-    if (!_key.currentState!.validate()) return;
+    if (!_key.currentState!.validate()) {
+      _shakeKey.currentState?.shake();
+      return;
+    }
     setState(() => _saving = true);
     try {
       final sub = Subscription(
@@ -67,135 +79,184 @@ class _SubscriptionFormScreenState extends State<SubscriptionFormScreen> {
       } else {
         await _db.updateSubscription(sub);
       }
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
+      showSnack(context, 'Subscription saved successfully!');
       Navigator.pop(context, true);
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       showSnack(context, 'Error saving subscription: $e', error: true);
     } finally {
-      if (mounted) setState(() => _saving = false);
+      if (mounted) {
+        setState(() => _saving = false);
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final isEdit = widget.subscription != null;
+
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.subscription == null ? 'Add Subscription' : 'Edit Subscription'),
+        title: Text(
+          isEdit ? 'Edit Subscription' : 'Add Subscription',
+          style: const TextStyle(fontWeight: FontWeight.w800),
+        ),
       ),
-      body: Form(
-        key: _key,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            children: [
-              TextFormField(
-                controller: _service,
-                enableSuggestions: false,
-                autocorrect: false,
-                decoration: const InputDecoration(
-                  labelText: 'Service Name *',
-                  hintText: 'e.g. Google Workspace, GitHub, Zoom',
-                  prefixIcon: Icon(Icons.subscriptions_outlined),
-                ),
-                validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    flex: 3,
-                    child: InputDecorator(
+      body: GestureDetector(
+        onTap: () => FocusScope.of(context).unfocus(),
+        child: ShakeWidget(
+          key: _shakeKey,
+          child: Form(
+            key: _key,
+            autovalidateMode: AutovalidateMode.onUserInteraction,
+            child: ListView(
+              keyboardDismissBehavior:
+                  ScrollViewKeyboardDismissBehavior.onDrag,
+              padding: const EdgeInsets.fromLTRB(18, 8, 18, 40),
+              children: [
+                const SectionLabel('SUBSCRIPTION SERVICE'),
+                FintechGroupedCard(
+                  children: [
+                    AppTextField(
+                      controller: _service,
                       decoration: const InputDecoration(
-                        labelText: 'Billing Interval *',
-                        prefixIcon: Icon(Icons.repeat_outlined),
+                        labelText: 'Service / Tool Name *',
+                        prefixIcon:
+                            Icon(Icons.subscriptions_outlined, size: 20),
                       ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          value: _type,
-                          isDense: true,
-                          items: Subscription.types.map((t) => DropdownMenuItem(
-                            value: t,
-                            child: Text(t, style: const TextStyle(fontWeight: FontWeight.w600)),
-                          )).toList(),
-                          onChanged: (val) {
-                            if (val != null) setState(() => _type = val);
-                          },
+                      validator: (v) =>
+                          (v == null || v.trim().isEmpty) ? 'Required' : null,
+                    ),
+                  ],
+                ),
+
+                const SectionLabel('BILLING CYCLE & COST'),
+                FintechGroupedCard(
+                  children: [
+                    FintechDropdown<String>(
+                      labelText: 'Billing Interval *',
+                      prefixIcon: const Icon(Icons.repeat_rounded, size: 20),
+                      value: _type,
+                      items: Subscription.types
+                          .map((t) => DropdownMenuItem(
+                                value: t,
+                                child: Text(t,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w600)),
+                              ))
+                          .toList(),
+                      onChanged: (val) {
+                        if (val != null) {
+                          setState(() => _type = val);
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    AppTextField(
+                      controller: _price,
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(
+                        labelText: 'Recurring Cost *',
+                        prefixIcon: Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 14),
+                          child: Center(
+                            widthFactor: 1,
+                            child: Text(
+                              'EGP',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 15,
+                                color: _subColor,
+                              ),
+                            ),
+                          ),
                         ),
                       ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    flex: 2,
-                    child: TextFormField(
-                      controller: _price,
-                      enableSuggestions: false,
-                      autocorrect: false,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      decoration: const InputDecoration(
-                        labelText: 'Price (EGP) *',
-                        prefixIcon: Icon(Icons.attach_money_outlined),
-                      ),
                       validator: (v) {
-                        if (v == null || v.trim().isEmpty) return 'Required';
-                        if (double.tryParse(v.trim()) == null) return 'Invalid';
+                        if (v == null || v.trim().isEmpty) {
+                          return 'Required';
+                        }
+                        if (double.tryParse(v.trim()) == null) {
+                          return 'Enter a valid amount';
+                        }
                         return null;
                       },
                     ),
+                  ],
+                ),
+
+                const SectionLabel('RENEWAL & NOTES'),
+                FintechGroupedCard(
+                  children: [
+                    AppTextField(
+                      controller: _renewalDate,
+                      readOnly: true,
+                      onTap: _pickDate,
+                      decoration: InputDecoration(
+                        labelText: 'Next Renewal / Expiry Date',
+                        prefixIcon: const Icon(Icons.calendar_today_rounded,
+                            size: 20),
+                        suffixIcon: _renewalDate.text.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear_rounded,
+                                    size: 18),
+                                onPressed: () =>
+                                    setState(() => _renewalDate.clear()),
+                              )
+                            : null,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    AppTextField(
+                      controller: _notes,
+                      maxLines: 3,
+                      decoration: const InputDecoration(
+                        labelText: 'Notes / Account Details (Optional)',
+                        prefixIcon: Icon(Icons.notes_rounded, size: 20),
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 16),
+                SizedBox(
+                  height: 52,
+                  child: FilledButton.icon(
+                    onPressed: _saving ? null : _save,
+                    icon: _saving
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Icon(Icons.check_circle_outline_rounded, size: 20),
+                    label: Text(
+                      isEdit ? 'Update Subscription' : 'Add Subscription',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: _subColor,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(26),
+                      ),
+                    ),
                   ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _renewalDate,
-                readOnly: true,
-                onTap: _pickDate,
-                decoration: InputDecoration(
-                  labelText: 'Renewal / Next Payment Date',
-                  hintText: 'Select date',
-                  prefixIcon: const Icon(Icons.calendar_today_outlined),
-                  suffixIcon: _renewalDate.text.isNotEmpty
-                      ? IconButton(
-                          icon: const Icon(Icons.clear, size: 18),
-                          onPressed: () => _renewalDate.clear(),
-                        )
-                      : null,
                 ),
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _notes,
-                enableSuggestions: false,
-                autocorrect: false,
-                maxLines: 3,
-                decoration: const InputDecoration(
-                  labelText: 'Notes / Account Details (Optional)',
-                  hintText: 'e.g. 5 user seats, renewed annually via card ending 1234',
-                  prefixIcon: Icon(Icons.notes_outlined),
-                ),
-              ),
-              const SizedBox(height: 32),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: _saving ? null : _save,
-                  icon: _saving
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                        )
-                      : const Icon(Icons.save_outlined),
-                  label: Text(widget.subscription == null ? 'Add Subscription' : 'Save Changes'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFE11D48),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                  ),
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

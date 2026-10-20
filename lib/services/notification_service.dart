@@ -1,8 +1,11 @@
 import 'dart:io';
+import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
+
+import '../models/borrow_log.dart';
 
 class NotificationService {
   static final NotificationService _i = NotificationService._();
@@ -11,12 +14,13 @@ class NotificationService {
 
   final FlutterLocalNotificationsPlugin _plugin = FlutterLocalNotificationsPlugin();
   bool _initialized = false;
+  bool get isInitialized => _initialized;
 
   Future<void> init() async {
     if (_initialized) return;
     try {
       tz_data.initializeTimeZones();
-      const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
+      const androidInit = AndroidInitializationSettings('@drawable/ic_stat_mono');
       const winInit = LinuxInitializationSettings(defaultActionName: 'Open');
       const initSettings = InitializationSettings(
         android: androidInit,
@@ -24,40 +28,39 @@ class NotificationService {
       );
 
       await _plugin.initialize(settings: initSettings);
-
-      if (Platform.isAndroid) {
-        final androidImpl = _plugin.resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>();
-        await androidImpl?.requestNotificationsPermission();
-      }
       _initialized = true;
     } catch (e) {
-      if (kDebugMode) print('NotificationService init error: $e');
+      if (kDebugMode && !Platform.environment.containsKey('FLUTTER_TEST')) {
+        print('NotificationService init error: $e');
+      }
     }
   }
 
-  Future<void> scheduleOverdueReminder({
+  Future<bool?> requestPermission() async {
+    await init();
+    if (!_initialized) return null;
+    if (Platform.isAndroid) {
+      final androidImpl = _plugin.resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>();
+      return await androidImpl?.requestNotificationsPermission();
+    }
+    return null;
+  }
+
+  Future<bool> scheduleOverdueReminder({
     required int borrowId,
     required String deviceName,
     required String employeeName,
     required DateTime dueDate,
+    required TimeOfDay reminderTime,
   }) async {
+    final tzDate = toUtcTZDate(dueDate, reminderTime.hour, reminderTime.minute);
+    if (tzDate == null) return false;
+
     await init();
+    if (!_initialized) return false;
+    await requestPermission();
     try {
-      // Schedule for 9:00 AM on due date, or +10 seconds if due date is today or already passed
-      var scheduledDate = tz.TZDateTime(
-        tz.local,
-        dueDate.year,
-        dueDate.month,
-        dueDate.day,
-        9,
-        0,
-      );
-
-      if (scheduledDate.isBefore(tz.TZDateTime.now(tz.local))) {
-        scheduledDate = tz.TZDateTime.now(tz.local).add(const Duration(seconds: 10));
-      }
-
       const androidDetails = AndroidNotificationDetails(
         'overdue_channel',
         'Overdue Borrow Reminders',
@@ -66,24 +69,81 @@ class NotificationService {
         priority: Priority.high,
       );
 
+      final dateFormatted = '${dueDate.year}-${dueDate.month.toString().padLeft(2, '0')}-${dueDate.day.toString().padLeft(2, '0')}';
       await _plugin.zonedSchedule(
         id: borrowId,
-        title: 'Device Overdue: $deviceName',
-        body: '$employeeName has not returned $deviceName (Due: ${dueDate.year}-${dueDate.month.toString().padLeft(2, '0')}-${dueDate.day.toString().padLeft(2, '0')})',
-        scheduledDate: scheduledDate,
+        title: 'Due today: $deviceName',
+        body: '$employeeName is scheduled to return $deviceName (Due: $dateFormatted)',
+        scheduledDate: tzDate,
         notificationDetails: const NotificationDetails(android: androidDetails),
-        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
       );
+      return true;
     } catch (e) {
       if (kDebugMode) print('Error scheduling reminder: $e');
+      return false;
+    }
+  }
+
+  tz.TZDateTime? toUtcTZDate(DateTime date, int hour, int minute, [DateTime? nowReference]) {
+    try {
+      tz_data.initializeTimeZones();
+    } catch (_) {}
+    // Dart DateTime constructor applies correct DST and timezone rules for the target date
+    final local = DateTime(date.year, date.month, date.day, hour, minute);
+    final utc = local.toUtc();
+    final tzDate = tz.TZDateTime.utc(utc.year, utc.month, utc.day, utc.hour, utc.minute);
+    final ref = nowReference != null
+        ? tz.TZDateTime.from(nowReference.toUtc(), tz.UTC)
+        : tz.TZDateTime.now(tz.UTC);
+    if (tzDate.isBefore(ref)) return null;
+    return tzDate;
+  }
+
+  Future<void> reconcileReminders(List<BorrowLog> logs) async {
+    await init();
+    if (!_initialized) return;
+    try {
+      await _plugin.cancelAll();
+      for (final log in logs) {
+        if (!log.isReturned && log.dueDate != null && log.dueDate!.isNotEmpty && log.id != null) {
+          final due = DateTime.tryParse(log.dueDate!);
+          if (due != null) {
+            TimeOfDay reminderTime = const TimeOfDay(hour: 9, minute: 0);
+            if (log.reminderTime != null && log.reminderTime!.isNotEmpty) {
+              final parts = log.reminderTime!.split(':');
+              if (parts.length == 2) {
+                reminderTime = TimeOfDay(
+                  hour: int.tryParse(parts[0]) ?? 9,
+                  minute: int.tryParse(parts[1]) ?? 0,
+                );
+              }
+            }
+            await scheduleOverdueReminder(
+              borrowId: log.id!,
+              deviceName: log.deviceName,
+              employeeName: log.employeeName,
+              dueDate: due,
+              reminderTime: reminderTime,
+            );
+          }
+        }
+      }
+    } catch (e) {
+      if (kDebugMode && !Platform.environment.containsKey('FLUTTER_TEST')) {
+        print('Error reconciling reminders: $e');
+      }
     }
   }
 
   Future<void> cancelReminder(int borrowId) async {
+    if (!_initialized) return;
     try {
       await _plugin.cancel(id: borrowId);
     } catch (e) {
-      if (kDebugMode) print('Error canceling reminder: $e');
+      if (kDebugMode && !Platform.environment.containsKey('FLUTTER_TEST')) {
+        print('Error canceling reminder: $e');
+      }
     }
   }
 }

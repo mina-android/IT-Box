@@ -6,7 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 class LabelService {
-  /// Generates a 3-column label PDF and opens the share sheet.
+  /// Generates a 4-column label PDF and opens the share sheet.
   /// Uses only [pdf] + [share_plus] — no [printing] dependency needed.
   /// Labels may contain '\n' for two-line labels (e.g. device number + phone).
   static Future<void> printLabels({
@@ -16,16 +16,16 @@ class LabelService {
   }) async {
     final pdf = pw.Document();
 
-    // Pad to multiple of 3
+    // Pad to multiple of 4
     final items = List<String>.from(labels);
-    while (items.length % 3 != 0) {
+    while (items.length % 4 != 0) {
       items.add('');
     }
 
-    // Build rows of 3
+    // Build rows of 4
     final rows = <List<String>>[];
-    for (var i = 0; i < items.length; i += 3) {
-      rows.add(items.sublist(i, i + 3));
+    for (var i = 0; i < items.length; i += 4) {
+      rows.add(items.sublist(i, i + 4));
     }
 
     pdf.addPage(
@@ -49,6 +49,7 @@ class LabelService {
               0: pw.FlexColumnWidth(),
               1: pw.FlexColumnWidth(),
               2: pw.FlexColumnWidth(),
+              3: pw.FlexColumnWidth(),
             },
             children: rows.map((row) {
               return pw.TableRow(
@@ -124,9 +125,112 @@ class LabelService {
     await file.writeAsBytes(bytes);
 
     // Share via system share sheet
-    await Share.shareXFiles(
-      [XFile(file.path, mimeType: 'application/pdf')],
-      subject: title,
+    await SharePlus.instance.share(
+      ShareParams(
+        files: [XFile(file.path, mimeType: 'application/pdf')],
+        subject: title,
+      ),
+    );
+  }
+
+  /// Generates a printable grid of QR code asset stickers with asset ID, model, and metadata.
+  static Future<void> printDeviceQrCodes({
+    required List<Map<String, String>> items,
+    required String title,
+    required BuildContext context,
+  }) async {
+    final pdf = pw.Document();
+
+    const itemsPerPage = 12;
+    for (var pageStart = 0; pageStart < items.length; pageStart += itemsPerPage) {
+      final pageEnd = (pageStart + itemsPerPage < items.length) ? pageStart + itemsPerPage : items.length;
+      final pageItems = items.sublist(pageStart, pageEnd);
+
+      pdf.addPage(
+        pw.Page(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(24),
+          build: (pw.Context ctx) {
+            return pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text(
+                      title,
+                      style: pw.TextStyle(
+                        fontSize: 13,
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColors.blueGrey900,
+                      ),
+                    ),
+                    pw.Text(
+                      'Page ${(pageStart ~/ itemsPerPage) + 1} of ${((items.length - 1) ~/ itemsPerPage) + 1}',
+                      style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey600),
+                    ),
+                  ],
+                ),
+                pw.SizedBox(height: 12),
+                pw.Expanded(
+                  child: pw.GridView(
+                    crossAxisCount: 3,
+                    childAspectRatio: 0.88,
+                    crossAxisSpacing: 10,
+                    mainAxisSpacing: 10,
+                    children: pageItems.map((item) {
+                      final code = item['code'] ?? '';
+
+                      return pw.Container(
+                        padding: const pw.EdgeInsets.all(8),
+                        decoration: pw.BoxDecoration(
+                          border: pw.Border.all(color: PdfColors.grey400, width: 1.2),
+                          borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
+                        ),
+                        child: pw.Column(
+                          mainAxisAlignment: pw.MainAxisAlignment.center,
+                          crossAxisAlignment: pw.CrossAxisAlignment.center,
+                          children: [
+                            pw.BarcodeWidget(
+                              barcode: pw.Barcode.qrCode(),
+                              data: code,
+                              width: 80,
+                              height: 80,
+                            ),
+                            pw.SizedBox(height: 6),
+                            pw.Text(
+                              code,
+                              style: pw.TextStyle(
+                                fontSize: 11,
+                                fontWeight: pw.FontWeight.bold,
+                                color: PdfColors.black,
+                              ),
+                              textAlign: pw.TextAlign.center,
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      );
+    }
+
+    final bytes = await pdf.save();
+    final dir = await getTemporaryDirectory();
+    final safeTitle = title.replaceAll(RegExp(r'[^a-zA-Z0-9_]'), '_');
+    final file = File('${dir.path}/itbox_qr_$safeTitle.pdf');
+    await file.writeAsBytes(bytes);
+
+    await SharePlus.instance.share(
+      ShareParams(
+        files: [XFile(file.path, mimeType: 'application/pdf')],
+        subject: title,
+      ),
     );
   }
 }

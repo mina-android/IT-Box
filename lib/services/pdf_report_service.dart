@@ -193,9 +193,11 @@ class PdfReportService {
     final file = File('${dir.path}/ITBox_Financial_Report_$safeName.pdf');
     await file.writeAsBytes(bytes);
 
-    await Share.shareXFiles(
-      [XFile(file.path, mimeType: 'application/pdf')],
-      subject: 'IT Box Financial Report ($periodLabel)',
+    await SharePlus.instance.share(
+      ShareParams(
+        files: [XFile(file.path, mimeType: 'application/pdf')],
+        subject: 'IT Box Financial Report ($periodLabel)',
+      ),
     );
   }
 

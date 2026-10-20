@@ -1,17 +1,13 @@
-import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../database/database_helper.dart';
 import '../../services/theme_service.dart';
 import '../../services/company_service.dart';
-import '../../services/excel_service.dart';
-import '../../services/excel_import_service.dart';
 import '../../widgets/common_widgets.dart';
 import '../../theme/app_theme.dart';
-import '../../services/pdf_report_service.dart';
-import 'label_export_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   final ThemeService themeService;
@@ -29,656 +25,563 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void initState() {
     super.initState();
+    widget.themeService.addListener(_onThemeChanged);
     _loadCounts();
     _companyCtrl.text = CompanyService().name;
   }
 
+  void _onThemeChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
   @override
-  void dispose() { _companyCtrl.dispose(); super.dispose(); }
+  void dispose() {
+    widget.themeService.removeListener(_onThemeChanged);
+    _companyCtrl.dispose();
+    super.dispose();
+  }
 
   Future<void> _loadCounts() async {
     final c = await _db.getCounts();
-    if (mounted) setState(() { _counts = c; _loadingCounts = false; });
-  }
-
-  // ── Backup ────────────────────────────────────────────────────
-  Future<void> _backup() async {
-    try {
-      final json = await _db.exportJson();
-      final ts = DateTime.now().toString().replaceAll(RegExp(r'[: .]'), '-').substring(0, 19);
-      final fileName = 'itbox_backup_$ts.json';
-
-      String? outputPath;
-      try {
-        outputPath = await FilePicker.platform.saveFile(
-          dialogTitle: 'Save Backup',
-          fileName: fileName,
-          type: FileType.custom,
-          allowedExtensions: ['json'],
-          bytes: utf8.encode(json),
-        );
-      } catch (_) { outputPath = null; }
-
-      if (!mounted) return;
-      if (outputPath != null) {
-        showSnack(context, 'Backup saved to:\n$outputPath');
-      } else {
-        showSnack(context, 'Backup cancelled', error: true);
-      }
-    } catch (e) {
-      if (!mounted) return;
-      showSnack(context, 'Backup failed: $e', error: true);
+    if (mounted) {
+      setState(() {
+        _counts = c;
+        _loadingCounts = false;
+      });
     }
   }
 
-  // ── Restore ───────────────────────────────────────────────────
-  Future<void> _restore() async {
-    try {
-      final result = await FilePicker.platform.pickFiles(
-          type: FileType.custom, allowedExtensions: ['json'], withData: true);
-      if (result == null || result.files.isEmpty || !mounted) return;
-      final bytes = result.files.first.bytes;
-      if (bytes == null) { showSnack(context, 'Could not read file', error: true); return; }
-      final ok = await showConfirmDialog(context,
-          title: 'Restore Data',
-          message: 'This will replace ALL current data. Cannot be undone.',
-          confirmText: 'Restore', confirmColor: Colors.orange);
-      if (!ok || !mounted) return;
-      await _db.importJson(utf8.decode(bytes));
-      if (!mounted) return;
-      showSnack(context, 'Data restored successfully');
-      _loadCounts();
-    } catch (e) {
-      if (!mounted) return;
-      showSnack(context, 'Restore failed: $e', error: true);
-    }
-  }
-
-  // ── Export Devices ────────────────────────────────────────────
-  static const _exportDefs = [
-    ('Laptops',         'laptops',         Icons.laptop_outlined,
-      ['#', 'Laptop No.', 'Model', 'CPU', 'GPU', 'RAM', 'Storage', 'Condition', 'User']),
-    ('Routers',         'network_devices', Icons.router_outlined,
-      ['#', 'Device No.', 'Model', 'Phone No.', 'Location', 'Provider', 'WiFi Name', 'Status']),
-    ('MiFis',           'mifis',           Icons.wifi_tethering_outlined,
-      ['#', 'Device No.', 'Model', 'Phone No.', 'WiFi Name', 'Quota', 'Provider', 'Status']),
-    ('APs',             'access_points',   Icons.cell_tower_outlined,
-      ['#', 'Device No.', 'Model', 'Port No.', 'Location']),
-    ('Printers',        'printers',        Icons.print_outlined,
-      ['#', 'Printer No.', 'Model', 'Condition', 'Location']),
-    ('Electronics',     'electronics',     Icons.devices_other_outlined,
-      ['#', 'Device No.', 'Device Name', 'Details', 'Status']),
-    ('Employees',       'employees',       Icons.people_outline,
-      ['#', 'Name', 'Phone Number']),
-    ('Bills',           'bills',           Icons.receipt_outlined,
-      ['#', 'Person', 'Number', 'Category', 'Price (EGP)', 'Notes']),
-    ('Email Accounts',  'email_accounts',  Icons.email_outlined,
-      ['#', 'Employee', 'Email', 'Password']),
-    ('Log',             'log_entries',     Icons.history_outlined,
-      ['#', 'Date', 'Employee', 'Problem', 'Solution']),
-    ('Subscriptions',   'subscriptions',   Icons.subscriptions_outlined,
-      ['#', 'Service Name', 'Billing Interval', 'Price (EGP)', 'Renewal Date', 'Notes']),
-  ];
-
-  Future<void> _exportDevices() async {
-    final picked = await showModalBottomSheet<int>(
-      context: context, isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (ctx) => Padding(
-        padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Text('Select Category to Export',
-              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-          const SizedBox(height: 14),
-          ...List.generate(_exportDefs.length, (i) => ListTile(
-            leading: Icon(_exportDefs[i].$3, color: Theme.of(ctx).colorScheme.primary),
-            title: Text(_exportDefs[i].$1),
-            trailing: const Icon(Icons.table_chart_outlined),
-            onTap: () => Navigator.pop(ctx, i),
-          )),
-        ]),
-      ),
-    );
-    if (picked == null || !mounted) return;
-    try {
-      final def = _exportDefs[picked];
-      final database = await _db.db;
-      final rawRows = await database.query(def.$2);
-      final rows = _buildRows(def.$2, rawRows);
-      await ExcelService.exportTable(
-        sheetName: def.$1,
-        headers: def.$4,
-        rows: rows,
-        fileLabel: def.$1.replaceAll(' ', '_'),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      showSnack(context, 'Export failed: $e', error: true);
-    }
-  }
-
-  List<List<dynamic>> _buildRows(String table, List<Map<String, dynamic>> raw) {
-    return raw.asMap().entries.map((entry) {
-      final i = entry.key + 1;
-      final r = entry.value;
-      return switch (table) {
-        'laptops'         => [i, r['laptop_number'], r['model'], r['cpu'], r['gpu'], r['ram'], r['storage'], r['condition'], r['user']],
-        'network_devices' => [i, r['device_number'], r['model'], r['phone_number'], r['device_location'], r['service_provider'], r['wifi_name'], r['status']],
-        'mifis'           => [i, r['device_number'], r['model'], r['phone_number'], r['wifi_name'], r['quota'], r['service_provider'], r['status']],
-        'printers'        => [i, r['printer_number'], r['model'], r['condition'], r['location']],
-        'electronics'     => [i, r['device_number'], r['device_name'], r['details'], r['status']],
-        'employees'       => [i, r['name'], r['phone_number']],
-        'bills'           => [i, r['person'], r['number'], r['category'], r['price'], r['notes']],
-        'email_accounts'  => [i, r['employee_name'], r['email'], '(hidden)'],
-        'log_entries'     => [i, r['date'], r['employee_name'], r['problem'], r['solution'] ?? ''],
-        'subscriptions'   => [i, r['service'], r['type'], r['price'], r['renewal_date'], r['notes']],
-        'access_points'   => [i, r['device_number'], r['model'], r['port_number'], r['location']],
-        _                 => [i, ...r.values],
-      };
-    }).toList();
-  }
-
-  // ── Export Expenses date range ────────────────────────────────
-  Future<void> _exportExpenses() async {
-    DateTime fromDate = DateTime.now().copyWith(day: 1);
-    DateTime toDate   = DateTime.now();
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setS) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: const Text('Export Expenses', style: TextStyle(fontWeight: FontWeight.w800)),
-          content: Column(mainAxisSize: MainAxisSize.min, children: [
-            const Text('Select date range:', style: TextStyle(fontWeight: FontWeight.w600)),
-            const SizedBox(height: 16),
-            _dateRow(ctx, Icons.calendar_today_outlined,
-              'From: ${DateFormat('dd MMM yyyy').format(fromDate)}',
-              () async {
-                final p = await showDatePicker(context: ctx,
-                  initialDate: fromDate, firstDate: DateTime(2020), lastDate: DateTime.now());
-                if (p != null) setS(() => fromDate = p);
-              }),
-            const SizedBox(height: 10),
-            _dateRow(ctx, Icons.event_available_outlined,
-              'To: ${DateFormat('dd MMM yyyy').format(toDate)}',
-              () async {
-                final p = await showDatePicker(context: ctx,
-                  initialDate: toDate, firstDate: fromDate, lastDate: DateTime.now());
-                if (p != null) setS(() => toDate = p);
-              }),
-          ]),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Export')),
-          ],
-        ),
-      ),
-    );
-    if (confirmed != true || !mounted) return;
-    try {
-      final database = await _db.db;
-      final fromStr = DateFormat('yyyy-MM-dd').format(fromDate);
-      final toStr   = DateFormat('yyyy-MM-dd').format(toDate);
-      final rawRows = await database.rawQuery(
-        "SELECT * FROM expenses WHERE date >= ? AND date <= ? ORDER BY date DESC",
-        [fromStr, toStr],
-      );
-      final label = '${DateFormat('dd_MMM').format(fromDate)}_to_${DateFormat('dd_MMM_yyyy').format(toDate)}';
-      await ExcelService.exportExpenses(expenses: rawRows, label: label);
-    } catch (e) {
-      if (!mounted) return;
-      showSnack(context, 'Export failed: $e', error: true);
-    }
-  }
-
-  Future<void> _exportPdfReport() async {
-    final expenses = await _db.getExpenses();
-    final bills = await _db.getBills();
-    final subs = await _db.getSubscriptions();
-    if (!mounted) return;
-    await PdfReportService.generateAndShareMonthlyReport(
-      periodLabel: 'Full Catalog (${DateTime.now().year})',
-      expenses: expenses,
-      bills: bills,
-      subscriptions: subs,
-    );
-  }
-
-  Widget _dateRow(BuildContext ctx, IconData icon, String label, VoidCallback onTap) =>
-    InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(10),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(
-          border: Border.all(color: Colors.grey.withValues(alpha: 0.3)),
-          borderRadius: BorderRadius.circular(10)),
-        child: Row(children: [
-          Icon(icon, size: 16),
-          const SizedBox(width: 8),
-          Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
-        ]),
-      ),
-    );
-
-  // ── Import Devices ────────────────────────────────────────────
-  static const _importDefs = [
-    ('Laptops',         Icons.laptop_outlined),
-    ('Routers',         Icons.router_outlined),
-    ('MiFis',           Icons.wifi_tethering_outlined),
-    ('APs',             Icons.cell_tower_outlined),
-    ('Printers',        Icons.print_outlined),
-    ('Electronics',     Icons.devices_other_outlined),
-    ('Employees',       Icons.people_outline),
-    ('Bills',           Icons.receipt_outlined),
-    ('Email Accounts',  Icons.email_outlined),
-    ('Log',             Icons.history_outlined),
-    ('Subscriptions',   Icons.subscriptions_outlined),
-  ];
-
-  Future<void> _importDevices() async {
-    final picked = await showModalBottomSheet<int>(
-      context: context, isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (ctx) => Padding(
-        padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Text('Select Category to Import',
-              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-          const SizedBox(height: 4),
-          Text('Pick an Excel (.xlsx) file exported from IT Box\nor following the same column format.',
-              style: TextStyle(fontSize: 12, color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.5)),
-              textAlign: TextAlign.center),
-          const SizedBox(height: 14),
-          ...List.generate(_importDefs.length, (i) => ListTile(
-            leading: Icon(_importDefs[i].$2, color: Theme.of(ctx).colorScheme.primary),
-            title: Text(_importDefs[i].$1),
-            trailing: const Icon(Icons.upload_file_outlined),
-            onTap: () => Navigator.pop(ctx, i),
-          )),
-        ]),
-      ),
-    );
-    if (picked == null || !mounted) return;
-    await _runImport(picked);
-  }
-
-  Future<void> _runImport(int categoryIdx) async {
-    final excel = await ExcelImportService.pickExcel();
-    if (excel == null || !mounted) return;
-
-    // Ask append vs replace
-    final mode = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Import Mode', style: TextStyle(fontWeight: FontWeight.w800)),
-        content: const Text('Do you want to add these records to existing data, or replace everything in this category?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, 'cancel'), child: const Text('Cancel')),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, 'append'),
-            child: const Text('Append')),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, 'replace'),
-            style: FilledButton.styleFrom(backgroundColor: Colors.orange),
-            child: const Text('Replace')),
-        ],
-      ),
-    );
-    if (mode == null || mode == 'cancel' || !mounted) return;
-
-    // If replace, clear the table first
-    if (mode == 'replace') {
-      final database = await _db.db;
-      final tableMap = [
-        'laptops', 'network_devices', 'mifis', 'access_points', 'printers',
-        'electronics', 'employees', 'bills', 'email_accounts', 'log_entries', 'subscriptions',
-      ];
-      await database.delete(tableMap[categoryIdx]);
-    }
-
-    // Run the import
-    ImportResult result;
-    try {
-      result = switch (categoryIdx) {
-        0 => await ExcelImportService.importLaptops(excel),
-        1 => await ExcelImportService.importNetworkDevices(excel),
-        2 => await ExcelImportService.importMiFis(excel),
-        3 => await ExcelImportService.importAccessPoints(excel),
-        4 => await ExcelImportService.importPrinters(excel),
-        5 => await ExcelImportService.importElectronics(excel),
-        6 => await ExcelImportService.importEmployees(excel),
-        7 => await ExcelImportService.importBills(excel),
-        8 => await ExcelImportService.importEmailAccounts(excel),
-        9 => await ExcelImportService.importLogEntries(excel),
-        10 => await ExcelImportService.importSubscriptions(excel),
-        _ => const ImportResult(inserted: 0, skipped: 0),
-      };
-    } catch (e) {
-      if (!mounted) return;
-      showSnack(context, 'Import failed: $e', error: true);
-      return;
-    }
-
-    if (!mounted) return;
-    _loadCounts();
-
-    if (result.errors.isNotEmpty) {
-      showDialog(
-        context: context,
-        builder: (_) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: Text('Import Complete — ${result.summary}'),
-          content: SingleChildScrollView(
-            child: Text(result.errors.join('\n'),
-                style: const TextStyle(fontSize: 12))),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK')),
-          ],
-        ),
-      );
-    } else {
-      showSnack(context, '✓ ${result.summary}');
-    }
-  }
-
-  // ── Import Expenses ───────────────────────────────────────────
-  Future<void> _importExpenses() async {
-    final excel = await ExcelImportService.pickExcel();
-    if (excel == null || !mounted) return;
-
-    final mode = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Import Mode', style: TextStyle(fontWeight: FontWeight.w800)),
-        content: const Text('Append new expenses to existing ones, or replace all expenses?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, 'cancel'), child: const Text('Cancel')),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, 'append'),
-            child: const Text('Append')),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, 'replace'),
-            style: FilledButton.styleFrom(backgroundColor: Colors.orange),
-            child: const Text('Replace')),
-        ],
-      ),
-    );
-    if (mode == null || mode == 'cancel' || !mounted) return;
-
-    if (mode == 'replace') {
-      final database = await _db.db;
-      await database.delete('expenses');
-    }
-
-    ImportResult result;
-    try {
-      result = await ExcelImportService.importExpenses(excel);
-    } catch (e) {
-      if (!mounted) return;
-      showSnack(context, 'Import failed: $e', error: true);
-      return;
-    }
-
-    if (!mounted) return;
-    _loadCounts();
-    showSnack(context, '✓ ${result.summary}');
-  }
-
-  // ── Company name ──────────────────────────────────────────────
   Future<void> _saveCompany() async {
     await CompanyService().setCompanyName(_companyCtrl.text.trim());
-    if (!mounted) return;
-    showSnack(context, 'Company name saved');
+    if (!mounted) {
+      return;
+    }
+    showSnack(context, 'Company branding updated');
+  }
+
+  Future<void> _pickLogo() async {
+    try {
+      final res = await FilePickerPlatform.instance.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['png', 'jpg', 'jpeg', 'webp'],
+      );
+      if (res.isNotEmpty && res.first.path != null) {
+        final src = File(res.first.path!);
+        final ext = res.first.extension ?? 'png';
+        final dir = await getApplicationDocumentsDirectory();
+        final dest = File('${dir.path}/company_logo_${DateTime.now().millisecondsSinceEpoch}.$ext');
+        await src.copy(dest.path);
+        await CompanyService().setCompanyLogo(dest.path);
+        if (mounted) {
+          setState(() {});
+          showSnack(context, 'Company logo updated');
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        showSnack(context, 'Failed to pick logo: $e', error: true);
+      }
+    }
+  }
+
+  Future<void> _removeLogo() async {
+    await CompanyService().removeCompanyLogo();
+    if (mounted) {
+      setState(() {});
+      showSnack(context, 'Company logo removed');
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = widget.themeService.isDark;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Settings')),
+      appBar: const FintechAppBar(
+        title: 'System Settings',
+        subtitle: 'Appearance, branding & preferences',
+      ),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 60),
         children: [
-          // Summary
           if (!_loadingCounts) ...[
-            const _H('INVENTORY SUMMARY'),
+            const SectionLabel('CATALOG METRICS'),
             SizedBox(
-              height: 88,
-              child: ListView(scrollDirection: Axis.horizontal, children: [
-                _SC(icon: Icons.laptop_outlined,         label: 'Laptops',     count: _counts['laptops'] ?? 0,         color: theme.colorScheme.primary),
-                _SC(icon: Icons.router_outlined,         label: 'Routers',     count: _counts['network_devices'] ?? 0, color: AppColors.networkColor),
-                _SC(icon: Icons.wifi_tethering_outlined, label: 'MiFis',       count: _counts['mifis'] ?? 0,           color: const Color(0xFF0EA5E9)),
-                _SC(icon: Icons.cell_tower_outlined,     label: 'APs',         count: _counts['access_points'] ?? 0,   color: const Color(0xFF0891B2)),
-                _SC(icon: Icons.print_outlined,          label: 'Printers',    count: _counts['printers'] ?? 0,        color: AppColors.printerColor),
-                _SC(icon: Icons.devices_other_outlined,  label: 'Electronics', count: _counts['electronics'] ?? 0,     color: AppColors.electronicColor),
-                _SC(icon: Icons.people_outline,          label: 'Employees',   count: _counts['employees'] ?? 0,       color: const Color(0xFF0EA5E9)),
-                _SC(icon: Icons.receipt_long_outlined,   label: 'Expenses',    count: _counts['expenses'] ?? 0,        color: const Color(0xFF10B981)),
-                _SC(icon: Icons.receipt_outlined,        label: 'Bills',       count: _counts['bills'] ?? 0,           color: const Color(0xFF7C3AED)),
-                _SC(icon: Icons.email_outlined,          label: 'Emails',      count: _counts['email_accounts'] ?? 0,  color: const Color(0xFF0EA5E9)),
-                _SC(icon: Icons.swap_horiz_outlined,     label: 'Borrowed',    count: _counts['active_borrows'] ?? 0,  color: AppColors.borrowed),
-                _SC(icon: Icons.history_outlined,         label: 'Log',         count: _counts['log_entries'] ?? 0,     color: const Color(0xFF6366F1)),
-                _SC(icon: Icons.subscriptions_outlined,   label: 'Subs',        count: _counts['subscriptions'] ?? 0,   color: const Color(0xFFE11D48)),
-              ]),
+              height: 94,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                children: [
+                  _StatMetricCard(icon: Icons.laptop_outlined, label: 'Laptops', count: _counts['laptops'] ?? 0, color: theme.colorScheme.primary),
+                  _StatMetricCard(icon: Icons.router_outlined, label: 'Routers', count: _counts['network_devices'] ?? 0, color: AppColors.networkColor),
+                  _StatMetricCard(icon: Icons.wifi_tethering_outlined, label: 'MiFis', count: _counts['mifis'] ?? 0, color: const Color(0xFF0EA5E9)),
+                  _StatMetricCard(icon: Icons.cell_tower_outlined, label: 'APs', count: _counts['access_points'] ?? 0, color: const Color(0xFF0891B2)),
+                  _StatMetricCard(icon: Icons.print_outlined, label: 'Printers', count: _counts['printers'] ?? 0, color: AppColors.printerColor),
+                  _StatMetricCard(icon: Icons.devices_other_outlined, label: 'Electronics', count: _counts['electronics'] ?? 0, color: AppColors.electronicColor),
+                  _StatMetricCard(icon: Icons.people_outline, label: 'Staff', count: _counts['employees'] ?? 0, color: const Color(0xFF0EA5E9)),
+                  _StatMetricCard(icon: Icons.receipt_long_outlined, label: 'Expenses', count: _counts['expenses'] ?? 0, color: const Color(0xFF10B981)),
+                  _StatMetricCard(icon: Icons.receipt_outlined, label: 'Bills', count: _counts['bills'] ?? 0, color: const Color(0xFF7C3AED)),
+                  _StatMetricCard(icon: Icons.alternate_email_rounded, label: 'Emails', count: _counts['email_accounts'] ?? 0, color: const Color(0xFF0EA5E9)),
+                  _StatMetricCard(icon: Icons.swap_horiz_outlined, label: 'Borrows', count: _counts['active_borrows'] ?? 0, color: AppColors.borrowed),
+                  _StatMetricCard(icon: Icons.confirmation_number_outlined, label: 'Tickets', count: _counts['log_entries'] ?? 0, color: const Color(0xFF6366F1)),
+                  _StatMetricCard(icon: Icons.subscriptions_outlined, label: 'Subs', count: _counts['subscriptions'] ?? 0, color: const Color(0xFFE11D48)),
+                ],
+              ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 18),
           ],
 
-          // Company
-          const _H('COMPANY'),
-          Row(children: [
-            Expanded(child: TextFormField(
-              controller: _companyCtrl,
-              enableSuggestions: false, autocorrect: false,
-              decoration: const InputDecoration(
-                labelText: 'Company Name',
-                prefixIcon: Icon(Icons.business_outlined)),
-            )),
-            const SizedBox(width: 8),
-            ElevatedButton(onPressed: _saveCompany, child: const Text('Save')),
-          ]),
-
-          // Appearance
-          const SizedBox(height: 12),
-          const _H('APPEARANCE'),
-          _T(icon: isDark ? Icons.dark_mode_outlined : Icons.light_mode_outlined,
-            color: isDark ? const Color(0xFF8B5CF6) : const Color(0xFFF59E0B),
-            title: 'Dark Mode', subtitle: isDark ? 'Currently enabled' : 'Currently disabled',
-            trailing: Switch(value: isDark, onChanged: (_) => widget.themeService.toggle())),
-
-          // Backup & Restore
-          const SizedBox(height: 8),
-          const _H('BACKUP & RESTORE'),
-          _T(icon: Icons.save_alt_outlined, color: theme.colorScheme.primary,
-            title: 'Backup Data', subtitle: 'Save JSON backup — opens file manager',
-            onTap: _backup),
-          _T(icon: Icons.restore_outlined, color: Colors.orange,
-            title: 'Restore Data', subtitle: 'Restore from a JSON backup file',
-            onTap: _restore),
-
-          // Export
-          const SizedBox(height: 8),
-          const _H('EXPORT'),
-          _T(icon: Icons.table_chart_outlined, color: Colors.teal,
-            title: 'Export', subtitle: 'Export a category to Excel (.xlsx)',
-            onTap: _exportDevices),
-          _T(icon: Icons.receipt_long_outlined, color: const Color(0xFF10B981),
-            title: 'Export Expenses', subtitle: 'Export expenses by date range to Excel',
-            onTap: _exportExpenses),
-          _T(icon: Icons.picture_as_pdf_outlined, color: const Color(0xFFE11D48),
-            title: 'Export Financial Summary Report (PDF)', subtitle: 'Generate PDF report for Expenses, Bills & Subscriptions',
-            onTap: _exportPdfReport),
-
-          // Import
-          const SizedBox(height: 8),
-          const _H('IMPORT'),
-          _T(icon: Icons.download_outlined, color: const Color(0xFF3B82F6),
-            title: 'Import', subtitle: 'Import from Excel — Laptops, Routers, MiFis, APs, Printers, Electronics, Employees, Bills, Emails, Log, Subscriptions',
-            onTap: _importDevices),
-          _T(icon: Icons.playlist_add_outlined, color: const Color(0xFF10B981),
-            title: 'Import Expenses', subtitle: 'Import expenses from an Excel file',
-            onTap: _importExpenses),
-
-          // Labels
-          const SizedBox(height: 8),
-          const _H('DEVICE LABELS'),
-          _T(icon: Icons.label_outline, color: const Color(0xFFB45309),
-            title: 'Export Labels (PDF)', subtitle: 'Generate 3-column label sheet',
-            onTap: () => Navigator.push(context,
-                MaterialPageRoute(builder: (_) => const LabelExportScreen()))),
-
-          // About
-          const SizedBox(height: 16),
-          const _H('ABOUT'),
-          _T(
-            icon: Icons.info_outline_rounded,
-            color: theme.colorScheme.primary,
-            title: 'Version',
-            subtitle: 'com.ma.itbox',
-            trailing: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.primaryContainer,
-                borderRadius: BorderRadius.circular(20),
+          const SectionLabel('ORGANIZATION & BRANDING'),
+          FintechGroupedCard(
+            title: 'Organization Identity',
+            icon: Icons.business_outlined,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: AppTextField(
+                      controller: _companyCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Company / Org Name',
+                        prefixIcon: Icon(Icons.corporate_fare_rounded),
+                        hintText: 'e.g. Acme Corp',
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  ElevatedButton(
+                    onPressed: _saveCompany,
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
+                    child: const Text('Save', style: TextStyle(fontWeight: FontWeight.w700)),
+                  ),
+                ],
               ),
-              child: Text(
-                'v1.0.2',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: theme.colorScheme.primary,
+              const SizedBox(height: 16),
+              const Divider(height: 1),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Container(
+                    width: 54,
+                    height: 54,
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
+                        width: 1,
+                      ),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: CompanyService().hasLogo
+                        ? Image.file(
+                            File(CompanyService().logoPath),
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => const Icon(Icons.broken_image_rounded),
+                          )
+                        : Icon(
+                            Icons.image_outlined,
+                            color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
+                            size: 26,
+                          ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Company Logo',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14,
+                            color: theme.colorScheme.onSurface,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          CompanyService().hasLogo
+                              ? 'Appears on Home & Custody PDFs'
+                              : 'Upload PNG/JPG logo for custody slips',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  if (CompanyService().hasLogo)
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline_rounded, color: Colors.red),
+                      tooltip: 'Remove Logo',
+                      onPressed: _removeLogo,
+                    ),
+                  OutlinedButton.icon(
+                    onPressed: _pickLogo,
+                    icon: Icon(CompanyService().hasLogo ? Icons.edit_outlined : Icons.upload_rounded, size: 16),
+                    label: Text(CompanyService().hasLogo ? 'Change' : 'Upload'),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+
+          const SectionLabel('APPEARANCE & THEME'),
+          FintechGroupedCard(
+            title: 'Visual Theme',
+            icon: Icons.palette_outlined,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: _ThemePill(
+                      icon: Icons.brightness_auto_rounded,
+                      label: 'System',
+                      value: 'system',
+                      selected: widget.themeService.themeMode,
+                      onTap: () => widget.themeService.updateSetting('themeMode', 'system'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _ThemePill(
+                      icon: Icons.light_mode_rounded,
+                      label: 'Light',
+                      value: 'light',
+                      selected: widget.themeService.themeMode,
+                      onTap: () => widget.themeService.updateSetting('themeMode', 'light'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _ThemePill(
+                      icon: Icons.dark_mode_rounded,
+                      label: 'Dark',
+                      value: 'dark',
+                      selected: widget.themeService.themeMode,
+                      onTap: () => widget.themeService.updateSetting('themeMode', 'dark'),
+                    ),
+                  ),
+                ],
+              ),
+              const Divider(height: 20),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                secondary: const IconBox(icon: Icons.format_paint_outlined, color: Colors.indigo, size: 36),
+                title: const Text('Dynamic System Color', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                subtitle: Text('Derive color palette dynamically from your Android wallpaper', style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurface.withValues(alpha: 0.5))),
+                value: widget.themeService.dynamicColorEnabled,
+                onChanged: (v) => widget.themeService.updateSetting('dynamicColorEnabled', v),
+              ),
+              if (widget.themeService.themeMode != 'light') ...[
+                const Divider(height: 20),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  secondary: const IconBox(icon: Icons.contrast_rounded, color: Colors.blueGrey, size: 36),
+                  title: const Text('True Black (AMOLED)', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                  subtitle: Text('Pure #000000 background for OLED efficiency', style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurface.withValues(alpha: 0.5))),
+                  value: widget.themeService.amoledSurfaces,
+                  onChanged: (v) => widget.themeService.updateSetting('amoledSurfaces', v),
                 ),
-              ),
-            ),
+              ],
+              if (!widget.themeService.dynamicColorEnabled) ...[
+                const Divider(height: 20),
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.palette_outlined, color: theme.colorScheme.primary, size: 20),
+                          const SizedBox(width: 10),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('Accent Color', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                              Text(
+                                kSeedLabels[widget.themeService.themeSeed] ?? widget.themeService.themeSeed,
+                                style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurface.withValues(alpha: 0.55)),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: kSeedColors.entries.map((e) {
+                          final sel = widget.themeService.themeSeed == e.key;
+                          return GestureDetector(
+                            onTap: () => widget.themeService.updateSetting('themeSeed', e.key),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 100),
+                              width: 32,
+                              height: 32,
+                              decoration: BoxDecoration(
+                                color: e.value,
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: sel ? theme.colorScheme.onSurface : Colors.transparent,
+                                  width: 3,
+                                ),
+                                boxShadow: sel
+                                    ? [
+                                        BoxShadow(
+                                          color: e.value.withValues(alpha: 0.5),
+                                          blurRadius: 6,
+                                          spreadRadius: 1,
+                                        ),
+                                      ]
+                                    : null,
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
           ),
-          const _T(
-            icon: Icons.shield_outlined,
-            color: Color(0xFF10B981),
-            title: 'Privacy',
-            subtitle: 'All data stored locally — 100% offline',
-            trailing: Icon(
-              Icons.check_circle_outline,
-              color: Color(0xFF2E7D32),
-            ),
-          ),
-          _T(
-            icon: Icons.code_rounded,
-            color: const Color(0xFF3B82F6),
-            title: 'GitHub',
-            subtitle: 'View source code',
-            trailing: Icon(
-              Icons.open_in_new_rounded,
-              size: 18,
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
-            ),
-            onTap: () async {
-              final uri = Uri.parse('https://github.com/mina-android/IT-Box');
-              if (await canLaunchUrl(uri)) {
-                await launchUrl(uri, mode: LaunchMode.externalApplication);
-              }
-            },
-          ),
-          _T(
-            icon: Icons.person_outline_rounded,
-            color: const Color(0xFF8B5CF6),
-            title: 'Developer',
-            subtitle: 'Discover more projects by Mina Android',
-            trailing: Icon(
-              Icons.open_in_new_rounded,
-              size: 18,
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
-            ),
-            onTap: () async {
-              final uri = Uri.parse('https://github.com/mina-android');
-              if (await canLaunchUrl(uri)) {
-                await launchUrl(uri, mode: LaunchMode.externalApplication);
-              }
-            },
-          ),
+          const SizedBox(height: 18),
 
-          const SizedBox(height: 32),
-          Center(child: Column(children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(20),
-              child: Image.asset('assets/icon/app_icon.png', width: 40, height: 40,
-                errorBuilder: (_, __, ___) => Container(
-                  width: 60, height: 60,
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.primary.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(20)),
-                  child: Icon(Icons.inventory_2_outlined, size: 34,
-                      color: theme.colorScheme.primary)))),
-            const SizedBox(height: 8),
-            Text('IT Box', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
-            Text('v1.0.2 · com.ma.itbox', style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.4))),
-          ])),
-          const SizedBox(height: 32),
+          const SectionLabel('TYPOGRAPHY'),
+          FintechGroupedCard(
+            title: 'App Typography',
+            icon: Icons.text_fields_rounded,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.text_fields_rounded, color: theme.colorScheme.primary, size: 20),
+                  const SizedBox(width: 10),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('App Font', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                      Text(
+                        kFonts[widget.themeService.appFont] ?? 'System Default',
+                        style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurface.withValues(alpha: 0.55)),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: kFonts.entries.map((e) {
+                  final sel = widget.themeService.appFont == e.key;
+                  final isDark = theme.brightness == Brightness.dark;
+                  return GestureDetector(
+                    onTap: () => widget.themeService.updateSetting('appFont', e.key),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 100),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: sel
+                            ? theme.colorScheme.primary
+                            : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: sel
+                              ? theme.colorScheme.primary
+                              : (isDark
+                                  ? Colors.white.withValues(alpha: 0.08)
+                                  : Colors.black.withValues(alpha: 0.06)),
+                        ),
+                      ),
+                      child: Text(
+                        e.value,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: sel ? FontWeight.w700 : FontWeight.w400,
+                          color: sel ? theme.colorScheme.onPrimary : theme.colorScheme.onSurface,
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+
+          const SectionLabel('APPLICATION INFO'),
+          FintechGroupedCard(
+            title: 'About IT Box',
+            icon: Icons.info_outline_rounded,
+            children: [
+              const DetailRow(
+                label: 'Software Version',
+                value: 'v1.1.0',
+                icon: Icons.verified_outlined,
+              ),
+              const DetailRow(
+                label: 'Privacy Guarantee',
+                value: '100% Offline • Zero Network Tracking',
+                icon: Icons.security_outlined,
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () async {
+                        final uri = Uri.parse('https://github.com/mina-android/IT-Box');
+                        await launchUrl(uri, mode: LaunchMode.externalApplication);
+                      },
+                      icon: const Icon(Icons.code_rounded, size: 18),
+                      label: const Text('GitHub Repo'),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () async {
+                        final uri = Uri.parse('https://portfolio.minaashraf285.workers.dev');
+                        await launchUrl(uri, mode: LaunchMode.externalApplication);
+                      },
+                      icon: const Icon(Icons.person_outline_rounded, size: 18),
+                      label: const Text('Developer'),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ],
       ),
     );
   }
 }
 
-class _H extends StatelessWidget {
-  final String text;
-  const _H(this.text);
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: 8, left: 4),
-    child: Text(text, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800,
-        color: Theme.of(context).colorScheme.primary, letterSpacing: 0.8)));
-}
+class _StatMetricCard extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final int count;
+  final Color color;
 
-class _SC extends StatelessWidget {
-  final IconData icon; final String label; final int count; final Color color;
-  const _SC({required this.icon, required this.label, required this.count, required this.color});
-  @override
-  Widget build(BuildContext context) => Container(
-    width: 80, margin: const EdgeInsets.only(right: 8), padding: const EdgeInsets.all(10),
-    decoration: BoxDecoration(
-      color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(14),
-      border: Border.all(color: color.withValues(alpha: 0.2))),
-    child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-      Icon(icon, color: color, size: 20),
-      const SizedBox(height: 4),
-      Text('$count', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: color)),
-      Text(label, style: TextStyle(fontSize: 9, color: color.withValues(alpha: 0.8), fontWeight: FontWeight.w600),
-          textAlign: TextAlign.center),
-    ]));
-}
+  const _StatMetricCard({
+    required this.icon,
+    required this.label,
+    required this.count,
+    required this.color,
+  });
 
-class _T extends StatelessWidget {
-  final IconData icon; final Color color;
-  final String title, subtitle;
-  final VoidCallback? onTap; final Widget? trailing;
-  const _T({required this.icon, required this.color, required this.title,
-      required this.subtitle, this.onTap, this.trailing});
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Card(
-      margin: const EdgeInsets.only(bottom: 6),
-      child: ListTile(
-        onTap: onTap,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-        leading: Container(width: 40, height: 40,
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(11)),
-          child: Icon(icon, color: color, size: 19)),
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
-        subtitle: Text(subtitle, style: TextStyle(fontSize: 12,
-            color: theme.colorScheme.onSurface.withValues(alpha: 0.5))),
-        trailing: trailing ??
-            (onTap != null ? Icon(Icons.chevron_right,
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.3)) : null),
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Container(
+      width: 86,
+      margin: const EdgeInsets.only(right: 8),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.darkCard : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.02),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, color: color, size: 18),
+          const SizedBox(height: 4),
+          Text(
+            '$count',
+            style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: color),
+          ),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+            ),
+            textAlign: TextAlign.center,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ThemePill extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  final String selected;
+  final VoidCallback onTap;
+
+  const _ThemePill({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final sel = selected == value;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        height: 54,
+        decoration: BoxDecoration(
+          color: sel ? AppColors.primary : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 18, color: sel ? Colors.white : theme.colorScheme.onSurface.withValues(alpha: 0.7)),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: sel ? Colors.white : theme.colorScheme.onSurface,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

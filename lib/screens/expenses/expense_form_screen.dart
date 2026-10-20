@@ -4,22 +4,29 @@ import '../../database/database_helper.dart';
 import '../../models/expense.dart';
 import '../../widgets/common_widgets.dart';
 
+const Color _expenseColor = Color(0xFF10B981);
+
 class ExpenseFormScreen extends StatefulWidget {
   final Expense? expense;
   const ExpenseFormScreen({super.key, this.expense});
   @override
-  State<ExpenseFormScreen> createState() => _State();
+  State<ExpenseFormScreen> createState() => _ExpenseFormScreenState();
 }
 
-class _State extends State<ExpenseFormScreen> {
+class _ExpenseFormScreenState extends State<ExpenseFormScreen> {
   final _key = GlobalKey<FormState>();
+  final _shakeKey = GlobalKey<ShakeWidgetState>();
   final _db = DatabaseHelper();
   bool _saving = false;
   DateTime _date = DateTime.now();
 
-  late final _item    = TextEditingController(text: widget.expense?.item ?? '');
-  late final _price   = TextEditingController(text: widget.expense != null ? widget.expense!.price.toStringAsFixed(2) : '');
-  late final _details = TextEditingController(text: widget.expense?.details ?? '');
+  late final _item = TextEditingController(text: widget.expense?.item ?? '');
+  late final _price = TextEditingController(
+      text: widget.expense != null
+          ? widget.expense!.price.toStringAsFixed(2)
+          : '');
+  late final _details =
+      TextEditingController(text: widget.expense?.details ?? '');
 
   @override
   void initState() {
@@ -30,19 +37,30 @@ class _State extends State<ExpenseFormScreen> {
   }
 
   @override
-  void dispose() { for (final c in [_item, _price, _details]) {
+  void dispose() {
+    for (final c in [_item, _price, _details]) {
       c.dispose();
-    } super.dispose(); }
+    }
+    super.dispose();
+  }
 
   Future<void> _pickDate() async {
     final picked = await showDatePicker(
-      context: context, initialDate: _date,
-      firstDate: DateTime(2020), lastDate: DateTime.now().add(const Duration(days: 365)));
-    if (picked != null && mounted) setState(() => _date = picked);
+      context: context,
+      initialDate: _date,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+    );
+    if (picked != null && mounted) {
+      setState(() => _date = picked);
+    }
   }
 
   Future<void> _save() async {
-    if (!_key.currentState!.validate()) return;
+    if (!_key.currentState!.validate()) {
+      _shakeKey.currentState?.shake();
+      return;
+    }
     setState(() => _saving = true);
     try {
       final price = double.tryParse(_price.text.trim()) ?? 0.0;
@@ -58,79 +76,201 @@ class _State extends State<ExpenseFormScreen> {
       } else {
         await _db.updateExpense(e);
       }
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
+      showSnack(context, 'Expense saved successfully!');
       Navigator.pop(context, true);
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       showSnack(context, 'Error: $e', error: true);
     } finally {
-      if (mounted) { setState(() => _saving = false);
-    }
+      if (mounted) {
+        setState(() => _saving = false);
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final isEdit = widget.expense != null;
+    final theme = Theme.of(context);
+
     return Scaffold(
-      appBar: AppBar(title: Text(isEdit ? 'Edit Expense' : 'Add Expense')),
-      body: Form(
-        key: _key,
-        child: ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 40), children: [
-          const SectionLabel('DATE'),
-          InkWell(
-            onTap: _pickDate,
-            borderRadius: BorderRadius.circular(12),
-            child: InputDecorator(
-              decoration: const InputDecoration(prefixIcon: Icon(Icons.calendar_today_outlined), labelText: 'Date'),
-              child: Text(DateFormat('dd MMMM yyyy').format(_date),
-                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500)),
+      appBar: AppBar(
+        title: Text(
+          isEdit ? 'Edit Expense' : 'Add Expense',
+          style: const TextStyle(fontWeight: FontWeight.w800),
+        ),
+      ),
+      body: GestureDetector(
+        onTap: () => FocusScope.of(context).unfocus(),
+        child: ShakeWidget(
+          key: _shakeKey,
+          child: Form(
+            key: _key,
+            autovalidateMode: AutovalidateMode.onUserInteraction,
+            child: ListView(
+              keyboardDismissBehavior:
+                  ScrollViewKeyboardDismissBehavior.onDrag,
+              padding: const EdgeInsets.fromLTRB(18, 8, 18, 40),
+              children: [
+                const SectionLabel('TRANSACTION AMOUNT & DATE'),
+                FintechGroupedCard(
+                  children: [
+                    AppTextField(
+                      controller: _price,
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(
+                        labelText: 'Amount (Price) *',
+                        prefixIcon: Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 14),
+                          child: Center(
+                            widthFactor: 1,
+                            child: Text(
+                              'EGP',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 15,
+                                color: _expenseColor,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      validator: (v) {
+                        if (v == null || v.trim().isEmpty) {
+                          return 'Required';
+                        }
+                        if (double.tryParse(v.trim()) == null) {
+                          return 'Enter a valid amount';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    InkWell(
+                      onTap: _pickDate,
+                      borderRadius: BorderRadius.circular(14),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 14),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surfaceContainerHighest
+                              .withValues(alpha: 0.28),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: theme.colorScheme.outlineVariant
+                                .withValues(alpha: 0.25),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.calendar_today_rounded,
+                              size: 20,
+                              color: theme.colorScheme.primary,
+                            ),
+                            const SizedBox(width: 12),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Transaction Date',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: theme.colorScheme.onSurface
+                                        .withValues(alpha: 0.6),
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  DateFormat('EEEE, d MMMM yyyy').format(_date),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const Spacer(),
+                            Icon(
+                              Icons.edit_calendar_rounded,
+                              size: 18,
+                              color: theme.colorScheme.onSurface
+                                  .withValues(alpha: 0.5),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SectionLabel('EXPENSE DESCRIPTION'),
+                FintechGroupedCard(
+                  children: [
+                    AppTextField(
+                      controller: _item,
+                      decoration: const InputDecoration(
+                        labelText: 'Item / Category *',
+                        prefixIcon:
+                            Icon(Icons.shopping_bag_outlined, size: 20),
+                      ),
+                      validator: (v) =>
+                          v == null || v.trim().isEmpty ? 'Required' : null,
+                    ),
+                    const SizedBox(height: 12),
+                    AppTextField(
+                      controller: _details,
+                      maxLines: 3,
+                      decoration: const InputDecoration(
+                        labelText: 'Notes / Additional Details',
+                        prefixIcon: Icon(Icons.notes_rounded, size: 20),
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 16),
+                SizedBox(
+                  height: 52,
+                  child: FilledButton.icon(
+                    onPressed: _saving ? null : _save,
+                    icon: _saving
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Icon(Icons.check_circle_outline_rounded, size: 20),
+                    label: Text(
+                      isEdit ? 'Update Expense' : 'Record Expense',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: _expenseColor,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(26),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
-          const SectionLabel('EXPENSE DETAILS'),
-          Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: TextFormField(
-        enableSuggestions: false,
-        autocorrect: false,
-              controller: _item,
-              decoration: const InputDecoration(labelText: 'Item / Description *', prefixIcon: Icon(Icons.shopping_bag_outlined), hintText: 'What was purchased?'),
-              validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: TextFormField(
-        enableSuggestions: false,
-        autocorrect: false,
-              controller: _price,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(labelText: 'Price *', prefixIcon: Icon(Icons.attach_money_outlined), hintText: '0.00'),
-              validator: (v) {
-                if (v == null || v.trim().isEmpty) return 'Required';
-                if (double.tryParse(v.trim()) == null) return 'Enter a valid number';
-                return null;
-              },
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: TextFormField(
-        enableSuggestions: false,
-        autocorrect: false,
-              controller: _details,
-              maxLines: 3,
-              decoration: const InputDecoration(labelText: 'Details', prefixIcon: Icon(Icons.notes_outlined), alignLabelWithHint: true, hintText: 'Additional notes...'),
-            ),
-          ),
-          const SizedBox(height: 20),
-          ElevatedButton.icon(
-            onPressed: _saving ? null : _save,
-            icon: _saving ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Icon(Icons.save_outlined),
-            label: Text(isEdit ? 'Update Expense' : 'Add Expense'),
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF10B981)),
-          ),
-        ]),
+        ),
       ),
     );
   }

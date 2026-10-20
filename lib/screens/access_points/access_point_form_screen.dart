@@ -7,60 +7,177 @@ class AccessPointFormScreen extends StatefulWidget {
   final AccessPoint? ap;
   const AccessPointFormScreen({super.key, this.ap});
   @override
-  State<AccessPointFormScreen> createState() => _State();
+  State<AccessPointFormScreen> createState() => _AccessPointFormScreenState();
 }
 
-class _State extends State<AccessPointFormScreen> {
-  final _key = GlobalKey<FormState>(); final _db = DatabaseHelper();
+class _AccessPointFormScreenState extends State<AccessPointFormScreen> {
+  final _key = GlobalKey<FormState>();
+  final _shakeKey = GlobalKey<ShakeWidgetState>();
+  final _db = DatabaseHelper();
   bool _saving = false;
-  late final _num  = TextEditingController(text: widget.ap?.deviceNumber ?? '');
+
+  late final _num =
+      TextEditingController(text: widget.ap?.deviceNumber ?? '');
   late final _model = TextEditingController(text: widget.ap?.model ?? '');
   late final _port = TextEditingController(text: widget.ap?.portNumber ?? '');
-  late final _loc  = TextEditingController(text: widget.ap?.location ?? '');
+  late final _loc = TextEditingController(text: widget.ap?.location ?? '');
 
   @override
-  void dispose() { for (final c in [_num, _model, _port, _loc]) {
+  void dispose() {
+    for (final c in [_num, _model, _port, _loc]) {
       c.dispose();
-    } super.dispose(); }
+    }
+    super.dispose();
+  }
 
   Future<void> _save() async {
-    if (!_key.currentState!.validate()) return;
+    if (!_key.currentState!.validate()) {
+      _shakeKey.currentState?.shake();
+      return;
+    }
     setState(() => _saving = true);
     try {
-      final obj = AccessPoint(id: widget.ap?.id, deviceNumber: _num.text.trim(), model: _model.text.trim(), portNumber: _port.text.trim(), location: _loc.text.trim());
+      final obj = AccessPoint(
+        id: widget.ap?.id,
+        deviceNumber: _num.text.trim(),
+        model: _model.text.trim(),
+        portNumber: _port.text.trim(),
+        location: _loc.text.trim(),
+      );
       if (widget.ap == null) {
         await _db.insertAccessPoint(obj);
       } else {
         await _db.updateAccessPoint(obj);
       }
-      if (!mounted) { return; }
+      if (!mounted) {
+        return;
+      }
+      showSnack(context, 'Access Point saved successfully!');
       Navigator.pop(context, true);
-    } catch (e) { if (!mounted) { return; }
-      showSnack(context, 'Error: $e', error: true); }
-    finally { if (mounted) { setState(() => _saving = false); } }
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      showSnack(context, 'Error: $e', error: true);
+    } finally {
+      if (mounted) {
+        setState(() => _saving = false);
+      }
+    }
+  }
+
+  Widget _buildField({
+    required TextEditingController controller,
+    required String label,
+    required IconData icon,
+    bool required = false,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: AppTextField(
+        controller: controller,
+        decoration: InputDecoration(
+          labelText: label,
+          prefixIcon: Icon(icon, size: 20),
+        ),
+        validator: required
+            ? (v) => v == null || v.trim().isEmpty ? 'Required' : null
+            : null,
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final isNew = widget.ap == null;
+
     return Scaffold(
-      appBar: AppBar(title: Text(widget.ap == null ? 'Add Access Point' : 'Edit Access Point')),
-      body: Form(key: _key, child: ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 40), children: [
-        Padding(padding: const EdgeInsets.only(bottom: 10), child: TextFormField(enableSuggestions: false, autocorrect: false, controller: _num,
-          decoration: const InputDecoration(labelText: 'Device Number *', prefixIcon: Icon(Icons.tag), hintText: 'e.g. AP-01'),
-          validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null)),
-        Padding(padding: const EdgeInsets.only(bottom: 10), child: TextFormField(enableSuggestions: false, autocorrect: false, controller: _model,
-          decoration: const InputDecoration(labelText: 'Model *', prefixIcon: Icon(Icons.memory_outlined), hintText: 'e.g. UniFi U6 Pro'),
-          validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null)),
-        Padding(padding: const EdgeInsets.only(bottom: 10), child: TextFormField(enableSuggestions: false, autocorrect: false, controller: _port,
-          decoration: const InputDecoration(labelText: 'Port Number', prefixIcon: Icon(Icons.settings_ethernet_outlined), hintText: 'e.g. Port 24'))),
-        Padding(padding: const EdgeInsets.only(bottom: 14), child: TextFormField(enableSuggestions: false, autocorrect: false, controller: _loc,
-          decoration: const InputDecoration(labelText: 'Location', prefixIcon: Icon(Icons.location_on_outlined), hintText: 'Floor / Room'))),
-        const SizedBox(height: 10),
-        ElevatedButton.icon(onPressed: _saving ? null : _save,
-          icon: _saving ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Icon(Icons.save_outlined),
-          label: Text(widget.ap == null ? 'Add Access Point' : 'Save Changes'),
-          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0891B2))),
-      ])),
+      appBar: AppBar(
+        title: Text(
+          isNew ? 'Add Access Point' : 'Edit Access Point',
+          style: const TextStyle(fontWeight: FontWeight.w800),
+        ),
+      ),
+      body: GestureDetector(
+        onTap: () => FocusScope.of(context).unfocus(),
+        child: ShakeWidget(
+          key: _shakeKey,
+          child: Form(
+            key: _key,
+            autovalidateMode: AutovalidateMode.onUserInteraction,
+            child: ListView(
+              keyboardDismissBehavior:
+                  ScrollViewKeyboardDismissBehavior.onDrag,
+              padding: const EdgeInsets.fromLTRB(18, 8, 18, 40),
+              children: [
+                const SectionLabel('DEVICE IDENTITY'),
+                FintechGroupedCard(
+                  children: [
+                    _buildField(
+                      controller: _num,
+                      label: 'Device Tag / Number *',
+                      icon: Icons.tag_rounded,
+                      required: true,
+                    ),
+                    _buildField(
+                      controller: _model,
+                      label: 'AP Model *',
+                      icon: Icons.cell_tower_rounded,
+                      required: true,
+                    ),
+                  ],
+                ),
+                const SectionLabel('NETWORK PORT & LOCATION'),
+                FintechGroupedCard(
+                  children: [
+                    _buildField(
+                      controller: _port,
+                      label: 'Patch Panel / Switch Port',
+                      icon: Icons.settings_ethernet_rounded,
+                    ),
+                    _buildField(
+                      controller: _loc,
+                      label: 'Physical Location / Zone',
+                      icon: Icons.location_on_outlined,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  height: 52,
+                  child: FilledButton.icon(
+                    onPressed: _saving ? null : _save,
+                    icon: _saving
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Icon(Icons.check_circle_outline_rounded, size: 20),
+                    label: Text(
+                      isNew ? 'Save Access Point' : 'Update Access Point',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF0891B2),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(26),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

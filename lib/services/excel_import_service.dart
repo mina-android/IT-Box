@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:excel/excel.dart';
 import 'package:file_picker/file_picker.dart';
 import '../database/database_helper.dart';
@@ -13,6 +14,7 @@ import '../models/email_account.dart';
 import '../models/log_entry.dart';
 import '../models/subscription.dart';
 import '../models/access_point.dart';
+import '../models/other_device.dart';
 
 /// Result of an import operation
 class ImportResult {
@@ -25,20 +27,21 @@ class ImportResult {
       '${errors.isNotEmpty ? ", ${errors.length} errors" : ""}';
 }
 
+// Top-level function for isolate
+Excel? _decodeExcel(List<int> bytes) => Excel.decodeBytes(bytes);
+
 class ExcelImportService {
   static final _db = DatabaseHelper();
 
   // ── Pick file ─────────────────────────────────────────────────
   static Future<Excel?> pickExcel() async {
-    final result = await FilePicker.platform.pickFiles(
+    final result = await FilePickerPlatform.instance.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['xlsx'],
-      withData: true,
     );
-    if (result == null || result.files.isEmpty) return null;
-    final bytes = result.files.first.bytes;
-    if (bytes == null) return null;
-    return Excel.decodeBytes(bytes);
+    if (result.isEmpty) return null;
+    final bytes = await result.first.readAsBytes();
+    return await compute(_decodeExcel, bytes);
   }
 
   // ── Cell value helper ─────────────────────────────────────────
@@ -64,12 +67,49 @@ class ExcelImportService {
     }).toList();
   }
 
+  static Future<ImportResult> _executeBatchImport<T>({
+    required String tableName,
+    required List<T> items,
+    required int skipped,
+    required List<String> errors,
+    required bool replace,
+    required Future<void> Function(T item) inserter,
+  }) async {
+    if (items.isEmpty) {
+      return ImportResult(
+        inserted: 0,
+        skipped: skipped,
+        errors: [
+          if (replace) 'No valid records found in file. Import aborted to prevent data loss.'
+          else if (errors.isEmpty) 'No valid records found in file.'
+          else ...errors,
+        ],
+      );
+    }
+
+    int inserted = 0;
+    await _db.batchScope(() async {
+      await _db.drift.transaction(() async {
+        if (replace) {
+          await _db.deleteTable(tableName);
+        }
+        for (final item in items) {
+          await inserter(item);
+          inserted++;
+        }
+      });
+    });
+
+    return ImportResult(inserted: inserted, skipped: skipped, errors: errors);
+  }
+
   // ── LAPTOPS ──────────────────────────────────────────────────
   // Expected columns: #, Laptop No., Model, CPU, GPU, RAM, Storage, Condition, User
-  static Future<ImportResult> importLaptops(Excel excel) async {
+  static Future<ImportResult> importLaptops(Excel excel, {bool replace = false}) async {
     final sheet = excel.sheets.values.first;
     final rows = _rows(sheet);
-    int inserted = 0, skipped = 0;
+    final items = <Laptop>[];
+    int skipped = 0;
     final errors = <String>[];
 
     for (var i = 0; i < rows.length; i++) {
@@ -78,7 +118,7 @@ class ExcelImportService {
         final num  = _str(row.length > 1 ? row[1] : null); // col 1
         final model= _str(row.length > 2 ? row[2] : null);
         if (num.isEmpty || model.isEmpty) { skipped++; continue; }
-        final l = Laptop(
+        items.add(Laptop(
           laptopNumber: num,
           model:        model,
           cpu:          _str(row.length > 3 ? row[3] : null),
@@ -87,20 +127,27 @@ class ExcelImportService {
           storage:      _str(row.length > 6 ? row[6] : null),
           condition:    _str(row.length > 7 ? row[7] : null).isEmpty ? 'Good' : _str(row[7]),
           user:         _str(row.length > 8 ? row[8] : null),
-        );
-        await _db.insertLaptop(l);
-        inserted++;
+        ));
       } catch (e) { errors.add('Row ${i + 2}: $e'); skipped++; }
     }
-    return ImportResult(inserted: inserted, skipped: skipped, errors: errors);
+
+    return _executeBatchImport<Laptop>(
+      tableName: 'laptops',
+      items: items,
+      skipped: skipped,
+      errors: errors,
+      replace: replace,
+      inserter: (l) => _db.insertLaptop(l),
+    );
   }
 
   // ── NETWORK DEVICES ──────────────────────────────────────────
   // Columns: #, Device No., Model, Phone No., Location, Provider, WiFi Name, Status
-  static Future<ImportResult> importNetworkDevices(Excel excel) async {
+  static Future<ImportResult> importNetworkDevices(Excel excel, {bool replace = false}) async {
     final sheet = excel.sheets.values.first;
     final rows = _rows(sheet);
-    int inserted = 0, skipped = 0;
+    final items = <NetworkDevice>[];
+    int skipped = 0;
     final errors = <String>[];
 
     for (var i = 0; i < rows.length; i++) {
@@ -109,7 +156,7 @@ class ExcelImportService {
         final num  = _str(row.length > 1 ? row[1] : null);
         final model= _str(row.length > 2 ? row[2] : null);
         if (num.isEmpty || model.isEmpty) { skipped++; continue; }
-        final d = NetworkDevice(
+        items.add(NetworkDevice(
           deviceNumber:   num,
           model:          model,
           phoneNumber:    _str(row.length > 3 ? row[3] : null),
@@ -117,20 +164,27 @@ class ExcelImportService {
           serviceProvider:_str(row.length > 5 ? row[5] : null),
           wifiName:       _str(row.length > 6 ? row[6] : null),
           status:         'Available',
-        );
-        await _db.insertNetworkDevice(d);
-        inserted++;
+        ));
       } catch (e) { errors.add('Row ${i + 2}: $e'); skipped++; }
     }
-    return ImportResult(inserted: inserted, skipped: skipped, errors: errors);
+
+    return _executeBatchImport<NetworkDevice>(
+      tableName: 'network_devices',
+      items: items,
+      skipped: skipped,
+      errors: errors,
+      replace: replace,
+      inserter: (d) => _db.insertNetworkDevice(d),
+    );
   }
 
   // ── MIFIS ────────────────────────────────────────────────────
   // Columns: #, Device No., Model, Phone No., WiFi Name, Quota, Provider, Status
-  static Future<ImportResult> importMiFis(Excel excel) async {
+  static Future<ImportResult> importMiFis(Excel excel, {bool replace = false}) async {
     final sheet = excel.sheets.values.first;
     final rows = _rows(sheet);
-    int inserted = 0, skipped = 0;
+    final items = <MiFi>[];
+    int skipped = 0;
     final errors = <String>[];
 
     for (var i = 0; i < rows.length; i++) {
@@ -139,7 +193,7 @@ class ExcelImportService {
         final num  = _str(row.length > 1 ? row[1] : null);
         final model= _str(row.length > 2 ? row[2] : null);
         if (num.isEmpty || model.isEmpty) { skipped++; continue; }
-        final m = MiFi(
+        items.add(MiFi(
           deviceNumber:   num,
           model:          model,
           phoneNumber:    _str(row.length > 3 ? row[3] : null),
@@ -147,20 +201,27 @@ class ExcelImportService {
           quota:          _str(row.length > 5 ? row[5] : null),
           serviceProvider:_str(row.length > 6 ? row[6] : null),
           status:         'Available',
-        );
-        await _db.insertMiFi(m);
-        inserted++;
+        ));
       } catch (e) { errors.add('Row ${i + 2}: $e'); skipped++; }
     }
-    return ImportResult(inserted: inserted, skipped: skipped, errors: errors);
+
+    return _executeBatchImport<MiFi>(
+      tableName: 'mifis',
+      items: items,
+      skipped: skipped,
+      errors: errors,
+      replace: replace,
+      inserter: (m) => _db.insertMiFi(m),
+    );
   }
 
   // ── PRINTERS ─────────────────────────────────────────────────
   // Columns: #, Printer No., Model, Condition, Location
-  static Future<ImportResult> importPrinters(Excel excel) async {
+  static Future<ImportResult> importPrinters(Excel excel, {bool replace = false}) async {
     final sheet = excel.sheets.values.first;
     final rows = _rows(sheet);
-    int inserted = 0, skipped = 0;
+    final items = <Printer>[];
+    int skipped = 0;
     final errors = <String>[];
 
     for (var i = 0; i < rows.length; i++) {
@@ -169,25 +230,32 @@ class ExcelImportService {
         final num  = _str(row.length > 1 ? row[1] : null);
         final model= _str(row.length > 2 ? row[2] : null);
         if (num.isEmpty || model.isEmpty) { skipped++; continue; }
-        final p = Printer(
+        items.add(Printer(
           printerNumber: num,
           model:         model,
           condition:     _str(row.length > 3 ? row[3] : null).isEmpty ? 'Good' : _str(row[3]),
           location:      _str(row.length > 4 ? row[4] : null),
-        );
-        await _db.insertPrinter(p);
-        inserted++;
+        ));
       } catch (e) { errors.add('Row ${i + 2}: $e'); skipped++; }
     }
-    return ImportResult(inserted: inserted, skipped: skipped, errors: errors);
+
+    return _executeBatchImport<Printer>(
+      tableName: 'printers',
+      items: items,
+      skipped: skipped,
+      errors: errors,
+      replace: replace,
+      inserter: (p) => _db.insertPrinter(p),
+    );
   }
 
   // ── ELECTRONICS ──────────────────────────────────────────────
   // Columns: #, Device No., Device Name, Details, Status
-  static Future<ImportResult> importElectronics(Excel excel) async {
+  static Future<ImportResult> importElectronics(Excel excel, {bool replace = false}) async {
     final sheet = excel.sheets.values.first;
     final rows = _rows(sheet);
-    int inserted = 0, skipped = 0;
+    final items = <Electronic>[];
+    int skipped = 0;
     final errors = <String>[];
 
     for (var i = 0; i < rows.length; i++) {
@@ -196,25 +264,32 @@ class ExcelImportService {
         final num  = _str(row.length > 1 ? row[1] : null);
         final name = _str(row.length > 2 ? row[2] : null);
         if (num.isEmpty || name.isEmpty) { skipped++; continue; }
-        final e = Electronic(
+        items.add(Electronic(
           deviceNumber: num,
           deviceName:   name,
           details:      _str(row.length > 3 ? row[3] : null),
           status:       'Available',
-        );
-        await _db.insertElectronic(e);
-        inserted++;
+        ));
       } catch (e) { errors.add('Row ${i + 2}: $e'); skipped++; }
     }
-    return ImportResult(inserted: inserted, skipped: skipped, errors: errors);
+
+    return _executeBatchImport<Electronic>(
+      tableName: 'electronics',
+      items: items,
+      skipped: skipped,
+      errors: errors,
+      replace: replace,
+      inserter: (e) => _db.insertElectronic(e),
+    );
   }
 
   // ── EMPLOYEES ────────────────────────────────────────────────
   // Columns: #, Name, Phone Number
-  static Future<ImportResult> importEmployees(Excel excel) async {
+  static Future<ImportResult> importEmployees(Excel excel, {bool replace = false}) async {
     final sheet = excel.sheets.values.first;
     final rows = _rows(sheet);
-    int inserted = 0, skipped = 0;
+    final items = <Employee>[];
+    int skipped = 0;
     final errors = <String>[];
 
     for (var i = 0; i < rows.length; i++) {
@@ -222,23 +297,30 @@ class ExcelImportService {
       try {
         final name = _str(row.length > 1 ? row[1] : null);
         if (name.isEmpty) { skipped++; continue; }
-        final e = Employee(
+        items.add(Employee(
           name:        name,
           phoneNumber: _str(row.length > 2 ? row[2] : null),
-        );
-        await _db.insertEmployee(e);
-        inserted++;
+        ));
       } catch (e) { errors.add('Row ${i + 2}: $e'); skipped++; }
     }
-    return ImportResult(inserted: inserted, skipped: skipped, errors: errors);
+
+    return _executeBatchImport<Employee>(
+      tableName: 'employees',
+      items: items,
+      skipped: skipped,
+      errors: errors,
+      replace: replace,
+      inserter: (e) => _db.insertEmployee(e),
+    );
   }
 
   // ── BILLS ─────────────────────────────────────────────────────
   // Columns: #, Person, Number, Category, Price (EGP), Notes
-  static Future<ImportResult> importBills(Excel excel) async {
+  static Future<ImportResult> importBills(Excel excel, {bool replace = false}) async {
     final sheet = excel.sheets.values.first;
     final rows = _rows(sheet);
-    int inserted = 0, skipped = 0;
+    final items = <Bill>[];
+    int skipped = 0;
     final errors = <String>[];
 
     for (var i = 0; i < rows.length; i++) {
@@ -251,26 +333,33 @@ class ExcelImportService {
           (c) => c.toLowerCase() == rawCat.toLowerCase(),
           orElse: () => Bill.categories.first,
         );
-        final b = Bill(
+        items.add(Bill(
           person:   _str(row.length > 1 ? row[1] : null),
           number:   number,
           category: catMatch,
           price:    _dbl(row.length > 4 ? row[4] : null),
           notes:    _str(row.length > 5 ? row[5] : null),
-        );
-        await _db.insertBill(b);
-        inserted++;
+        ));
       } catch (e) { errors.add('Row ${i + 2}: $e'); skipped++; }
     }
-    return ImportResult(inserted: inserted, skipped: skipped, errors: errors);
+
+    return _executeBatchImport<Bill>(
+      tableName: 'bills',
+      items: items,
+      skipped: skipped,
+      errors: errors,
+      replace: replace,
+      inserter: (b) => _db.insertBill(b),
+    );
   }
 
   // ── EXPENSES ─────────────────────────────────────────────────
   // Columns: Date, Item, Price (EGP), Details
-  static Future<ImportResult> importExpenses(Excel excel) async {
+  static Future<ImportResult> importExpenses(Excel excel, {bool replace = false}) async {
     final sheet = excel.sheets.values.first;
     final rows = _rows(sheet);
-    int inserted = 0, skipped = 0;
+    final items = <Expense>[];
+    int skipped = 0;
     final errors = <String>[];
 
     for (var i = 0; i < rows.length; i++) {
@@ -287,26 +376,34 @@ class ExcelImportService {
         // Normalise date: accept "dd MMM yyyy", "yyyy-MM-dd", or Excel serial
         String normDate = _normalizeDate(date);
 
-        final e = Expense(
+        items.add(Expense(
           date:    normDate,
           item:    item,
           price:   _dbl(row.length > 2 ? row[2] : null),
           details: _str(row.length > 3 ? row[3] : null),
-        );
-        await _db.insertExpense(e);
-        inserted++;
+        ));
       } catch (e) { errors.add('Row ${i + 2}: $e'); skipped++; }
     }
-    return ImportResult(inserted: inserted, skipped: skipped, errors: errors);
+
+    return _executeBatchImport<Expense>(
+      tableName: 'expenses',
+      items: items,
+      skipped: skipped,
+      errors: errors,
+      replace: replace,
+      inserter: (e) => _db.insertExpense(e),
+    );
   }
 
   // ── EMAIL ACCOUNTS ───────────────────────────────────────────
   // Columns: #, Employee, Email, Password(hidden)
-  static Future<ImportResult> importEmailAccounts(Excel excel) async {
+  static Future<ImportResult> importEmailAccounts(Excel excel, {bool replace = false}) async {
     final sheet = excel.sheets.values.first;
     final rows = _rows(sheet);
-    int inserted = 0, skipped = 0;
+    final items = <EmailAccount>[];
+    int skipped = 0;
     final errors = <String>[];
+    int maskedOrEmptyPassCount = 0;
 
     for (var i = 0; i < rows.length; i++) {
       final row = rows[i];
@@ -314,25 +411,44 @@ class ExcelImportService {
         final email = _str(row.length > 2 ? row[2] : null);
         if (email.isEmpty || !email.contains('@')) { skipped++; continue; }
         final pass = _str(row.length > 3 ? row[3] : null);
-        if (pass == '(hidden)' || pass.isEmpty) { skipped++; continue; }
-        final e = EmailAccount(
+        if (pass == '(hidden)' || pass == '••••••' || pass.isEmpty) {
+          maskedOrEmptyPassCount++;
+          skipped++;
+          continue;
+        }
+        items.add(EmailAccount(
           employeeName: _str(row.length > 1 ? row[1] : null),
           email:        email,
           password:     pass,
-        );
-        await _db.insertEmailAccount(e);
-        inserted++;
+        ));
       } catch (e) { errors.add('Row ${i + 2}: $e'); skipped++; }
     }
-    return ImportResult(inserted: inserted, skipped: skipped, errors: errors);
+
+    if (replace && items.isEmpty && maskedOrEmptyPassCount > 0) {
+      return ImportResult(
+        inserted: 0,
+        skipped: skipped,
+        errors: const ['No accounts with valid passwords found. Passwords in exported files are hidden for security and cannot replace database accounts.'],
+      );
+    }
+
+    return _executeBatchImport<EmailAccount>(
+      tableName: 'email_accounts',
+      items: items,
+      skipped: skipped,
+      errors: errors,
+      replace: replace,
+      inserter: (e) => _db.insertEmailAccount(e),
+    );
   }
 
   // ── SUBSCRIPTIONS ─────────────────────────────────────────────
   // Columns: #, Service Name, Billing Interval, Price (EGP), Renewal Date, Notes
-  static Future<ImportResult> importSubscriptions(Excel excel) async {
+  static Future<ImportResult> importSubscriptions(Excel excel, {bool replace = false}) async {
     final sheet = excel.sheets.values.first;
     final rows = _rows(sheet);
-    int inserted = 0, skipped = 0;
+    final items = <Subscription>[];
+    int skipped = 0;
     final errors = <String>[];
 
     for (var i = 0; i < rows.length; i++) {
@@ -345,26 +461,33 @@ class ExcelImportService {
           (t) => t.toLowerCase() == rawType.toLowerCase(),
           orElse: () => 'Monthly',
         );
-        final s = Subscription(
+        items.add(Subscription(
           service:     service,
           type:        typeMatch,
           price:       _dbl(row.length > 3 ? row[3] : null),
           renewalDate: _normalizeDate(_str(row.length > 4 ? row[4] : null)),
           notes:       _str(row.length > 5 ? row[5] : null),
-        );
-        await _db.insertSubscription(s);
-        inserted++;
+        ));
       } catch (e) { errors.add('Row ${i + 2}: $e'); skipped++; }
     }
-    return ImportResult(inserted: inserted, skipped: skipped, errors: errors);
+
+    return _executeBatchImport<Subscription>(
+      tableName: 'subscriptions',
+      items: items,
+      skipped: skipped,
+      errors: errors,
+      replace: replace,
+      inserter: (s) => _db.insertSubscription(s),
+    );
   }
 
   // ── ACCESS POINTS ─────────────────────────────────────────────
   // Columns: #, Device No., Model, Port No., Location
-  static Future<ImportResult> importAccessPoints(Excel excel) async {
+  static Future<ImportResult> importAccessPoints(Excel excel, {bool replace = false}) async {
     final sheet = excel.sheets.values.first;
     final rows = _rows(sheet);
-    int inserted = 0, skipped = 0;
+    final items = <AccessPoint>[];
+    int skipped = 0;
     final errors = <String>[];
 
     for (var i = 0; i < rows.length; i++) {
@@ -373,17 +496,23 @@ class ExcelImportService {
         final num   = _str(row.length > 1 ? row[1] : null);
         final model = _str(row.length > 2 ? row[2] : null);
         if (num.isEmpty || model.isEmpty) { skipped++; continue; }
-        final a = AccessPoint(
+        items.add(AccessPoint(
           deviceNumber: num,
           model:        model,
           portNumber:   _str(row.length > 3 ? row[3] : null),
           location:     _str(row.length > 4 ? row[4] : null),
-        );
-        await _db.insertAccessPoint(a);
-        inserted++;
+        ));
       } catch (e) { errors.add('Row ${i + 2}: $e'); skipped++; }
     }
-    return ImportResult(inserted: inserted, skipped: skipped, errors: errors);
+
+    return _executeBatchImport<AccessPoint>(
+      tableName: 'access_points',
+      items: items,
+      skipped: skipped,
+      errors: errors,
+      replace: replace,
+      inserter: (a) => _db.insertAccessPoint(a),
+    );
   }
 
   // ── Date normalizer ──────────────────────────────────────────
@@ -424,10 +553,11 @@ class ExcelImportService {
 
   // ── LOG ENTRIES ───────────────────────────────────────────────
   // Columns: Date, Employee, Problem, Solution
-  static Future<ImportResult> importLogEntries(Excel excel) async {
+  static Future<ImportResult> importLogEntries(Excel excel, {bool replace = false}) async {
     final sheet = excel.sheets.values.first;
     final rows = _rows(sheet);
-    int inserted = 0, skipped = 0;
+    final items = <LogEntry>[];
+    int skipped = 0;
     final errors = <String>[];
 
     for (var i = 0; i < rows.length; i++) {
@@ -439,16 +569,60 @@ class ExcelImportService {
         if (problem.isEmpty) { skipped++; continue; }
         final solution = _str(row.length > 3 ? row[3] : null);
 
-        final e = LogEntry(
+        items.add(LogEntry(
           date:         date,
           employeeName: employee,
           problem:      problem,
           solution:     solution,
-        );
-        await _db.insertLogEntry(e);
-        inserted++;
+        ));
       } catch (e) { errors.add('Row ${i + 2}: $e'); skipped++; }
     }
-    return ImportResult(inserted: inserted, skipped: skipped, errors: errors);
+
+    return _executeBatchImport<LogEntry>(
+      tableName: 'log_entries',
+      items: items,
+      skipped: skipped,
+      errors: errors,
+      replace: replace,
+      inserter: (e) => _db.insertLogEntry(e),
+    );
+  }
+
+  // ── OTHER DEVICES ─────────────────────────────────────────────
+  // Columns: #, Device Type, Device Name, Model, Notes
+  static Future<ImportResult> importOtherDevices(Excel excel, {bool replace = false}) async {
+    final sheet = excel.sheets.values.first;
+    final rows = _rows(sheet);
+    final items = <OtherDevice>[];
+    int skipped = 0;
+    final errors = <String>[];
+
+    for (var i = 0; i < rows.length; i++) {
+      final row = rows[i];
+      try {
+        final type  = _str(row.length > 1 ? row[1] : null);
+        final name  = _str(row.length > 2 ? row[2] : null);
+        final model = _str(row.length > 3 ? row[3] : null);
+        final notes = _str(row.length > 4 ? row[4] : null);
+
+        if (name.isEmpty) { skipped++; continue; }
+
+        items.add(OtherDevice(
+          deviceType: type.isNotEmpty ? type : 'Other',
+          deviceName: name,
+          model: model,
+          notes: notes,
+        ));
+      } catch (e) { errors.add('Row ${i + 2}: $e'); skipped++; }
+    }
+
+    return _executeBatchImport<OtherDevice>(
+      tableName: 'other_devices',
+      items: items,
+      skipped: skipped,
+      errors: errors,
+      replace: replace,
+      inserter: (d) => _db.insertOtherDevice(d),
+    );
   }
 }

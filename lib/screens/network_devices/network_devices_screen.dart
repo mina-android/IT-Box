@@ -8,104 +8,264 @@ import 'network_device_form_screen.dart';
 class NetworkDevicesScreen extends StatefulWidget {
   const NetworkDevicesScreen({super.key});
   @override
-  State<NetworkDevicesScreen> createState() => _State();
+  State<NetworkDevicesScreen> createState() => _NetworkDevicesScreenState();
 }
 
-class _State extends State<NetworkDevicesScreen> {
+class _NetworkDevicesScreenState extends State<NetworkDevicesScreen> with AutomaticKeepAliveClientMixin {
   final _db = DatabaseHelper();
+  late final Listenable _tablesListenable;
   final _search = TextEditingController();
-  List<NetworkDevice> _all = [], _filtered = [];
+  List<NetworkDevice> _all = [];
+  List<NetworkDevice> _filtered = [];
   bool _loading = true;
+  final Set<int> _selectedIds = <int>{};
+  bool get _isSelectionMode => _selectedIds.isNotEmpty;
 
   @override
-  void initState() { super.initState(); _load(); _search.addListener(_filter); }
-  @override
-  void dispose() { _search.dispose(); super.dispose(); }
+  bool get wantKeepAlive => true;
 
-  Future<void> _load() async {
-    setState(() => _loading = true);
-    _all = await _db.getNetworkDevices();
-    _filter();
-    if (mounted) setState(() => _loading = false);
+  @override
+  void initState() {
+    super.initState();
+    _tablesListenable = _db.tables(['network_devices']);
+    _tablesListenable.addListener(_onDbChanged);
+    _load();
+    _search.addListener(_applyFilter);
   }
 
-  void _filter() {
+  void _onDbChanged() {
+    if (mounted) {
+      _load(showLoader: false);
+    }
+  }
+
+  @override
+  void dispose() {
+    _tablesListenable.removeListener(_onDbChanged);
+    _search.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load({bool showLoader = false}) async {
+    if (showLoader || _all.isEmpty) {
+      setState(() => _loading = true);
+    }
+    try {
+      final list = await _db.getNetworkDevices();
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _all = list;
+        _applyFilter();
+      });
+    } catch (e) {
+      if (mounted) {
+        showSnack(context, 'Failed to load network devices: $e', error: true);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _loading = false);
+      }
+    }
+  }
+
+  void _applyFilter() {
     final q = _search.text.toLowerCase();
-    setState(() => _filtered = q.isEmpty ? List.from(_all) : _all.where((d) =>
-      d.deviceNumber.toLowerCase().contains(q) ||
-      d.model.toLowerCase().contains(q) ||
-      d.deviceLocation.toLowerCase().contains(q) ||
-      d.wifiName.toLowerCase().contains(q)).toList());
+    setState(() {
+      _filtered = _all.where((d) {
+        return d.model.toLowerCase().contains(q) ||
+            d.deviceNumber.toLowerCase().contains(q) ||
+            d.phoneNumber.toLowerCase().contains(q) ||
+            d.deviceLocation.toLowerCase().contains(q) ||
+            d.serviceProvider.toLowerCase().contains(q) ||
+            d.wifiName.toLowerCase().contains(q);
+      }).toList();
+    });
+  }
+
+  void _toggleSelection(int id) {
+    setState(() {
+      if (_selectedIds.contains(id)) {
+        _selectedIds.remove(id);
+      } else {
+        _selectedIds.add(id);
+      }
+    });
+  }
+
+  Future<void> _bulkDelete() async {
+    final confirm = await showConfirmDialog(
+      context,
+      title: 'Delete Selected?',
+      message: 'Delete ${_selectedIds.length} network devices?',
+      confirmText: 'Delete',
+    );
+    if (!confirm || !mounted) {
+      return;
+    }
+    for (final id in _selectedIds) {
+      await _db.deleteNetworkDevice(id);
+    }
+    if (!mounted) {
+      return;
+    }
+    showSnack(context, '${_selectedIds.length} devices deleted');
+    _selectedIds.clear();
+    _load();
   }
 
   Future<void> _openForm([NetworkDevice? d]) async {
-    final saved = await Navigator.push<bool>(context, MaterialPageRoute(builder: (_) => NetworkDeviceFormScreen(device: d)));
-    if (saved == true && mounted) _load();
+    final ok = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(builder: (_) => NetworkDeviceFormScreen(device: d)),
+    );
+    if (ok == true && mounted) {
+      _load();
+    }
   }
 
-  Future<void> _delete(NetworkDevice d) async {
-    final ok = await showConfirmDialog(context, title: 'Delete Device', message: 'Delete "${d.model}" (${d.deviceNumber})?');
-    if (!ok || !mounted) return;
+  Future<void> _delete(NetworkDevice d, {bool confirm = true}) async {
+    bool ok;
+    if (confirm) {
+      ok = await showConfirmDialog(
+        context,
+        title: 'Delete Device',
+        message: 'Delete "${d.model}" (${d.deviceNumber})?',
+      );
+    } else {
+      ok = true;
+    }
+    if (!ok || !mounted) {
+      return;
+    }
     await _db.deleteNetworkDevice(d.id!);
-    if (!mounted) return;
-    showSnack(context, 'Device deleted');
+    if (!mounted) {
+      return;
+    }
+    if (confirm) {
+      showSnack(context, 'Device deleted');
+    }
     _load();
   }
 
   void _showDetail(NetworkDevice d) {
-    showModalBottomSheet(
-      context: context, isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (_) => _DetailSheet(device: d,
-        onEdit: () { Navigator.pop(context); _openForm(d); },
-        onDelete: () { Navigator.pop(context); _delete(d); }),
+    showFintechBottomSheet(
+      context: context,
+      child: _DetailSheet(
+        device: d,
+        onEdit: () {
+          Navigator.pop(context);
+          _openForm(d);
+        },
+        onDelete: () {
+          Navigator.pop(context);
+          _delete(d);
+        },
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    super.build(context);
     return Scaffold(
-      body: Column(children: [
-        SearchBar2(controller: _search, hint: 'Search model, number, location...'),
-        Expanded(
-          child: _loading ? const Center(child: CircularProgressIndicator())
-            : _filtered.isEmpty
-              ? EmptyState(icon: Icons.router_outlined,
-                  title: _search.text.isEmpty ? 'No Network Devices' : 'No Results',
-                  subtitle: _search.text.isEmpty ? 'Tap + to add a device' : 'Try a different search')
-              : RefreshIndicator(
-                  onRefresh: _load,
-                  child: ListView.builder(
-                    padding: const EdgeInsets.only(bottom: 90),
-                    itemCount: _filtered.length,
-                    itemBuilder: (_, i) {
-                      final d = _filtered[i];
-                      return Card(
-                        child: ListTile(
-                          onTap: () => _showDetail(d),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                          leading: const IconBox(icon: Icons.router_outlined, color: AppColors.networkColor),
-                          title: Text(d.model, style: const TextStyle(fontWeight: FontWeight.w700)),
-                          subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                            Text('# ${d.deviceNumber}', style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurface.withValues(alpha: 0.5))),
-                            if (d.phoneNumber.isNotEmpty) Text(d.phoneNumber, style: const TextStyle(fontSize: 12)),
-                          ]),
-                          trailing: StatusBadge(d.status),
+      body: Column(
+        children: [
+          SearchBar2(controller: _search, hint: 'Search routers, sims, wifi...'),
+          Expanded(
+            child: _loading
+                ? const ShimmerListLoader()
+                : _filtered.isEmpty
+                    ? EmptyState(
+                        icon: Icons.router_rounded,
+                        title: _search.text.isEmpty
+                            ? 'No Network Devices'
+                            : 'No Results',
+                        subtitle: _search.text.isEmpty
+                            ? 'Tap + to add a router or device'
+                            : 'Try a different search',
+                        onRefresh: _load,
+                      )
+                    : GridView.builder(
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          crossAxisSpacing: 10,
+                          mainAxisSpacing: 10,
+                          childAspectRatio: 1.32,
                         ),
-                      );
-                    },
-                  ),
-                ),
-        ),
-      ]),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _openForm(),
-        icon: const Icon(Icons.add),
-        label: const Text('Add Device'),
-        backgroundColor: AppColors.networkColor,
-        foregroundColor: Colors.white,
+                        itemCount: _filtered.length,
+                        itemBuilder: (_, i) {
+                          final d = _filtered[i];
+                          final isSelected = _selectedIds.contains(d.id);
+                          return SlideInAndFade(
+                            index: i,
+                            child: InventoryGridCard(
+                              selected: isSelected,
+                              onTap: _isSelectionMode
+                                  ? () => _toggleSelection(d.id!)
+                                  : () => _showDetail(d),
+                              onLongPress: () => _toggleSelection(d.id!),
+                              leading: const IconBox(
+                                icon: Icons.router_rounded,
+                                color: AppColors.networkColor,
+                                size: 36,
+                              ),
+                              badge: StatusBadge(d.status),
+                              title: d.model,
+                              subtitle: '# ${d.deviceNumber}',
+                              extra: d.phoneNumber.isNotEmpty
+                                  ? d.phoneNumber
+                                  : (d.deviceLocation.isNotEmpty
+                                      ? d.deviceLocation
+                                      : null),
+                            ),
+                          );
+                        },
+                      ),
+          ),
+        ],
       ),
+      floatingActionButton: _isSelectionMode
+          ? null
+          : Padding(
+              padding: const EdgeInsets.only(bottom: 80),
+              child: FintechFab(
+                onPressed: () => _openForm(),
+                color: Theme.of(context).brightness == Brightness.dark
+                    ? const Color(0xFF81C784)
+                    : const Color(0xFF2E7D32),
+                tooltip: 'Add Router',
+              ),
+            ),
+      bottomNavigationBar: _isSelectionMode
+          ? BottomAppBar(
+              elevation: 4,
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded),
+                    onPressed: () => setState(() => _selectedIds.clear()),
+                    tooltip: 'Clear',
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '${_selectedIds.length} selected',
+                    style: const TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline_rounded,
+                        color: Colors.red),
+                    onPressed: _bulkDelete,
+                    tooltip: 'Delete',
+                  ),
+                ],
+              ),
+            )
+          : null,
     );
   }
 }
@@ -113,61 +273,216 @@ class _State extends State<NetworkDevicesScreen> {
 class _DetailSheet extends StatefulWidget {
   final NetworkDevice device;
   final VoidCallback onEdit, onDelete;
-  const _DetailSheet({required this.device, required this.onEdit, required this.onDelete});
+  const _DetailSheet({
+    required this.device,
+    required this.onEdit,
+    required this.onDelete,
+  });
   @override
   State<_DetailSheet> createState() => _DetailSheetState();
 }
 
 class _DetailSheetState extends State<_DetailSheet> {
-  bool _showWifi = false, _showAdmin = false;
+  bool _showWifi = false;
+  bool _showAdmin = false;
 
   @override
   Widget build(BuildContext context) {
     final d = widget.device;
     final theme = Theme.of(context);
-    return DraggableScrollableSheet(
-      initialChildSize: 0.6, minChildSize: 0.4, maxChildSize: 0.9, expand: false,
-      builder: (_, ctrl) => SingleChildScrollView(
-        controller: ctrl,
-        padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: theme.dividerColor, borderRadius: BorderRadius.circular(2)))),
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const IconBox(
+                icon: Icons.router_rounded,
+                color: AppColors.networkColor,
+                size: 50,
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      d.model,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 18,
+                        letterSpacing: -0.2,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '# ${d.deviceNumber}',
+                      style: TextStyle(
+                        color: theme.colorScheme.onSurface
+                            .withValues(alpha: 0.6),
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              StatusBadge(d.status),
+            ],
+          ),
           const SizedBox(height: 16),
-          Row(children: [
-            const IconBox(icon: Icons.router_outlined, color: AppColors.networkColor, size: 50),
-            const SizedBox(width: 12),
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(d.model, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17)),
-              Text('# ${d.deviceNumber}', style: TextStyle(color: theme.colorScheme.onSurface.withValues(alpha: 0.5), fontSize: 13)),
-            ])),
-            StatusBadge(d.status),
-            IconButton(icon: const Icon(Icons.edit_outlined), onPressed: widget.onEdit),
-            IconButton(icon: Icon(Icons.delete_outline, color: theme.colorScheme.error), onPressed: widget.onDelete),
-          ]),
-          const Divider(height: 28),
-          DetailRow(label: 'Phone No.', value: d.phoneNumber, icon: Icons.phone_outlined),
-          DetailRow(label: 'Location', value: d.deviceLocation, icon: Icons.location_on_outlined),
-          DetailRow(label: 'Provider', value: d.serviceProvider, icon: Icons.cell_tower_outlined),
-          DetailRow(label: 'WiFi Name', value: d.wifiName, icon: Icons.wifi_outlined),
-          if (d.wifiPassword.isNotEmpty)
-            _passRow('WiFi Password', d.wifiPassword, _showWifi, () => setState(() => _showWifi = !_showWifi), Icons.lock_outlined, theme),
-          DetailRow(label: 'Gateway', value: d.gateway, icon: Icons.router),
-          if (d.adminPassword.isNotEmpty)
-            _passRow('Admin Password', d.adminPassword, _showAdmin, () => setState(() => _showAdmin = !_showAdmin), Icons.admin_panel_settings_outlined, theme),
-        ]),
+          // Quick action buttons
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: widget.onEdit,
+                  icon: const Icon(Icons.edit_outlined, size: 16),
+                  label: const Text('Edit Details'),
+                  style: OutlinedButton.styleFrom(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 11),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: widget.onDelete,
+                  icon: Icon(Icons.delete_outline_rounded,
+                      size: 16, color: theme.colorScheme.error),
+                  label: Text('Delete',
+                      style: TextStyle(color: theme.colorScheme.error)),
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(
+                      color: theme.colorScheme.error.withValues(alpha: 0.35),
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 11),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          const SectionLabel('DEVICE & CONNECTION INFO'),
+          FintechGroupedCard(
+            children: [
+              DetailRow(
+                label: 'Phone No.',
+                value: d.phoneNumber,
+                icon: Icons.phone_rounded,
+                copyable: true,
+              ),
+              DetailRow(
+                label: 'Location',
+                value: d.deviceLocation,
+                icon: Icons.location_on_outlined,
+              ),
+              DetailRow(
+                label: 'Provider',
+                value: d.serviceProvider,
+                icon: Icons.cell_tower_rounded,
+              ),
+              DetailRow(
+                label: 'Gateway IP',
+                value: d.gateway,
+                icon: Icons.alt_route_rounded,
+                copyable: true,
+              ),
+            ],
+          ),
+          const SectionLabel('WIFI & SECURITY'),
+          FintechGroupedCard(
+            children: [
+              DetailRow(
+                label: 'WiFi Name',
+                value: d.wifiName,
+                icon: Icons.wifi_rounded,
+                copyable: true,
+              ),
+              if (d.wifiPassword.isNotEmpty)
+                _passwordRow(
+                  label: 'WiFi Password',
+                  value: d.wifiPassword,
+                  show: _showWifi,
+                  onToggle: () => setState(() => _showWifi = !_showWifi),
+                  icon: Icons.lock_outline_rounded,
+                  theme: theme,
+                ),
+              if (d.adminPassword.isNotEmpty)
+                _passwordRow(
+                  label: 'Admin Password',
+                  value: d.adminPassword,
+                  show: _showAdmin,
+                  onToggle: () => setState(() => _showAdmin = !_showAdmin),
+                  icon: Icons.admin_panel_settings_outlined,
+                  theme: theme,
+                ),
+            ],
+          ),
+        ],
       ),
     );
   }
 
-  Widget _passRow(String label, String value, bool show, VoidCallback toggle, IconData icon, ThemeData theme) =>
-    Padding(
-      padding: const EdgeInsets.symmetric(vertical: 5),
-      child: Row(children: [
-        Icon(icon, size: 15, color: theme.colorScheme.primary.withValues(alpha: 0.6)),
-        const SizedBox(width: 6),
-        SizedBox(width: 100, child: Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: theme.colorScheme.onSurface.withValues(alpha: 0.5)))),
-        Expanded(child: Text(show ? value : '••••••••', style: const TextStyle(fontWeight: FontWeight.w500))),
-        GestureDetector(onTap: toggle, child: Icon(show ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 18, color: Colors.grey)),
-      ]),
+  Widget _passwordRow({
+    required String label,
+    required String value,
+    required bool show,
+    required VoidCallback onToggle,
+    required IconData icon,
+    required ThemeData theme,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 7),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primary.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, size: 15, color: theme.colorScheme.primary),
+          ),
+          const SizedBox(width: 10),
+          SizedBox(
+            width: 110,
+            child: Text(
+              label,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                fontWeight: FontWeight.w600,
+                fontSize: 12,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              show ? value : '••••••••',
+              style: const TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 13.5,
+              ),
+            ),
+          ),
+          IconButton(
+            icon: Icon(
+              show ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+              size: 18,
+              color: theme.colorScheme.primary,
+            ),
+            onPressed: onToggle,
+          ),
+        ],
+      ),
     );
+  }
 }

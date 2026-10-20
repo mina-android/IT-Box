@@ -8,24 +8,29 @@ class LaptopFormScreen extends StatefulWidget {
   final Laptop? laptop;
   const LaptopFormScreen({super.key, this.laptop});
   @override
-  State<LaptopFormScreen> createState() => _State();
+  State<LaptopFormScreen> createState() => _LaptopFormScreenState();
 }
 
-class _State extends State<LaptopFormScreen> {
+class _LaptopFormScreenState extends State<LaptopFormScreen> {
   final _key = GlobalKey<FormState>();
+  final _shakeKey = GlobalKey<ShakeWidgetState>();
   final _db = DatabaseHelper();
-  bool _saving = false, _showPass = false;
+  bool _saving = false;
+  bool _showPass = false;
   late String _condition;
   List<Employee> _employees = [];
   Employee? _selEmp;
 
-  late final _num     = TextEditingController(text: widget.laptop?.laptopNumber ?? '');
-  late final _model   = TextEditingController(text: widget.laptop?.model ?? '');
-  late final _cpu     = TextEditingController(text: widget.laptop?.cpu ?? '');
-  late final _gpu     = TextEditingController(text: widget.laptop?.gpu ?? '');
-  late final _ram     = TextEditingController(text: widget.laptop?.ram ?? '');
-  late final _storage = TextEditingController(text: widget.laptop?.storage ?? '');
-  late final _pass    = TextEditingController(text: widget.laptop?.password ?? '');
+  late final _num =
+      TextEditingController(text: widget.laptop?.laptopNumber ?? '');
+  late final _model = TextEditingController(text: widget.laptop?.model ?? '');
+  late final _cpu = TextEditingController(text: widget.laptop?.cpu ?? '');
+  late final _gpu = TextEditingController(text: widget.laptop?.gpu ?? '');
+  late final _ram = TextEditingController(text: widget.laptop?.ram ?? '');
+  late final _storage =
+      TextEditingController(text: widget.laptop?.storage ?? '');
+  late final _pass =
+      TextEditingController(text: widget.laptop?.password ?? '');
 
   @override
   void initState() {
@@ -36,26 +41,34 @@ class _State extends State<LaptopFormScreen> {
 
   Future<void> _loadEmployees() async {
     final emps = await _db.getEmployees();
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
     setState(() {
       _employees = emps;
-      // Pre-select if editing and user matches an employee
       if (widget.laptop?.user.isNotEmpty == true) {
         try {
           _selEmp = emps.firstWhere((e) => e.name == widget.laptop!.user);
-        } catch (_) { _selEmp = null; }
+        } catch (_) {
+          _selEmp = null;
+        }
       }
     });
   }
 
   @override
   void dispose() {
-    for (final c in [_num, _model, _cpu, _gpu, _ram, _storage, _pass]) { c.dispose(); }
+    for (final c in [_num, _model, _cpu, _gpu, _ram, _storage, _pass]) {
+      c.dispose();
+    }
     super.dispose();
   }
 
   Future<void> _save() async {
-    if (!_key.currentState!.validate()) return;
+    if (!_key.currentState!.validate()) {
+      _shakeKey.currentState?.shake();
+      return;
+    }
     setState(() => _saving = true);
     try {
       final l = Laptop(
@@ -70,73 +83,233 @@ class _State extends State<LaptopFormScreen> {
         user: _selEmp?.name ?? '',
         password: _pass.text,
       );
-      if (widget.laptop == null) { await _db.insertLaptop(l); } else { await _db.updateLaptop(l); }
-      if (!mounted) return;
+      if (widget.laptop == null) {
+        await _db.insertLaptop(l);
+      } else {
+        await _db.updateLaptop(l);
+      }
+      if (!mounted) {
+        return;
+      }
+      showSnack(context, 'Laptop saved successfully!');
       Navigator.pop(context, true);
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       showSnack(context, 'Error: $e', error: true);
-    } finally { if (mounted) setState(() => _saving = false); }
+    } finally {
+      if (mounted) {
+        setState(() => _saving = false);
+      }
+    }
   }
 
-  Widget _f(TextEditingController c, String l, IconData i, {bool req=false, String? hint}) =>
-    Padding(padding: const EdgeInsets.only(bottom: 10),
-      child: TextFormField(
-        controller: c, enableSuggestions: false, autocorrect: false,
-        decoration: InputDecoration(labelText: l, prefixIcon: Icon(i), hintText: hint),
-        validator: req ? (v) => v==null||v.trim().isEmpty?'Required':null : null));
+  Widget _buildField({
+    required TextEditingController controller,
+    required String label,
+    required IconData icon,
+    bool required = false,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: AppTextField(
+        controller: controller,
+        decoration: InputDecoration(
+          labelText: label,
+          prefixIcon: Icon(icon, size: 20),
+        ),
+        validator: required
+            ? (v) => v == null || v.trim().isEmpty ? 'Required' : null
+            : null,
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
+    final isNew = widget.laptop == null;
+
     return Scaffold(
-      appBar: AppBar(title: Text(widget.laptop == null ? 'Add Laptop' : 'Edit Laptop')),
-      body: Form(
-        key: _key,
-        child: ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 40), children: [
-          const SectionLabel('IDENTIFICATION'),
-          _f(_num, 'Laptop Number *', Icons.tag, req: true, hint: 'e.g. RADA-LT-01'),
-          _f(_model, 'Model *', Icons.laptop_outlined, req: true, hint: 'e.g. Dell XPS 15'),
-          const SectionLabel('SPECIFICATIONS'),
-          _f(_cpu, 'CPU', Icons.memory_outlined, hint: 'e.g. Intel i7-13700H'),
-          _f(_gpu, 'GPU', Icons.videogame_asset_outlined, hint: 'e.g. NVIDIA RTX 4060'),
-          _f(_ram, 'RAM', Icons.storage_outlined, hint: 'e.g. 16GB DDR5'),
-          _f(_storage, 'Storage', Icons.disc_full_outlined, hint: 'e.g. 512GB NVMe'),
-          const SectionLabel('CONDITION'),
-          SegmentedButton<String>(
-            segments: ['Good','Fair','Poor'].map((c) => ButtonSegment<String>(value:c,label:Text(c))).toList(),
-            selected: {_condition}, onSelectionChanged: (s) => setState(() => _condition=s.first)),
-          const SectionLabel('ASSIGNMENT'),
-          InputDecorator(
-            decoration: const InputDecoration(labelText: 'Assigned User', prefixIcon: Icon(Icons.person_outline)),
-            child: DropdownButton<Employee?>(
-              value: _selEmp,
-              isExpanded: true,
-              underline: const SizedBox.shrink(),
-              hint: Text('None',
-                style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4))),
-              items: [
-                const DropdownMenuItem<Employee?>(value: null, child: Text('Unassigned')),
-                ..._employees.map((e) => DropdownMenuItem<Employee?>(value: e, child: Text(e.name))),
+      appBar: AppBar(
+        title: Text(
+          isNew ? 'Add Laptop' : 'Edit Laptop',
+          style: const TextStyle(fontWeight: FontWeight.w800),
+        ),
+      ),
+      body: GestureDetector(
+        onTap: () => FocusScope.of(context).unfocus(),
+        child: ShakeWidget(
+          key: _shakeKey,
+          child: Form(
+            key: _key,
+            autovalidateMode: AutovalidateMode.onUserInteraction,
+            child: ListView(
+              keyboardDismissBehavior:
+                  ScrollViewKeyboardDismissBehavior.onDrag,
+              padding: const EdgeInsets.fromLTRB(18, 8, 18, 40),
+              children: [
+                const SectionLabel('DEVICE IDENTITY'),
+                FintechGroupedCard(
+                  children: [
+                    _buildField(
+                      controller: _num,
+                      label: 'Laptop Tag / Number *',
+                      icon: Icons.tag_rounded,
+                      required: true,
+                    ),
+                    _buildField(
+                      controller: _model,
+                      label: 'Model & Manufacturer *',
+                      icon: Icons.laptop_mac_rounded,
+                      required: true,
+                    ),
+                  ],
+                ),
+
+                const SectionLabel('SPECIFICATIONS'),
+                FintechGroupedCard(
+                  children: [
+                    _buildField(
+                      controller: _cpu,
+                      label: 'Processor (CPU)',
+                      icon: Icons.memory_rounded,
+                    ),
+                    _buildField(
+                      controller: _gpu,
+                      label: 'Graphics (GPU)',
+                      icon: Icons.videogame_asset_outlined,
+                    ),
+                    _buildField(
+                      controller: _ram,
+                      label: 'Memory (RAM)',
+                      icon: Icons.storage_rounded,
+                    ),
+                    _buildField(
+                      controller: _storage,
+                      label: 'Storage Drive',
+                      icon: Icons.disc_full_outlined,
+                    ),
+                  ],
+                ),
+
+                const SectionLabel('HARDWARE CONDITION'),
+                FintechGroupedCard(
+                  children: [
+                    SizedBox(
+                      width: double.infinity,
+                      child: SegmentedButton<String>(
+                        style: ButtonStyle(
+                          shape: WidgetStateProperty.all(
+                            RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
+                        ),
+                        segments: const [
+                          ButtonSegment<String>(
+                            value: 'Good',
+                            label: Text('Good',
+                                style: TextStyle(fontWeight: FontWeight.w700)),
+                          ),
+                          ButtonSegment<String>(
+                            value: 'Fair',
+                            label: Text('Fair',
+                                style: TextStyle(fontWeight: FontWeight.w700)),
+                          ),
+                          ButtonSegment<String>(
+                            value: 'Poor',
+                            label: Text('Poor',
+                                style: TextStyle(fontWeight: FontWeight.w700)),
+                          ),
+                        ],
+                        selected: {_condition},
+                        onSelectionChanged: (s) =>
+                            setState(() => _condition = s.first),
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SectionLabel('USER ASSIGNMENT & ACCESS'),
+                FintechGroupedCard(
+                  children: [
+                    FintechDropdown<Employee?>(
+                      labelText: 'Assigned Employee',
+                      hintText: 'Unassigned',
+                      prefixIcon: const Icon(Icons.person_outline_rounded, size: 20),
+                      value: _selEmp,
+                      items: [
+                        const DropdownMenuItem<Employee?>(
+                          value: null,
+                          child: Text('Unassigned'),
+                        ),
+                        ..._employees.map((e) => DropdownMenuItem<Employee?>(
+                              value: e,
+                              child: Text(e.name,
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w600)),
+                            )),
+                      ],
+                      onChanged: (v) => setState(() => _selEmp = v),
+                    ),
+                    const SizedBox(height: 12),
+                    AppTextField(
+                      controller: _pass,
+                      obscureText: !_showPass,
+                      decoration: InputDecoration(
+                        labelText: 'Admin / Login Password',
+                        prefixIcon:
+                            const Icon(Icons.lock_outline_rounded, size: 20),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _showPass
+                                ? Icons.visibility_off_outlined
+                                : Icons.visibility_outlined,
+                            size: 19,
+                          ),
+                          onPressed: () =>
+                              setState(() => _showPass = !_showPass),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 16),
+                SizedBox(
+                  height: 52,
+                  child: FilledButton.icon(
+                    onPressed: _saving ? null : _save,
+                    icon: _saving
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Icon(Icons.check_circle_outline_rounded, size: 20),
+                    label: Text(
+                      isNew ? 'Save Laptop' : 'Update Laptop',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                    style: FilledButton.styleFrom(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(26),
+                      ),
+                    ),
+                  ),
+                ),
               ],
-              onChanged: (v) => setState(() => _selEmp = v),
             ),
           ),
-          const SizedBox(height: 10),
-          Padding(padding: const EdgeInsets.only(bottom: 10),
-            child: TextFormField(
-              controller: _pass, obscureText: !_showPass,
-              enableSuggestions: false, autocorrect: false,
-              decoration: InputDecoration(
-                labelText: 'Password', prefixIcon: const Icon(Icons.lock_outline),
-                suffixIcon: IconButton(
-                  icon: Icon(_showPass ? Icons.visibility_off_outlined : Icons.visibility_outlined),
-                  onPressed: () => setState(() => _showPass = !_showPass))))),
-          const SizedBox(height: 20),
-          ElevatedButton.icon(
-            onPressed: _saving ? null : _save,
-            icon: _saving ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Icon(Icons.save_outlined),
-            label: Text(widget.laptop == null ? 'Add Laptop' : 'Update Laptop')),
-        ]),
+        ),
       ),
     );
   }

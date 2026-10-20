@@ -1,19 +1,24 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../database/database_helper.dart';
 import '../../models/log_entry.dart';
 import '../../widgets/common_widgets.dart';
+import '../../theme/app_theme.dart';
 import 'log_form_screen.dart';
 
 const _logColor = Color(0xFF6366F1);
 
 class LogsScreen extends StatefulWidget {
-  const LogsScreen({super.key});
+  final bool embedded;
+  const LogsScreen({super.key, this.embedded = false});
+
   @override
   State<LogsScreen> createState() => _LogsScreenState();
 }
 
 class _LogsScreenState extends State<LogsScreen> {
+  Timer? _debounce;
   final _db = DatabaseHelper();
   final _searchCtrl = TextEditingController();
 
@@ -23,10 +28,26 @@ class _LogsScreenState extends State<LogsScreen> {
 
   // Filter state
   int? _selectedYear;
-  int? _selectedMonth;        // null = all months
+  int? _selectedMonth; // null = all months
   String _searchMode = 'problem'; // 'problem' or 'employee'
+  String? _stateFilter; // null | 'Open' | 'Closed' | 'High'
 
   bool _loading = true;
+  String _sortField = 'date'; // 'date' | 'priority' | 'state'
+  bool _sortAsc = false;
+  final Set<int> _selectedIds = {};
+  bool get _isSelectionMode => _selectedIds.isNotEmpty;
+  StreamSubscription<List<LogEntry>>? _logsSubscription;
+
+  void _toggleSelection(int id) {
+    setState(() {
+      if (_selectedIds.contains(id)) {
+        _selectedIds.remove(id);
+      } else {
+        _selectedIds.add(id);
+      }
+    });
+  }
 
   static const _monthNames = [
     '', 'January', 'February', 'March', 'April', 'May', 'June',
@@ -36,34 +57,56 @@ class _LogsScreenState extends State<LogsScreen> {
   @override
   void initState() {
     super.initState();
-    _searchCtrl.addListener(_applyFilter);
+    _searchCtrl.addListener(() {
+      if (_debounce?.isActive ?? false) {
+        _debounce!.cancel();
+      }
+      _debounce = Timer(const Duration(milliseconds: 300), _applyFilter);
+    });
     _load();
   }
 
   @override
   void dispose() {
+    _logsSubscription?.cancel();
+    _debounce?.cancel();
     _searchCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _load() async {
-    setState(() => _loading = true);
+  Future<void> _load({bool showLoader = true}) async {
+    if (showLoader && _all.isEmpty) {
+      setState(() => _loading = true);
+    }
     try {
       _availableYears = await _db.getLogYears();
-
-      // Keep selected year if it still exists; default to current year
       final now = DateTime.now().year;
       _selectedYear ??= _availableYears.isNotEmpty
-        ? (_availableYears.contains(now) ? now : _availableYears.first)
-        : now;
+          ? (_availableYears.contains(now) ? now : _availableYears.first)
+          : now;
 
       await _fetchEntries();
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() => _loading = false);
+      }
     }
   }
 
   Future<void> _fetchEntries() async {
+    _logsSubscription?.cancel();
+    _logsSubscription = _db.watchLogEntries(
+      year: _selectedYear,
+      month: _selectedMonth,
+    ).listen((entries) {
+      if (mounted) {
+        setState(() {
+          _all = entries;
+          _applyFilter();
+        });
+      }
+    });
+    // Initial fetch to populate immediately
     if (_selectedYear == null) {
       _all = await _db.getLogEntries();
     } else if (_selectedMonth != null) {
@@ -78,7 +121,6 @@ class _LogsScreenState extends State<LogsScreen> {
     final q = _searchCtrl.text.trim().toLowerCase();
     List<LogEntry> result = List.of(_all);
 
-    // Text search
     if (q.isNotEmpty) {
       if (_searchMode == 'employee') {
         result = result.where((e) => e.employeeName.toLowerCase().contains(q)).toList();
@@ -87,36 +129,207 @@ class _LogsScreenState extends State<LogsScreen> {
       }
     }
 
-    if (mounted) setState(() => _filtered = result);
+    if (_stateFilter == 'Open') {
+      result = result.where((e) => e.state.toLowerCase() == 'open').toList();
+    } else if (_stateFilter == 'Closed') {
+      result = result.where((e) => e.state.toLowerCase() == 'closed').toList();
+    } else if (_stateFilter == 'High') {
+      result = result.where((e) => e.state.toLowerCase() == 'open' && e.priority == 'High').toList();
+    }
+
+    result.sort((a, b) {
+      int cmp;
+      switch (_sortField) {
+        case 'priority':
+          const order = {'High': 0, 'Medium': 1, 'Low': 2};
+          cmp = (order[a.priority] ?? 1).compareTo(order[b.priority] ?? 1);
+          break;
+        case 'state':
+          cmp = a.state.compareTo(b.state);
+          break;
+        default:
+          cmp = a.date.compareTo(b.date);
+      }
+      return _sortAsc ? cmp : -cmp;
+    });
+
+    if (mounted) {
+      setState(() => _filtered = result);
+    }
+  }
+
+  void _showFilterAndSortSheet() {
+    final allYears = {..._availableYears, DateTime.now().year}.toList()
+      ..sort((a, b) => b.compareTo(a));
+
+    showFintechBottomSheet(
+      context: context,
+      title: 'Filter & Sort Tickets',
+      subtitle: 'Organize IT support logs',
+      child: StatefulBuilder(
+        builder: (ctx, setS) {
+          final theme = Theme.of(ctx);
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Time Period', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                  TextButton(
+                    onPressed: () async {
+                      setState(() {
+                        _selectedYear = DateTime.now().year;
+                        _selectedMonth = null;
+                        _sortField = 'date';
+                        _sortAsc = false;
+                      });
+                      setS(() {});
+                      await _fetchEntries();
+                    },
+                    child: const Text('Reset', style: TextStyle(fontWeight: FontWeight.w700)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  ChoiceChip(
+                    label: const Text('All Years'),
+                    selected: _selectedYear == null,
+                    onSelected: (_) async {
+                      setState(() {
+                        _selectedYear = null;
+                        _selectedMonth = null;
+                      });
+                      setS(() {});
+                      await _fetchEntries();
+                    },
+                  ),
+                  ...allYears.map((y) => ChoiceChip(
+                        label: Text('$y'),
+                        selected: _selectedYear == y,
+                        onSelected: (_) async {
+                          setState(() {
+                            _selectedYear = y;
+                            _selectedMonth = null;
+                          });
+                          setS(() {});
+                          await _fetchEntries();
+                        },
+                      )),
+                ],
+              ),
+              if (_selectedYear != null) ...[
+                const SizedBox(height: 14),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    ChoiceChip(
+                      label: const Text('All Months'),
+                      selected: _selectedMonth == null,
+                      onSelected: (_) async {
+                        setState(() => _selectedMonth = null);
+                        setS(() {});
+                        await _fetchEntries();
+                      },
+                    ),
+                    for (int m = 1; m <= 12; m++)
+                      ChoiceChip(
+                        label: Text(_monthNames[m].substring(0, 3)),
+                        selected: _selectedMonth == m,
+                        onSelected: (_) async {
+                          setState(() => _selectedMonth = m);
+                          setS(() {});
+                          await _fetchEntries();
+                        },
+                      ),
+                  ],
+                ),
+              ],
+              const Divider(height: 28),
+              const Text('Sort Ordering', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+              const SizedBox(height: 10),
+              ...[('date', 'Date Added'), ('priority', 'Ticket Priority'), ('state', 'Current Status')].map((pair) {
+                final isSelected = _sortField == pair.$1;
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 6),
+                  decoration: BoxDecoration(
+                    color: isSelected ? _logColor.withValues(alpha: 0.08) : Colors.transparent,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: isSelected ? _logColor : theme.colorScheme.outlineVariant.withValues(alpha: 0.2),
+                    ),
+                  ),
+                  child: ListTile(
+                    dense: true,
+                    title: Text(pair.$2, style: TextStyle(fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500)),
+                    trailing: isSelected
+                        ? IconButton(
+                            icon: Icon(_sortAsc ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded, color: _logColor),
+                            onPressed: () {
+                              setState(() => _sortAsc = !_sortAsc);
+                              setS(() {});
+                              _applyFilter();
+                            },
+                          )
+                        : null,
+                    onTap: () {
+                      setState(() => _sortField = pair.$1);
+                      setS(() {});
+                      _applyFilter();
+                    },
+                  ),
+                );
+              }),
+              const SizedBox(height: 16),
+            ],
+          );
+        },
+      ),
+    );
   }
 
   Future<void> _openForm([LogEntry? entry]) async {
     final ok = await Navigator.push<bool>(
-      context, MaterialPageRoute(builder: (_) => LogFormScreen(entry: entry)));
+      context,
+      MaterialPageRoute(builder: (_) => LogFormScreen(entry: entry)),
+    );
     if (ok == true && mounted) {
-      // Re-fetch years in case a new year was added
       _availableYears = await _db.getLogYears();
       await _fetchEntries();
-      setState(() {});
     }
   }
 
   Future<void> _delete(LogEntry e) async {
-    final ok = await showConfirmDialog(context,
-      title: 'Delete Log',
-      message: 'Delete this log entry?');
-    if (!ok || !mounted) return;
+    final ok = await showConfirmDialog(
+      context,
+      title: 'Delete Ticket',
+      message: 'Are you sure you want to delete this IT log entry?',
+    );
+    if (!ok || !mounted) {
+      return;
+    }
     await _db.deleteLogEntry(e.id!);
-    if (!mounted) return;
-    showSnack(context, 'Log deleted');
+    if (!mounted) {
+      return;
+    }
+    showSnack(context, 'Ticket deleted');
     _load();
   }
 
   String _fmtDate(String d) {
-    try { return DateFormat('dd MMM yyyy').format(DateTime.parse(d)); } catch (_) { return d; }
+    try {
+      return DateFormat('dd MMM yyyy').format(DateTime.parse(d));
+    } catch (_) {
+      return d;
+    }
   }
 
-  // Build grouped map: "Month Year" → list
   Map<String, List<LogEntry>> _grouped() {
     final map = <String, List<LogEntry>>{};
     for (final e in _filtered) {
@@ -129,165 +342,274 @@ class _LogsScreenState extends State<LogsScreen> {
     return map;
   }
 
+  void _showTicketDetails(LogEntry entry) {
+    final isClosed = entry.state.toLowerCase() == 'closed';
+    final pColor = entry.priority == 'High'
+        ? Colors.red
+        : (entry.priority == 'Medium' ? Colors.orange : Colors.green);
+
+    showFintechBottomSheet(
+      context: context,
+      title: 'Support Ticket',
+      subtitle: '#${entry.id ?? 0} • ${_fmtDate(entry.date)}',
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              StatusBadge(
+                entry.state,
+                color: isClosed ? Colors.green : Colors.amber.shade800,
+              ),
+              const SizedBox(width: 8),
+              StatusBadge(
+                '${entry.priority} Priority',
+                color: pColor,
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          FintechGroupedCard(
+            title: 'Problem Description',
+            icon: Icons.report_problem_outlined,
+            children: [
+              Text(
+                entry.problem,
+                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15, height: 1.4),
+              ),
+              if (entry.employeeName.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                DetailRow(
+                  label: 'Reported By',
+                  value: entry.employeeName,
+                  icon: Icons.person_outline,
+                ),
+              ],
+            ],
+          ),
+          if (entry.solution.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            FintechGroupedCard(
+              title: 'Resolution Details',
+              icon: Icons.check_circle_outline,
+              children: [
+                Text(
+                  entry.solution,
+                  style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14, height: 1.4),
+                ),
+              ],
+            ),
+          ],
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _delete(entry);
+                  },
+                  icon: const Icon(Icons.delete_outline_rounded, size: 18, color: Colors.red),
+                  label: const Text('Delete', style: TextStyle(color: Colors.red)),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    side: BorderSide(color: Colors.red.withValues(alpha: 0.3)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _openForm(entry);
+                  },
+                  icon: const Icon(Icons.edit_outlined, size: 18),
+                  label: const Text('Edit Ticket'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _logColor,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    // Year options: always include current year
-    final allYears = {..._availableYears, DateTime.now().year}.toList()
-      ..sort((a, b) => b.compareTo(a));
+    final openTickets = _all.where((e) => e.state.toLowerCase() == 'open').toList();
+    final closedTickets = _all.where((e) => e.state.toLowerCase() == 'closed').toList();
+    final highPriorityOpen = openTickets.where((e) => e.priority == 'High').length;
+    final hasActiveFilterOrSort = _selectedMonth != null || _selectedYear != DateTime.now().year || _sortField != 'date' || _sortAsc;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Log'),
-        actions: [
-          // Year filter
-          Padding(
-            padding: const EdgeInsets.only(right: 4),
-            child: DropdownButton<int?>(
-              value: _selectedYear,
-              underline: const SizedBox.shrink(),
-              icon: const Icon(Icons.expand_more, size: 18),
-              style: TextStyle(
-                color: theme.colorScheme.primary,
-                fontWeight: FontWeight.w700,
-                fontSize: 14,
+    final content = Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+          child: Row(
+            children: [
+              Expanded(
+                child: SearchBar2(
+                  controller: _searchCtrl,
+                  hintText: _searchMode == 'problem' ? 'Search problem description…' : 'Search requester employee…',
+                  noPadding: true,
+                ),
               ),
-              items: [
-                DropdownMenuItem<int?>(
-                  value: null,
-                  child: Text('All', style: TextStyle(color: theme.colorScheme.onSurface)),
-                ),
-                ...allYears.map((y) => DropdownMenuItem<int?>(
-                  value: y,
-                  child: Text('$y', style: TextStyle(color: theme.colorScheme.onSurface)),
-                )),
-              ],
-              onChanged: (y) async {
-                setState(() { _selectedYear = y; _selectedMonth = null; });
-                await _fetchEntries();
-              },
-            ),
-          ),
-          // Month filter (only when year is selected)
-          if (_selectedYear != null)
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: DropdownButton<int?>(
-                value: _selectedMonth,
-                underline: const SizedBox.shrink(),
-                icon: const Icon(Icons.expand_more, size: 18),
-                hint: Text('Month',
-                  style: TextStyle(color: theme.colorScheme.primary, fontWeight: FontWeight.w700, fontSize: 14)),
-                style: TextStyle(
-                  color: theme.colorScheme.primary,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 14,
-                ),
-                items: [
-                  DropdownMenuItem<int?>(
-                    value: null,
-                    child: Text('All months', style: TextStyle(color: theme.colorScheme.onSurface)),
-                  ),
-                  for (int m = 1; m <= 12; m++)
-                    DropdownMenuItem<int?>(
-                      value: m,
-                      child: Text(_monthNames[m], style: TextStyle(color: theme.colorScheme.onSurface)),
+              const SizedBox(width: 8),
+              Tooltip(
+                message: _searchMode == 'problem' ? 'Switch to user search' : 'Switch to problem search',
+                child: InkWell(
+                  onTap: () {
+                    setState(() {
+                      _searchMode = _searchMode == 'problem' ? 'employee' : 'problem';
+                    });
+                    _applyFilter();
+                  },
+                  borderRadius: BorderRadius.circular(14),
+                  child: Container(
+                    height: 48,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      color: _logColor.withValues(alpha: 0.10),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: _logColor.withValues(alpha: 0.25)),
                     ),
-                ],
-                onChanged: (m) async {
-                  setState(() => _selectedMonth = m);
-                  await _fetchEntries();
-                },
-              ),
-            ),
-        ],
-      ),
-      body: _loading
-        ? const Center(child: CircularProgressIndicator())
-        : Column(children: [
-            // Search bar + mode toggle
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-              child: Row(children: [
-                Expanded(
-                  child: TextField(
-                    controller: _searchCtrl,
-                    enableSuggestions: false,
-                    autocorrect: false,
-                    decoration: InputDecoration(
-                      hintText: _searchMode == 'problem'
-                        ? 'Search by problem...'
-                        : 'Search by employee...',
-                      prefixIcon: const Icon(Icons.search, size: 20),
-                      suffixIcon: _searchCtrl.text.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.clear, size: 18),
-                            onPressed: () => _searchCtrl.clear())
-                        : null,
-                      isDense: true,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                // Toggle search mode
-                Tooltip(
-                  message: _searchMode == 'problem' ? 'Switch to employee search' : 'Switch to problem search',
-                  child: InkWell(
-                    onTap: () {
-                      setState(() {
-                        _searchMode = _searchMode == 'problem' ? 'employee' : 'problem';
-                      });
-                      _applyFilter();
-                    },
-                    borderRadius: BorderRadius.circular(12),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: _logColor.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: _logColor.withValues(alpha: 0.3)),
-                      ),
-                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
                         Icon(
-                          _searchMode == 'problem'
-                            ? Icons.report_problem_outlined
-                            : Icons.person_outline,
+                          _searchMode == 'problem' ? Icons.report_problem_rounded : Icons.person_rounded,
                           size: 16,
                           color: _logColor,
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          _searchMode == 'problem' ? 'Problem' : 'User',
+                          _searchMode == 'problem' ? 'Issue' : 'User',
                           style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _logColor),
                         ),
-                      ]),
+                      ],
                     ),
                   ),
                 ),
-              ]),
-            ),
-            const SizedBox(height: 4),
-            // List
-            Expanded(
-              child: _filtered.isEmpty
-                ? const EmptyState(
-                    icon: Icons.history_outlined,
-                    title: 'No Log Entries',
-                    subtitle: 'Tap + to log your first IT issue')
-                : RefreshIndicator(
-                    onRefresh: _load,
-                    child: _buildList(theme),
+              ),
+              const SizedBox(width: 8),
+              FintechActionButton(
+                icon: Icons.tune_rounded,
+                tooltip: 'Filter & Sort Tickets',
+                isActive: hasActiveFilterOrSort,
+                activeColor: _logColor,
+                onTap: _showFilterAndSortSheet,
+              ),
+            ],
+          ),
+        ),
+        if (_all.isNotEmpty)
+          _TicketDashboardCard(
+            total: _all.length,
+            openCount: openTickets.length,
+            closedCount: closedTickets.length,
+            highPriorityOpen: highPriorityOpen,
+            activeFilter: _stateFilter,
+            onFilterChanged: (f) {
+              setState(() {
+                _stateFilter = f;
+                _applyFilter();
+              });
+            },
+          ),
+        const SizedBox(height: 4),
+        Expanded(
+          child: _filtered.isEmpty
+              ? const EmptyState(
+                  icon: Icons.confirmation_number_outlined,
+                  title: 'No IT Tickets Found',
+                  subtitle: 'Tap + to report or log an IT support ticket',
+                )
+              : _buildList(theme),
+        ),
+      ],
+    );
+
+    return Scaffold(
+      backgroundColor: widget.embedded ? Colors.transparent : null,
+      appBar: widget.embedded
+          ? null
+          : FintechAppBar(
+              title: 'Tickets',
+              actions: [
+                if (_isSelectionMode)
+                  FintechCircleButton(
+                    icon: Icons.select_all_rounded,
+                    tooltip: 'Select All',
+                    onPressed: () {
+                      setState(() {
+                        if (_selectedIds.length == _filtered.length) {
+                          _selectedIds.clear();
+                        } else {
+                          _selectedIds.addAll(_filtered.map((e) => e.id!));
+                        }
+                      });
+                    },
                   ),
+              ],
             ),
-          ]),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _openForm(),
-        icon: const Icon(Icons.add),
-        label: const Text('Add Log'),
-        backgroundColor: _logColor,
-        foregroundColor: Colors.white,
-      ),
+      body: _loading ? const ShimmerListLoader() : content,
+      bottomNavigationBar: _isSelectionMode
+          ? BottomAppBar(
+              elevation: 4,
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded),
+                    onPressed: () => setState(() => _selectedIds.clear()),
+                  ),
+                  Text(
+                    '${_selectedIds.length} selected',
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline_rounded, color: Colors.red),
+                    onPressed: () async {
+                      final ok = await showConfirmDialog(
+                        context,
+                        title: 'Delete Tickets',
+                        message: 'Delete ${_selectedIds.length} ticket log(s)?',
+                      );
+                      if (!ok || !mounted) return;
+                      for (final id in _selectedIds) {
+                        await _db.deleteLogEntry(id);
+                      }
+                      setState(() => _selectedIds.clear());
+                      _load();
+                    },
+                    tooltip: 'Delete Selected',
+                  ),
+                ],
+              ),
+            )
+          : null,
+      floatingActionButton: _isSelectionMode
+          ? null
+          : Padding(
+              padding: EdgeInsets.only(bottom: widget.embedded ? 80 : 0),
+              child: FintechFab(
+                onPressed: () => _openForm(),
+                tooltip: 'Add Ticket',
+                icon: Icons.add_rounded,
+              ),
+            ),
     );
   }
 
@@ -295,120 +617,421 @@ class _LogsScreenState extends State<LogsScreen> {
     final grouped = _grouped();
     final monthKeys = grouped.keys.toList();
 
-    return CustomScrollView(slivers: [
-      SliverList(delegate: SliverChildBuilderDelegate((_, si) {
-        final monthKey = monthKeys[si];
-        final items = grouped[monthKey]!;
-        return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 16, 6),
-            child: Row(children: [
-              Expanded(child: Text(monthKey, style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w800,
-                color: theme.colorScheme.primary,
-                letterSpacing: 0.3,
-              ))),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.primary.withValues(alpha: 0.10),
-                  borderRadius: BorderRadius.circular(20),
+    return CustomScrollView(
+      slivers: [
+        SliverList(
+          delegate: SliverChildBuilderDelegate((_, si) {
+            final monthKey = monthKeys[si];
+            final items = grouped[monthKey]!;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 16, 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          monthKey,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                            color: theme.colorScheme.primary,
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.primary.withValues(alpha: 0.10),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          '${items.length} ${items.length == 1 ? 'ticket' : 'tickets'}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: theme.colorScheme.primary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                child: Text('${items.length} ${items.length == 1 ? 'entry' : 'entries'}',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700,
-                    color: theme.colorScheme.primary)),
-              ),
-            ]),
-          ),
-          ...items.map((e) => _LogCard(
-            entry: e,
-            onEdit: () => _openForm(e),
-            onDelete: () => _delete(e),
-            fmtDate: _fmtDate,
-          )),
-        ]);
-      }, childCount: monthKeys.length)),
-      const SliverPadding(padding: EdgeInsets.only(bottom: 90)),
-    ]);
+                ...items.asMap().entries.map((kv) {
+                  final i = kv.key;
+                  final e = kv.value;
+                  final isSelected = _selectedIds.contains(e.id);
+                  return SlideInAndFade(
+                    index: i,
+                    child: _LogCard(
+                      entry: e,
+                      theme: theme,
+                      isSelected: isSelected,
+                      onTap: () => _showTicketDetails(e),
+                      onLongPress: () => _toggleSelection(e.id!),
+                      onEdit: () => _openForm(e),
+                      onDelete: () => _delete(e),
+                      fmtDate: _fmtDate,
+                    ),
+                  );
+                }),
+              ],
+            );
+          }, childCount: monthKeys.length),
+        ),
+        const SliverPadding(padding: EdgeInsets.only(bottom: 120)),
+      ],
+    );
   }
 }
 
-// ── Log Card ──────────────────────────────────────────────────────
 class _LogCard extends StatelessWidget {
   final LogEntry entry;
+  final ThemeData theme;
+  final bool isSelected;
+  final VoidCallback onTap;
+  final VoidCallback onLongPress;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
   final String Function(String) fmtDate;
-  const _LogCard({required this.entry, required this.onEdit, required this.onDelete, required this.fmtDate});
+
+  const _LogCard({
+    required this.entry,
+    required this.theme,
+    required this.isSelected,
+    required this.onTap,
+    required this.onLongPress,
+    required this.onEdit,
+    required this.onDelete,
+    required this.fmtDate,
+  });
+
+  Color _priorityColor() {
+    switch (entry.priority) {
+      case 'High':
+        return Colors.red;
+      case 'Medium':
+        return Colors.orange;
+      default:
+        return Colors.green;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = theme.brightness == Brightness.dark;
+    final isClosed = entry.state.toLowerCase() == 'closed';
+    final pColor = _priorityColor();
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
+      decoration: BoxDecoration(
+        color: isSelected
+            ? _logColor.withValues(alpha: 0.08)
+            : (isDark ? AppColors.darkCard : Colors.white),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: isSelected
+              ? _logColor
+              : (isDark ? AppColors.darkBorder : AppColors.lightBorder),
+          width: isSelected ? 1.5 : 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: onTap,
+        onLongPress: onLongPress,
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: (isClosed ? Colors.green : pColor).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  isClosed ? Icons.check_circle_rounded : Icons.report_problem_rounded,
+                  color: isClosed ? Colors.green : pColor,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            entry.problem,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                              decoration: isClosed ? TextDecoration.lineThrough : null,
+                              color: isClosed ? theme.colorScheme.onSurface.withValues(alpha: 0.5) : null,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        StatusBadge(
+                          entry.priority,
+                          color: pColor,
+                        ),
+                      ],
+                    ),
+                    if (entry.employeeName.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Icon(Icons.person_outline, size: 12, color: theme.colorScheme.primary),
+                          const SizedBox(width: 4),
+                          Text(
+                            entry.employeeName,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: theme.colorScheme.primary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                    if (entry.solution.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        'Resolution: ${entry.solution}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.calendar_today_rounded,
+                          size: 11,
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          fmtDate(entry.date),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const Spacer(),
+                        StatusBadge(
+                          entry.state,
+                          color: isClosed ? Colors.green : Colors.amber.shade800,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TicketDashboardCard extends StatelessWidget {
+  final int total;
+  final int openCount;
+  final int closedCount;
+  final int highPriorityOpen;
+  final String? activeFilter;
+  final ValueChanged<String?> onFilterChanged;
+
+  const _TicketDashboardCard({
+    required this.total,
+    required this.openCount,
+    required this.closedCount,
+    required this.highPriorityOpen,
+    required this.activeFilter,
+    required this.onFilterChanged,
+  });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final hasSolution = entry.solution.isNotEmpty;
+    final isDark = theme.brightness == Brightness.dark;
+    final rate = total > 0 ? (closedCount / total).clamp(0.0, 1.0) : 0.0;
 
-    return Card(
-      margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          // Header row: date + user + actions
-          Row(children: [
-            const IconBox(icon: Icons.history_outlined, color: _logColor),
-            const SizedBox(width: 10),
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(fmtDate(entry.date),
-                style: TextStyle(fontSize: 11, color: theme.colorScheme.onSurface.withValues(alpha: 0.5))),
-              if (entry.employeeName.isNotEmpty)
-                Row(children: [
-                  const Icon(Icons.person_outline, size: 12, color: _logColor),
-                  const SizedBox(width: 3),
-                  Text(entry.employeeName,
-                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _logColor)),
-                ]),
-            ])),
-            Row(mainAxisSize: MainAxisSize.min, children: [
-              GestureDetector(onTap: onEdit,
-                child: const Icon(Icons.edit_outlined, size: 16, color: Colors.grey)),
-              const SizedBox(width: 12),
-              GestureDetector(onTap: onDelete,
-                child: Icon(Icons.delete_outline, size: 16, color: theme.colorScheme.error)),
-            ]),
-          ]),
-          const SizedBox(height: 10),
-          // Problem
-          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Container(
-              width: 6,
-              height: 6,
-              margin: const EdgeInsets.only(top: 5, right: 6),
-              decoration: const BoxDecoration(color: Colors.orange, shape: BoxShape.circle),
-            ),
-            Expanded(child: Text(entry.problem,
-              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14))),
-          ]),
-          // Solution (if any)
-          if (hasSolution) ...[
-            const SizedBox(height: 6),
-            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Container(
-                width: 6,
-                height: 6,
-                margin: const EdgeInsets.only(top: 5, right: 6),
-                decoration: const BoxDecoration(color: Color(0xFF10B981), shape: BoxShape.circle),
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 6, 16, 6),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.darkCard : Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: _logColor.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.confirmation_number_outlined, color: _logColor, size: 16),
+                  ),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Ticket Resolution Rate',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                  ),
+                ],
               ),
-              Expanded(child: Text(entry.solution,
-                style: TextStyle(fontSize: 13,
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.75)))),
-            ]),
-          ] else ...[
-            const SizedBox(height: 4),
-            Text('No solution yet',
-              style: TextStyle(fontSize: 12,
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.35),
-                fontStyle: FontStyle.italic)),
+              Text(
+                '${(rate * 100).toInt()}%',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                  color: rate >= 0.7 ? const Color(0xFF10B981) : _logColor,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: rate,
+              backgroundColor: theme.colorScheme.outlineVariant.withValues(alpha: 0.15),
+              valueColor: AlwaysStoppedAnimation(rate >= 0.7 ? const Color(0xFF10B981) : _logColor),
+              minHeight: 6,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _TicketMetricPill(
+                  label: 'Open',
+                  count: openCount,
+                  color: const Color(0xFFF59E0B),
+                  isSelected: activeFilter == 'Open',
+                  onTap: () => onFilterChanged(activeFilter == 'Open' ? null : 'Open'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _TicketMetricPill(
+                  label: 'High Alert',
+                  count: highPriorityOpen,
+                  color: const Color(0xFFEF4444),
+                  isSelected: activeFilter == 'High',
+                  onTap: () => onFilterChanged(activeFilter == 'High' ? null : 'High'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _TicketMetricPill(
+                  label: 'Resolved',
+                  count: closedCount,
+                  color: const Color(0xFF10B981),
+                  isSelected: activeFilter == 'Closed',
+                  onTap: () => onFilterChanged(activeFilter == 'Closed' ? null : 'Closed'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TicketMetricPill extends StatelessWidget {
+  final String label;
+  final int count;
+  final Color color;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _TicketMetricPill({
+    required this.label,
+    required this.count,
+    required this.color,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+        decoration: BoxDecoration(
+          color: isSelected ? color.withValues(alpha: 0.15) : color.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected ? color : color.withValues(alpha: 0.2),
+            width: isSelected ? 1.5 : 1,
+          ),
+        ),
+        child: Column(
+          children: [
+            Text(
+              '$count',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+                color: color,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: color,
+              ),
+            ),
           ],
-        ]),
+        ),
       ),
     );
   }

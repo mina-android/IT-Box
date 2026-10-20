@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:excel/excel.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
@@ -43,6 +44,21 @@ class ExcelService {
     }
   }
 
+  // ── Isolate helper ────────────────────────────────────────────────
+  static Future<List<int>> _encodeExcelIsolate(Map<String, dynamic> data) async {
+    final sheetName = data['sheetName'] as String;
+    final headers = (data['headers'] as List).cast<String>();
+    final rows = (data['rows'] as List).map((e) => (e as List).cast<dynamic>()).toList();
+
+    final excel = Excel.createExcel();
+    final sheet = excel[sheetName];
+    excel.setDefaultSheet(sheetName);
+
+    _writeSheet(sheet, headers, rows);
+
+    return excel.encode() ?? <int>[];
+  }
+
   // ── Export a single database table ──────────────────────────────
   static Future<void> exportTable({
     required String sheetName,
@@ -50,20 +66,21 @@ class ExcelService {
     required List<List<dynamic>> rows,
     required String fileLabel,
   }) async {
-    final excel = Excel.createExcel();
-    final sheet = excel[sheetName];
-    excel.setDefaultSheet(sheetName);
-
-    _writeSheet(sheet, headers, rows);
-
-    final bytes = excel.encode();
-    if (bytes == null) throw Exception('Excel encoding failed');
+    final bytes = await compute(_encodeExcelIsolate, {
+      'sheetName': sheetName,
+      'headers': headers,
+      'rows': rows,
+    });
+    
+    if (bytes.isEmpty) throw Exception('Excel encoding failed');
 
     final dir = await getTemporaryDirectory();
     final ts  = DateTime.now().toString().replaceAll(RegExp(r'[: .]'), '-').substring(0, 19);
     final file = File('${dir.path}/${fileLabel}_$ts.xlsx');
     await file.writeAsBytes(bytes);
-    await Share.shareXFiles([XFile(file.path)], subject: fileLabel);
+    await SharePlus.instance.share(
+      ShareParams(files: [XFile(file.path)], subject: fileLabel),
+    );
   }
 
   // ── Export expenses date range ───────────────────────────────────
@@ -106,6 +123,8 @@ class ExcelService {
     final ts   = DateTime.now().toString().replaceAll(RegExp(r'[: .]'), '-').substring(0, 19);
     final file = File('${dir.path}/Expenses_${label}_$ts.xlsx');
     await file.writeAsBytes(bytes);
-    await Share.shareXFiles([XFile(file.path)], subject: 'Expenses – $label');
+    await SharePlus.instance.share(
+      ShareParams(files: [XFile(file.path)], subject: 'Expenses – $label'),
+    );
   }
 }

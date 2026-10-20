@@ -10,6 +10,7 @@ class BorrowLog {
   final String outDate;
   final String? backDate;
   final String? dueDate;
+  final String? reminderTime;
   final bool isReturned;
 
   const BorrowLog({
@@ -24,6 +25,7 @@ class BorrowLog {
     required this.outDate,
     this.backDate,
     this.dueDate,
+    this.reminderTime,
     this.isReturned = false,
   });
 
@@ -39,6 +41,7 @@ class BorrowLog {
     'out_date': outDate,
     'back_date': backDate,
     'due_date': dueDate,
+    'reminder_time': reminderTime,
     'is_returned': isReturned ? 1 : 0,
   };
 
@@ -54,13 +57,16 @@ class BorrowLog {
     outDate: (m['out_date'] ?? '') as String,
     backDate: m['back_date'] as String?,
     dueDate: m['due_date'] as String?,
+    reminderTime: m['reminder_time'] as String?,
     isReturned: (m['is_returned'] as int? ?? 0) == 1,
   );
 
   BorrowLog copyWith({
     int? id, String? deviceType, int? deviceId, String? deviceName, String? deviceNumber,
     int? employeeId, String? employeeName, String? reason, String? outDate,
-    String? backDate, String? dueDate, bool? isReturned,
+    String? backDate,    String? dueDate,
+    String? reminderTime,
+    bool? isReturned,
   }) => BorrowLog(
     id: id ?? this.id,
     deviceType: deviceType ?? this.deviceType,
@@ -73,7 +79,17 @@ class BorrowLog {
     outDate: outDate ?? this.outDate,
     backDate: backDate ?? this.backDate,
     dueDate: dueDate ?? this.dueDate,
+    reminderTime: reminderTime ?? this.reminderTime,
     isReturned: isReturned ?? this.isReturned,
   );
+
+  bool isOverdue([DateTime? referenceDate]) {
+    if (isReturned || dueDate == null || dueDate!.isEmpty) return false;
+    final due = DateTime.tryParse(dueDate!);
+    if (due == null) return false;
+    final ref = referenceDate ?? DateTime.now();
+    final todayMidnight = DateTime(ref.year, ref.month, ref.day);
+    return due.isBefore(todayMidnight);
+  }
 }
 

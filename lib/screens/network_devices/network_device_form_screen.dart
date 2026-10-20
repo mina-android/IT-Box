@@ -7,34 +7,58 @@ class NetworkDeviceFormScreen extends StatefulWidget {
   final NetworkDevice? device;
   const NetworkDeviceFormScreen({super.key, this.device});
   @override
-  State<NetworkDeviceFormScreen> createState() => _State();
+  State<NetworkDeviceFormScreen> createState() => _NetworkDeviceFormScreenState();
 }
 
-class _State extends State<NetworkDeviceFormScreen> {
+class _NetworkDeviceFormScreenState extends State<NetworkDeviceFormScreen> {
   final _key = GlobalKey<FormState>();
+  final _shakeKey = GlobalKey<ShakeWidgetState>();
   final _db = DatabaseHelper();
-  bool _saving = false, _showWifiPass = false, _showAdminPass = false;
+  bool _saving = false;
+  bool _showWifiPass = false;
+  bool _showAdminPass = false;
 
-  late final _num      = TextEditingController(text: widget.device?.deviceNumber ?? '');
-  late final _model    = TextEditingController(text: widget.device?.model ?? '');
-  late final _phone    = TextEditingController(text: widget.device?.phoneNumber ?? '');
-  late final _loc      = TextEditingController(text: widget.device?.deviceLocation ?? '');
-  late final _provider = TextEditingController(text: widget.device?.serviceProvider ?? '');
-  late final _wifi     = TextEditingController(text: widget.device?.wifiName ?? '');
-  late final _wifiPass = TextEditingController(text: widget.device?.wifiPassword ?? '');
-  late final _gateway  = TextEditingController(text: widget.device?.gateway ?? '');
-  late final _adminPass= TextEditingController(text: widget.device?.adminPassword ?? '');
+  late final _num =
+      TextEditingController(text: widget.device?.deviceNumber ?? '');
+  late final _model = TextEditingController(text: widget.device?.model ?? '');
+  late final _phone =
+      TextEditingController(text: widget.device?.phoneNumber ?? '');
+  late final _loc =
+      TextEditingController(text: widget.device?.deviceLocation ?? '');
+  late final _provider =
+      TextEditingController(text: widget.device?.serviceProvider ?? '');
+  late final _wifi =
+      TextEditingController(text: widget.device?.wifiName ?? '');
+  late final _wifiPass =
+      TextEditingController(text: widget.device?.wifiPassword ?? '');
+  late final _gateway =
+      TextEditingController(text: widget.device?.gateway ?? '');
+  late final _adminPass =
+      TextEditingController(text: widget.device?.adminPassword ?? '');
 
   @override
   void dispose() {
-    for (final c in [_num, _model, _phone, _loc, _provider, _wifi, _wifiPass, _gateway, _adminPass]) {
+    for (final c in [
+      _num,
+      _model,
+      _phone,
+      _loc,
+      _provider,
+      _wifi,
+      _wifiPass,
+      _gateway,
+      _adminPass
+    ]) {
       c.dispose();
     }
     super.dispose();
   }
 
   Future<void> _save() async {
-    if (!_key.currentState!.validate()) return;
+    if (!_key.currentState!.validate()) {
+      _shakeKey.currentState?.shake();
+      return;
+    }
     setState(() => _saving = true);
     try {
       final d = NetworkDevice(
@@ -55,79 +79,200 @@ class _State extends State<NetworkDeviceFormScreen> {
       } else {
         await _db.updateNetworkDevice(d);
       }
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
+      showSnack(context, 'Device saved successfully!');
       Navigator.pop(context, true);
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       showSnack(context, 'Error: $e', error: true);
     } finally {
-      if (mounted) setState(() => _saving = false);
+      if (mounted) {
+        setState(() => _saving = false);
+      }
     }
   }
 
-  Widget _field(TextEditingController ctrl, String label, IconData icon,
-      {bool req = false, TextInputType? type, String? hint}) =>
-      Padding(
-        padding: const EdgeInsets.only(bottom: 10),
-        child: TextFormField(
-        enableSuggestions: false,
-        autocorrect: false,
-          controller: ctrl, keyboardType: type,
-          decoration: InputDecoration(labelText: label, prefixIcon: Icon(icon), hintText: hint),
-          validator: req ? (v) => v == null || v.trim().isEmpty ? 'Required' : null : null,
+  Widget _buildField({
+    required TextEditingController controller,
+    required String label,
+    required IconData icon,
+    bool required = false,
+    TextInputType? keyboardType,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: AppTextField(
+        controller: controller,
+        keyboardType: keyboardType,
+        decoration: InputDecoration(
+          labelText: label,
+          prefixIcon: Icon(icon, size: 20),
         ),
-      );
-
-  Widget _passField(TextEditingController ctrl, String label, IconData icon,
-      bool show, VoidCallback toggle) =>
-      Padding(
-        padding: const EdgeInsets.only(bottom: 10),
-        child: TextFormField(
-        enableSuggestions: false,
-        autocorrect: false,
-          controller: ctrl,
-          obscureText: !show,
-          decoration: InputDecoration(
-            labelText: label,
-            prefixIcon: Icon(icon),
-            suffixIcon: IconButton(
-              icon: Icon(show ? Icons.visibility_off_outlined : Icons.visibility_outlined),
-              onPressed: toggle,
-            ),
-          ),
-        ),
-      );
+        validator: required
+            ? (v) => v == null || v.trim().isEmpty ? 'Required' : null
+            : null,
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    final isEdit = widget.device != null;
+    final isNew = widget.device == null;
+
     return Scaffold(
-      appBar: AppBar(title: Text(isEdit ? 'Edit Network Device' : 'Add Network Device')),
-      body: Form(
-        key: _key,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 40),
-          children: [
-            const SectionLabel('IDENTIFICATION'),
-            _field(_num, 'Device Number *', Icons.tag, req: true, hint: 'e.g. RADA-ND-01'),
-            _field(_model, 'Model *', Icons.router_outlined, req: true, hint: 'e.g. Cisco RV340'),
-            _field(_phone, 'Phone Number', Icons.phone_outlined, type: TextInputType.phone, hint: '+962 79 ...'),
-            _field(_loc, 'Device Location', Icons.location_on_outlined, hint: 'Floor / Room'),
-            _field(_provider, 'Service Provider', Icons.cell_tower_outlined, hint: 'e.g. Zain Jordan'),
-            const SectionLabel('NETWORK CREDENTIALS'),
-            _field(_wifi, 'WiFi Name (SSID)', Icons.wifi_outlined, hint: 'WiFi network name'),
-            _passField(_wifiPass, 'WiFi Password', Icons.lock_outlined, _showWifiPass,
-                () => setState(() => _showWifiPass = !_showWifiPass)),
-            _field(_gateway, 'Gateway IP', Icons.router, hint: 'e.g. 192.168.1.1'),
-            _passField(_adminPass, 'Admin Password', Icons.admin_panel_settings_outlined, _showAdminPass,
-                () => setState(() => _showAdminPass = !_showAdminPass)),
-            const SizedBox(height: 20),
-            ElevatedButton.icon(
-              onPressed: _saving ? null : _save,
-              icon: _saving ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Icon(Icons.save_outlined),
-              label: Text(isEdit ? 'Update Device' : 'Add Device'),
+      appBar: AppBar(
+        title: Text(
+          isNew ? 'Add Network Device' : 'Edit Network Device',
+          style: const TextStyle(fontWeight: FontWeight.w800),
+        ),
+      ),
+      body: GestureDetector(
+        onTap: () => FocusScope.of(context).unfocus(),
+        child: ShakeWidget(
+          key: _shakeKey,
+          child: Form(
+            key: _key,
+            autovalidateMode: AutovalidateMode.onUserInteraction,
+            child: ListView(
+              keyboardDismissBehavior:
+                  ScrollViewKeyboardDismissBehavior.onDrag,
+              padding: const EdgeInsets.fromLTRB(18, 8, 18, 40),
+              children: [
+                const SectionLabel('DEVICE IDENTITY'),
+                FintechGroupedCard(
+                  children: [
+                    _buildField(
+                      controller: _num,
+                      label: 'Device Number *',
+                      icon: Icons.tag_rounded,
+                      required: true,
+                    ),
+                    _buildField(
+                      controller: _model,
+                      label: 'Model / Brand *',
+                      icon: Icons.router_rounded,
+                      required: true,
+                    ),
+                  ],
+                ),
+
+                const SectionLabel('CARRIER & LOCATION'),
+                FintechGroupedCard(
+                  children: [
+                    _buildField(
+                      controller: _phone,
+                      label: 'SIM / Phone Number',
+                      icon: Icons.phone_rounded,
+                      keyboardType: TextInputType.phone,
+                    ),
+                    _buildField(
+                      controller: _loc,
+                      label: 'Installation Location',
+                      icon: Icons.location_on_outlined,
+                    ),
+                    _buildField(
+                      controller: _provider,
+                      label: 'Service Provider / ISP',
+                      icon: Icons.cell_tower_rounded,
+                    ),
+                    _buildField(
+                      controller: _gateway,
+                      label: 'Default Gateway (e.g. 192.168.1.1)',
+                      icon: Icons.alt_route_rounded,
+                    ),
+                  ],
+                ),
+
+                const SectionLabel('WIFI & PASSWORDS'),
+                FintechGroupedCard(
+                  children: [
+                    _buildField(
+                      controller: _wifi,
+                      label: 'WiFi SSID Name',
+                      icon: Icons.wifi_rounded,
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: AppTextField(
+                        controller: _wifiPass,
+                        obscureText: !_showWifiPass,
+                        decoration: InputDecoration(
+                          labelText: 'WiFi Password',
+                          prefixIcon:
+                              const Icon(Icons.lock_outline_rounded, size: 20),
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              _showWifiPass
+                                  ? Icons.visibility_off_outlined
+                                  : Icons.visibility_outlined,
+                              size: 19,
+                            ),
+                            onPressed: () => setState(
+                                () => _showWifiPass = !_showWifiPass),
+                          ),
+                        ),
+                      ),
+                    ),
+                    AppTextField(
+                      controller: _adminPass,
+                      obscureText: !_showAdminPass,
+                      decoration: InputDecoration(
+                        labelText: 'Router Admin Password',
+                        prefixIcon: const Icon(
+                            Icons.admin_panel_settings_outlined,
+                            size: 20),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _showAdminPass
+                                ? Icons.visibility_off_outlined
+                                : Icons.visibility_outlined,
+                            size: 19,
+                          ),
+                          onPressed: () => setState(
+                              () => _showAdminPass = !_showAdminPass),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 16),
+                SizedBox(
+                  height: 52,
+                  child: FilledButton.icon(
+                    onPressed: _saving ? null : _save,
+                    icon: _saving
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Icon(Icons.check_circle_outline_rounded, size: 20),
+                    label: Text(
+                      isNew ? 'Save Router' : 'Update Router',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                    style: FilledButton.styleFrom(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(26),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
