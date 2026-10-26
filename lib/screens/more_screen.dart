@@ -20,6 +20,7 @@ import 'accounts_passwords/accounts_passwords_screen.dart';
 import 'vendor_contacts/vendor_contacts_screen.dart';
 import 'network_tools/unit_converter_screen.dart';
 import 'search/global_search_screen.dart';
+import 'network_tools/diagnostics/network_diagnostics_screen.dart';
 import 'package:itbox/widgets/common_widgets.dart';
 
 class _MoreItem {
@@ -150,6 +151,13 @@ class MoreScreen extends StatelessWidget {
             sub: 'ISPs, hotlines & vendor contacts',
             color: Color(0xFF0284C7),
             screen: VendorContactsScreen(),
+          ),
+          _MoreItem(
+            icon: Icons.troubleshoot_rounded,
+            label: 'Network Diagnostics',
+            sub: 'DNS, port probe & speed test',
+            color: Color(0xFF6366F1),
+            screen: NetworkDiagnosticsScreen(),
           ),
         ],
       ),
