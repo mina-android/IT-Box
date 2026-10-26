@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../database/database_helper.dart';
 import '../../models/email_account.dart';
 import '../../widgets/common_widgets.dart';
+import '../../widgets/selection_bottom_bar.dart';
 import '../../theme/app_theme.dart';
 import 'email_form_screen.dart';
 
@@ -427,26 +428,10 @@ class _EmailsScreenState extends State<EmailsScreen> {
               ),
             ),
       bottomNavigationBar: _isSelectionMode
-          ? BottomAppBar(
-              elevation: 4,
-              child: Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.close_rounded),
-                    onPressed: () => setState(() => _selectedIds.clear()),
-                  ),
-                  Text(
-                    '${_selectedIds.length} selected',
-                    style: const TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline_rounded, color: Colors.red),
-                    onPressed: _bulkDelete,
-                    tooltip: 'Delete Selected',
-                  ),
-                ],
-              ),
+          ? SelectionBottomBar(
+              selectedCount: _selectedIds.length,
+              onClose: () => setState(() => _selectedIds.clear()),
+              onDelete: _bulkDelete,
             )
           : null,
     );

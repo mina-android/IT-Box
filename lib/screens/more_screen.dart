@@ -17,6 +17,7 @@ import 'barcode_scanner/barcode_scanner_screen.dart';
 import 'audit_trail/activity_feed_screen.dart';
 import 'wifi_networks/wifi_networks_screen.dart';
 import 'accounts_passwords/accounts_passwords_screen.dart';
+import 'vendor_contacts/vendor_contacts_screen.dart';
 import 'package:itbox/widgets/common_widgets.dart';
 
 class _MoreItem {
@@ -133,6 +134,13 @@ class MoreScreen extends StatelessWidget {
             sub: 'Subnet & mask calculator',
             color: Color(0xFF14B8A6),
             screen: CidrCalculatorScreen(),
+          ),
+          _MoreItem(
+            icon: Icons.contact_phone_rounded,
+            label: 'Vendor Runbook',
+            sub: 'ISPs, hotlines & vendor contacts',
+            color: Color(0xFF0284C7),
+            screen: VendorContactsScreen(),
           ),
         ],
       ),

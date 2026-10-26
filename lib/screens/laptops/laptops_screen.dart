@@ -7,6 +7,7 @@ import '../../models/laptop.dart';
 import '../../models/employee.dart';
 import '../../services/custody_pdf_service.dart';
 import '../../widgets/common_widgets.dart';
+import '../../widgets/selection_bottom_bar.dart';
 import 'laptop_form_screen.dart';
 import '../maintenance/device_maintenance_screen.dart';
 
@@ -249,29 +250,10 @@ class _LaptopsScreenState extends State<LaptopsScreen> with AutomaticKeepAliveCl
               ),
             ),
       bottomNavigationBar: _isSelectionMode
-          ? BottomAppBar(
-              elevation: 4,
-              child: Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.close_rounded),
-                    onPressed: () => setState(() => _selectedIds.clear()),
-                    tooltip: 'Clear',
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    '${_selectedIds.length} selected',
-                    style: const TextStyle(fontWeight: FontWeight.w800),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline_rounded,
-                        color: Colors.red),
-                    onPressed: _bulkDelete,
-                    tooltip: 'Delete',
-                  ),
-                ],
-              ),
+          ? SelectionBottomBar(
+              selectedCount: _selectedIds.length,
+              onClose: () => setState(() => _selectedIds.clear()),
+              onDelete: _bulkDelete,
             )
           : null,
     );

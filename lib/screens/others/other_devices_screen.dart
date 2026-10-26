@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../database/database_helper.dart';
 import '../../models/other_device.dart';
 import '../../widgets/common_widgets.dart';
+import '../../widgets/selection_bottom_bar.dart';
 import 'other_device_form_screen.dart';
 
 class OtherDevicesScreen extends StatefulWidget {
@@ -285,28 +286,10 @@ class _OtherDevicesScreenState extends State<OtherDevicesScreen> with AutomaticK
               ),
             ),
       bottomNavigationBar: _isSelectionMode
-          ? BottomAppBar(
-              elevation: 4,
-              child: Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.close_rounded),
-                    onPressed: () => setState(() => _selectedIds.clear()),
-                    tooltip: 'Clear',
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    '${_selectedIds.length} selected',
-                    style: const TextStyle(fontWeight: FontWeight.w800),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline_rounded, color: Colors.red),
-                    onPressed: _bulkDelete,
-                    tooltip: 'Delete',
-                  ),
-                ],
-              ),
+          ? SelectionBottomBar(
+              selectedCount: _selectedIds.length,
+              onClose: () => setState(() => _selectedIds.clear()),
+              onDelete: _bulkDelete,
             )
           : null,
       body: Column(

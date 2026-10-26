@@ -6,6 +6,8 @@ import '../../database/database_helper.dart';
 import '../../models/expense.dart';
 import '../../services/pdf_report_service.dart';
 import '../../widgets/common_widgets.dart';
+import '../../widgets/selection_bottom_bar.dart';
+import '../../theme/app_theme.dart';
 import 'expense_form_screen.dart';
 
 const _expenseColor = Color(0xFF10B981);
@@ -348,7 +350,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
       height: 48,
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+        color: AppColors.cardSurface(context),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: isDark
@@ -363,7 +365,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
           isDense: true,
           elevation: 6,
           borderRadius: BorderRadius.circular(16),
-          dropdownColor: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+          dropdownColor: AppColors.cardSurface(context),
           icon: Icon(
             Icons.keyboard_arrow_down_rounded,
             size: 20,
@@ -637,27 +639,10 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
               color: _expenseColor,
             ),
       bottomNavigationBar: _isSelectionMode
-          ? BottomAppBar(
-              elevation: 4,
-              child: Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.close_rounded),
-                    onPressed: () => setState(() => _selectedIds.clear()),
-                  ),
-                  Text(
-                    '${_selectedIds.length} selected',
-                    style: const TextStyle(fontWeight: FontWeight.w800),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline_rounded,
-                        color: Colors.red),
-                    onPressed: _bulkDelete,
-                    tooltip: 'Delete',
-                  ),
-                ],
-              ),
+          ? SelectionBottomBar(
+              selectedCount: _selectedIds.length,
+              onClose: () => setState(() => _selectedIds.clear()),
+              onDelete: _bulkDelete,
             )
           : null,
     );

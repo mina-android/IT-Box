@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import '../../database/database_helper.dart';
 import '../../models/bill.dart';
 import '../../widgets/common_widgets.dart';
+import '../../widgets/selection_bottom_bar.dart';
 import 'bill_form_screen.dart';
 
 const _billColor = Color(0xFF8B5CF6); // Electric Purple
@@ -376,27 +377,10 @@ class _BillsScreenState extends State<BillsScreen> {
               ),
             ),
       bottomNavigationBar: _isSelectionMode
-          ? BottomAppBar(
-              elevation: 4,
-              child: Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.close_rounded),
-                    onPressed: () => setState(() => _selectedIds.clear()),
-                  ),
-                  Text(
-                    '${_selectedIds.length} selected',
-                    style: const TextStyle(fontWeight: FontWeight.w800),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline_rounded,
-                        color: Colors.red),
-                    onPressed: _bulkDelete,
-                    tooltip: 'Delete',
-                  ),
-                ],
-              ),
+          ? SelectionBottomBar(
+              selectedCount: _selectedIds.length,
+              onClose: () => setState(() => _selectedIds.clear()),
+              onDelete: _bulkDelete,
             )
           : null,
     );

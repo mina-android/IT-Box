@@ -7,6 +7,8 @@ class SelectionBottomBar extends StatelessWidget {
   final VoidCallback onDelete;
   final VoidCallback onClose;
   final String? actionLabel;
+  final List<Widget>? leadingActions;
+  final List<Widget>? trailingActions;
 
   const SelectionBottomBar({
     super.key,
@@ -14,6 +16,8 @@ class SelectionBottomBar extends StatelessWidget {
     required this.onDelete,
     required this.onClose,
     this.actionLabel,
+    this.leadingActions,
+    this.trailingActions,
   });
 
   @override
@@ -53,7 +57,9 @@ class SelectionBottomBar extends StatelessWidget {
               '$selectedCount selected',
               style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
             ),
+            if (leadingActions != null) ...leadingActions!,
             const Spacer(),
+            if (trailingActions != null) ...trailingActions!,
             FilledButton.icon(
               onPressed: selectedCount > 0 ? onDelete : null,
               style: FilledButton.styleFrom(

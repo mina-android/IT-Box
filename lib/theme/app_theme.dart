@@ -34,6 +34,18 @@ class AppColors {
   static const Color expenseColor = Color(0xFFEC4899); // Rose
   static const Color billColor = Color(0xFF8B5CF6); // Purple
   static const Color subscriptionColor = Color(0xFFF43F5E); // Red-Rose
+  static const Color vendorColor = Color(0xFF0284C7); // Cyan-Blue
+
+  /// Returns context-aware card background surface color respecting AMOLED dark mode.
+  static Color cardSurface(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bg = Theme.of(context).scaffoldBackgroundColor;
+    final isAmoled = isDark && bg == Colors.black;
+    if (isAmoled) {
+      return const Color(0xFF121212);
+    }
+    return isDark ? darkCard : lightCard;
+  }
 }
 
 // ── Seed colors ─────────────────────────────────────────────────────────────

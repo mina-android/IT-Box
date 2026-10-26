@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../database/database_helper.dart';
 import '../../models/mifi.dart';
 import '../../widgets/common_widgets.dart';
+import '../../widgets/selection_bottom_bar.dart';
 import 'mifi_form_screen.dart';
 
 const Color _mifiColor = Color(0xFFD97706); // Warm Amber
@@ -323,33 +324,18 @@ class _MiFisScreenState extends State<MiFisScreen> with AutomaticKeepAliveClient
               ),
             ),
       bottomNavigationBar: _isSelectionMode
-          ? BottomAppBar(
-              elevation: 4,
-              child: Row(
-                children: [
+          ? SelectionBottomBar(
+              selectedCount: _selectedIds.length,
+              onClose: () => setState(() => _selectedIds.clear()),
+              onDelete: _bulkDelete,
+              trailingActions: [
+                if (_selectedIds.length == 1)
                   IconButton(
-                    icon: const Icon(Icons.close_rounded),
-                    onPressed: () => setState(() => _selectedIds.clear()),
+                    icon: const Icon(Icons.copy_rounded),
+                    onPressed: _duplicate,
+                    tooltip: 'Duplicate',
                   ),
-                  Text(
-                    '${_selectedIds.length} selected',
-                    style: const TextStyle(fontWeight: FontWeight.w800),
-                  ),
-                  const Spacer(),
-                  if (_selectedIds.length == 1)
-                    IconButton(
-                      icon: const Icon(Icons.copy_rounded),
-                      onPressed: _duplicate,
-                      tooltip: 'Duplicate',
-                    ),
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline_rounded,
-                        color: Colors.red),
-                    onPressed: _bulkDelete,
-                    tooltip: 'Delete',
-                  ),
-                ],
-              ),
+              ],
             )
           : null,
     );
