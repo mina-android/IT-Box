@@ -1603,6 +1603,14 @@ class DatabaseHelper extends ChangeNotifier {
     return rows.map(_maintenanceEntryToMap).toList();
   }
 
+  /// Retrieve all maintenance logs across all devices (useful for maintenance calendar & schedules).
+  Future<List<Map<String, dynamic>>> getAllMaintenanceLogs() async {
+    final query = drift.select(drift.deviceMaintenanceLogs)
+      ..orderBy([(tbl) => OrderingTerm.desc(tbl.date), (tbl) => OrderingTerm.desc(tbl.id)]);
+    final rows = await query.get();
+    return rows.map(_maintenanceEntryToMap).toList();
+  }
+
   Future<int> deleteMaintenanceLog(int id) async {
     final rows = await (drift.delete(drift.deviceMaintenanceLogs)..where((tbl) => tbl.id.equals(id))).go();
     notifyTableChanged('device_maintenance_logs');

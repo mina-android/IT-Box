@@ -21,6 +21,7 @@ import 'vendor_contacts/vendor_contacts_screen.dart';
 import 'network_tools/unit_converter_screen.dart';
 import 'search/global_search_screen.dart';
 import 'network_tools/diagnostics/network_diagnostics_screen.dart';
+import 'maintenance/maintenance_calendar_screen.dart';
 import 'package:itbox/widgets/common_widgets.dart';
 
 class _MoreItem {
@@ -158,6 +159,13 @@ class MoreScreen extends StatelessWidget {
             sub: 'DNS, port probe & speed test',
             color: Color(0xFF6366F1),
             screen: NetworkDiagnosticsScreen(),
+          ),
+          _MoreItem(
+            icon: Icons.calendar_month_rounded,
+            label: 'Maintenance Calendar',
+            sub: 'Planned repairs & service events',
+            color: Color(0xFFD97706),
+            screen: MaintenanceCalendarScreen(),
           ),
         ],
       ),
