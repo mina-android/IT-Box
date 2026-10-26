@@ -18,6 +18,7 @@ import 'audit_trail/activity_feed_screen.dart';
 import 'wifi_networks/wifi_networks_screen.dart';
 import 'accounts_passwords/accounts_passwords_screen.dart';
 import 'vendor_contacts/vendor_contacts_screen.dart';
+import 'network_tools/unit_converter_screen.dart';
 import 'package:itbox/widgets/common_widgets.dart';
 
 class _MoreItem {
@@ -134,6 +135,13 @@ class MoreScreen extends StatelessWidget {
             sub: 'Subnet & mask calculator',
             color: Color(0xFF14B8A6),
             screen: CidrCalculatorScreen(),
+          ),
+          _MoreItem(
+            icon: Icons.transform_rounded,
+            label: 'Unit Converter',
+            sub: 'Network, storage & RF units',
+            color: Color(0xFF0D9488),
+            screen: UnitConverterScreen(),
           ),
           _MoreItem(
             icon: Icons.contact_phone_rounded,

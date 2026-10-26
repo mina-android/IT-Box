@@ -1,6 +1,7 @@
 // lib/screens/audit_trail/activity_feed_screen.dart
 import 'package:flutter/material.dart';
 import '../../database/database_helper.dart';
+import '../../services/audit_export_service.dart';
 import '../../widgets/common_widgets.dart';
 
 class ActivityFeedScreen extends StatefulWidget {
@@ -32,6 +33,28 @@ class _ActivityFeedScreenState extends State<ActivityFeedScreen> {
     }
   }
 
+  Future<void> _exportCsv() async {
+    try {
+      final file = await AuditExportService().exportAuditCsv();
+      if (!mounted) return;
+      showSnack(context, 'Audit CSV saved to ${file.path}');
+    } catch (e) {
+      if (!mounted) return;
+      showSnack(context, 'Failed to export CSV: $e', error: true);
+    }
+  }
+
+  Future<void> _exportPdf() async {
+    try {
+      final file = await AuditExportService().exportAuditPdf();
+      if (!mounted) return;
+      showSnack(context, 'Audit PDF report saved to ${file.path}');
+    } catch (e) {
+      if (!mounted) return;
+      showSnack(context, 'Failed to export PDF: $e', error: true);
+    }
+  }
+
   Future<void> _clearAuditTrail() async {
     final ok = await showConfirmDialog(
       context,
@@ -58,12 +81,23 @@ class _ActivityFeedScreenState extends State<ActivityFeedScreen> {
         title: 'Audit & Activity Trail',
         subtitle: '${_activities.length} recorded events',
         actions: [
-          if (_activities.isNotEmpty)
+          if (_activities.isNotEmpty) ...[
+            FintechCircleButton(
+              icon: Icons.table_chart_rounded,
+              tooltip: 'Export CSV',
+              onPressed: _exportCsv,
+            ),
+            FintechCircleButton(
+              icon: Icons.picture_as_pdf_rounded,
+              tooltip: 'Export PDF Report',
+              onPressed: _exportPdf,
+            ),
             FintechCircleButton(
               icon: Icons.delete_sweep_rounded,
               tooltip: 'Clear Audit Trail',
               onPressed: _clearAuditTrail,
             ),
+          ],
         ],
       ),
       body: _loading
