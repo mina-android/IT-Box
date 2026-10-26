@@ -4,6 +4,7 @@ import '../../models/email_account.dart';
 import '../../models/employee.dart';
 import '../../widgets/common_widgets.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/haptics.dart';
 
 const _emailColor = Color(0xFF0EA5E9);
 
@@ -202,11 +203,25 @@ class _EmailFormScreenState extends State<EmailFormScreen> {
     }
     setState(() => _saving = true);
     try {
+      final emailStr = _email.text.trim();
+      final allAccounts = await _db.getEmailAccounts();
+      final duplicate = allAccounts.any((acc) =>
+          acc.id != widget.account?.id &&
+          acc.email.trim().toLowerCase() == emailStr.toLowerCase());
+      if (duplicate) {
+        if (!mounted) return;
+        _shakeKey.currentState?.shake();
+        AppHaptics.tap(context, HapticStrength.heavy);
+        showSnack(context, 'Email "$emailStr" is already registered.', error: true);
+        setState(() => _saving = false);
+        return;
+      }
+
       final acc = EmailAccount(
         id: widget.account?.id,
         employeeId: _selEmp?.id,
         employeeName: _selEmp?.name ?? '',
-        email: _email.text.trim(),
+        email: emailStr,
         password: _pass.text,
       );
       if (widget.account == null) {

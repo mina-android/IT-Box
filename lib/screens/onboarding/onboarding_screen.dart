@@ -45,9 +45,54 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         return;
       }
       final picked = result.first;
-      final bytes = await picked.readAsBytes();
+      final rawStr = utf8.decode(await picked.readAsBytes());
+
+      var summary = await DatabaseHelper().inspectBackupJson(rawStr);
+      String? passphrase;
+
+      if (summary.isEncrypted && !summary.isValid) {
+        if (!mounted) return;
+        final passCtrl = TextEditingController();
+        final okPass = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Encrypted Backup Detected'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Please enter the passphrase used to encrypt this backup:'),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: passCtrl,
+                  obscureText: true,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Passphrase',
+                    prefixIcon: Icon(Icons.lock_rounded),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+              FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Unlock')),
+            ],
+          ),
+        );
+        if (okPass != true || !mounted) return;
+        passphrase = passCtrl.text.trim();
+        summary = await DatabaseHelper().inspectBackupJson(rawStr, passphrase: passphrase);
+      }
+
+      if (!mounted) return;
+      if (!summary.isValid) {
+        showSnack(context, summary.validationError ?? 'Invalid backup file.', error: true);
+        return;
+      }
+
       setState(() => _saving = true);
-      await DatabaseHelper().importJson(utf8.decode(bytes));
+      await DatabaseHelper().importJson(rawStr, passphrase: passphrase);
       setState(() => _saving = false);
       if (!mounted) {
         return;

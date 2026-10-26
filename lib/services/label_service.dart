@@ -75,28 +75,27 @@ class LabelService {
                         : hasSecondLine
                             ? pw.Column(
                                 mainAxisAlignment: pw.MainAxisAlignment.center,
-                                children: [
-                                  pw.Text(
-                                    cell.split('\n')[0],
-                                    style: pw.TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: pw.FontWeight.bold,
-                                      color: PdfColors.black,
-                                      letterSpacing: 0.3,
-                                    ),
-                                    textAlign: pw.TextAlign.center,
-                                  ),
-                                  pw.SizedBox(height: 2),
-                                  pw.Text(
-                                    cell.split('\n')[1],
-                                    style: pw.TextStyle(
-                                      fontSize: 9,
-                                      fontWeight: pw.FontWeight.normal,
-                                      color: PdfColors.grey700,
-                                    ),
-                                    textAlign: pw.TextAlign.center,
-                                  ),
-                                ],
+                                children: cell
+                                    .split('\n')
+                                    .asMap()
+                                    .entries
+                                    .map((entry) => pw.Padding(
+                                          padding: const pw.EdgeInsets.symmetric(vertical: 1),
+                                          child: pw.Text(
+                                            entry.value,
+                                            style: pw.TextStyle(
+                                              fontSize: entry.key == 0 ? 11 : 8.5,
+                                              fontWeight: entry.key == 0
+                                                  ? pw.FontWeight.bold
+                                                  : pw.FontWeight.normal,
+                                              color: entry.key == 0
+                                                  ? PdfColors.black
+                                                  : PdfColors.grey700,
+                                            ),
+                                            textAlign: pw.TextAlign.center,
+                                          ),
+                                        ))
+                                    .toList(),
                               )
                             : pw.Text(
                                 cell,

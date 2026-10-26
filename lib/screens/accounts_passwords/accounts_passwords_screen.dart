@@ -141,7 +141,8 @@ class _AccountsPasswordsScreenState extends State<AccountsPasswordsScreen> {
                         separatorBuilder: (_, __) => const SizedBox(height: 12),
                         itemBuilder: (ctx, i) {
                           final acc = filtered[i];
-                          final isRevealed = _revealedPasswords.contains(i);
+                          final accId = acc.id ?? i;
+                          final isRevealed = _revealedPasswords.contains(accId);
 
                           return SlideInAndFade(
                             index: i,
@@ -269,9 +270,9 @@ class _AccountsPasswordsScreenState extends State<AccountsPasswordsScreen> {
                                           onPressed: () {
                                             setState(() {
                                               if (isRevealed) {
-                                                _revealedPasswords.remove(i);
+                                                _revealedPasswords.remove(accId);
                                               } else {
-                                                _revealedPasswords.add(i);
+                                                _revealedPasswords.add(accId);
                                               }
                                             });
                                           },

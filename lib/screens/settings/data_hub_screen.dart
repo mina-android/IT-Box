@@ -25,7 +25,67 @@ class _DataHubScreenState extends State<DataHubScreen> {
   // ── Database Backup ──────────────────────────────────────────
   Future<void> _backup() async {
     try {
-      final json = await _db.exportJson();
+      final encrypt = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Backup Options'),
+          content: const Text(
+            'Would you like to encrypt this backup with a secure passphrase (AES-256-GCM)?\n\n'
+            'Encrypted backups require your password to restore and protect sensitive credentials.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Plaintext JSON'),
+            ),
+            FilledButton.icon(
+              icon: const Icon(Icons.lock_rounded, size: 18),
+              onPressed: () => Navigator.pop(ctx, true),
+              label: const Text('Encrypt Backup'),
+            ),
+          ],
+        ),
+      );
+      if (encrypt == null || !mounted) return;
+
+      String? passphrase;
+      if (encrypt) {
+        final passCtrl = TextEditingController();
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Set Backup Passphrase'),
+            content: TextField(
+              controller: passCtrl,
+              obscureText: true,
+              autofocus: true,
+              decoration: const InputDecoration(
+                labelText: 'Passphrase *',
+                prefixIcon: Icon(Icons.key_rounded),
+                hintText: 'Enter a strong password',
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  if (passCtrl.text.trim().length >= 4) {
+                    Navigator.pop(ctx, true);
+                  }
+                },
+                child: const Text('Confirm'),
+              ),
+            ],
+          ),
+        );
+        if (confirmed != true || !mounted) return;
+        passphrase = passCtrl.text.trim();
+      }
+
+      final json = await _db.exportJson(passphrase: passphrase);
       final ts = DateTime.now()
           .toString()
           .replaceAll(RegExp(r'[: .]'), '-')
@@ -58,22 +118,96 @@ class _DataHubScreenState extends State<DataHubScreen> {
         allowedExtensions: ['json'],
       );
       if (result.isEmpty || !mounted) return;
-      final bytes = await result.first.readAsBytes();
+      final rawStr = utf8.decode(await result.first.readAsBytes());
       if (!mounted) return;
 
-      final ok = await showConfirmDialog(
-        context,
-        title: 'Restore Database',
-        message:
-            'This will replace ALL current data with the selected JSON backup file. This action cannot be reversed.',
-        confirmText: 'Restore',
-        confirmColor: Colors.orange,
+      // Inspect backup manifest
+      var summary = await _db.inspectBackupJson(rawStr);
+      String? passphrase;
+
+      if (summary.isEncrypted && !summary.isValid) {
+        if (!mounted) return;
+        final passCtrl = TextEditingController();
+        final okPass = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Encrypted Backup Detected'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Please enter the passphrase used to encrypt this backup:'),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: passCtrl,
+                  obscureText: true,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Passphrase',
+                    prefixIcon: Icon(Icons.lock_rounded),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+              FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Unlock')),
+            ],
+          ),
+        );
+        if (okPass != true || !mounted) return;
+        passphrase = passCtrl.text.trim();
+        summary = await _db.inspectBackupJson(rawStr, passphrase: passphrase);
+      }
+
+      if (!mounted) return;
+      if (!summary.isValid) {
+        showSnack(context, summary.validationError ?? 'Invalid backup file.', error: true);
+        return;
+      }
+
+      // Display manifest summary before restoring
+      final totalRecords = summary.tableCounts.values.fold<int>(0, (a, b) => a + b);
+      final shouldRestore = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Confirm Full Restore'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Organization: ${summary.companyName.isNotEmpty ? summary.companyName : "IT Box"}'),
+                Text('Exported: ${summary.exportedAt}'),
+                Text('Schema Version: v${summary.schemaVersion}'),
+                Text('Total Records: $totalRecords across ${summary.tableCounts.length} tables'),
+                const SizedBox(height: 12),
+                const Text(
+                  'WARNING: This will replace ALL existing data with the contents of this backup file. This cannot be undone.',
+                  style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: Colors.red),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Replace All Data'),
+            ),
+          ],
+        ),
       );
-      if (!ok || !mounted) return;
 
-      await _db.importJson(utf8.decode(bytes));
+      if (shouldRestore != true || !mounted) return;
+
+      await _db.importJson(rawStr, passphrase: passphrase);
       if (!mounted) return;
-      showSnack(context, 'Database restored successfully');
+      showSnack(context, 'Database restored successfully ($totalRecords records)');
     } catch (e) {
       if (!mounted) return;
       showSnack(context, 'Restore failed: $e', error: true);

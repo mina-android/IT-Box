@@ -143,6 +143,18 @@ class _SwitchPatchMatrixScreenState extends State<SwitchPatchMatrixScreen> {
       if (toEdit == null) {
         _chassisList.add(result);
         _selectedChassis = result;
+      } else {
+        // C9: Clean up any ports that exceed the updated totalPorts
+        final existingPorts = await _db.getSwitchPatchPorts(result.id);
+        for (final p in existingPorts) {
+          final pNum = p['port_number'] as int? ?? 0;
+          if (pNum > result.totalPorts) {
+            final portId = p['id'] as int?;
+            if (portId != null) {
+              await _db.deleteSwitchPatchPort(portId);
+            }
+          }
+        }
       }
       await _saveChassisList();
       if (_selectedChassis != null) {
@@ -307,8 +319,9 @@ class _SwitchPatchMatrixScreenState extends State<SwitchPatchMatrixScreen> {
 
     final activePortsCount = _ports.where((p) => p['status'] == 'Active').length;
     final totalPorts = _selectedChassis?.totalPorts ?? 24;
-    final percentUtilized =
-        totalPorts > 0 ? (activePortsCount / totalPorts * 100).round() : 0;
+    final double rawRatio = totalPorts > 0 ? (activePortsCount / totalPorts) : 0.0;
+    final double progressValue = rawRatio.clamp(0.0, 1.0);
+    final percentUtilized = (progressValue * 100).round();
 
     return Scaffold(
       appBar: FintechAppBar(
@@ -585,7 +598,7 @@ class _SwitchPatchMatrixScreenState extends State<SwitchPatchMatrixScreen> {
                         ClipRRect(
                           borderRadius: BorderRadius.circular(6),
                           child: LinearProgressIndicator(
-                            value: totalPorts > 0 ? activePortsCount / totalPorts : 0,
+                            value: progressValue,
                             minHeight: 8,
                             backgroundColor: cs.outlineVariant.withValues(alpha: 0.2),
                             valueColor: AlwaysStoppedAnimation<Color>(
@@ -610,7 +623,7 @@ class _SwitchPatchMatrixScreenState extends State<SwitchPatchMatrixScreen> {
                             ),
                             _statBadge(
                               'Available',
-                              totalPorts - _ports.length,
+                              (totalPorts - _ports.length).clamp(0, totalPorts),
                               Colors.grey,
                             ),
                           ],

@@ -20,11 +20,18 @@ class NotificationService {
     if (_initialized) return;
     try {
       tz_data.initializeTimeZones();
-      const androidInit = AndroidInitializationSettings('@drawable/ic_stat_mono');
-      const winInit = LinuxInitializationSettings(defaultActionName: 'Open');
-      const initSettings = InitializationSettings(
+      AndroidInitializationSettings? androidInit;
+      LinuxInitializationSettings? linuxInit;
+
+      if (Platform.isAndroid) {
+        androidInit = const AndroidInitializationSettings('@drawable/ic_stat_mono');
+      } else if (Platform.isLinux) {
+        linuxInit = const LinuxInitializationSettings(defaultActionName: 'Open');
+      }
+
+      final initSettings = InitializationSettings(
         android: androidInit,
-        linux: winInit,
+        linux: linuxInit,
       );
 
       await _plugin.initialize(settings: initSettings);
@@ -54,7 +61,17 @@ class NotificationService {
     required DateTime dueDate,
     required TimeOfDay reminderTime,
   }) async {
-    final tzDate = toUtcTZDate(dueDate, reminderTime.hour, reminderTime.minute);
+    tz.TZDateTime? tzDate = toUtcTZDate(dueDate, reminderTime.hour, reminderTime.minute);
+    
+    // C10: If target instant has already passed today, schedule immediate notification 1 minute out
+    if (tzDate == null) {
+      final now = DateTime.now();
+      final isDueToday = dueDate.year == now.year && dueDate.month == now.month && dueDate.day == now.day;
+      if (isDueToday) {
+        final oneMinOut = now.add(const Duration(minutes: 1));
+        tzDate = toUtcTZDate(oneMinOut, oneMinOut.hour, oneMinOut.minute);
+      }
+    }
     if (tzDate == null) return false;
 
     await init();

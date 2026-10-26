@@ -72,8 +72,29 @@ class _StaticIpFormScreenState extends State<StaticIpFormScreen> {
     AppHaptics.tap(context, HapticStrength.medium);
 
     try {
+      final ipStr = _ipCtrl.text.trim();
+      final currentId = widget.item?['id'] as int?;
+
+      // C6: Duplicate IP address check
+      final existingIps = await _db.getStaticIps();
+      final duplicate = existingIps.any((item) =>
+          item['id'] != currentId &&
+          (item['ip_address'] as String? ?? '').trim() == ipStr);
+
+      if (duplicate) {
+        if (!mounted) return;
+        _shakeKey.currentState?.shake();
+        AppHaptics.tap(context, HapticStrength.heavy);
+        showSnack(
+          context,
+          'Conflict: IP address $ipStr is already allocated to another device.',
+          error: true,
+        );
+        return;
+      }
+
       final map = {
-        'ip_address': _ipCtrl.text.trim(),
+        'ip_address': ipStr,
         'subnet_mask': _subnetCtrl.text.trim().isNotEmpty ? _subnetCtrl.text.trim() : '255.255.255.0',
         'assigned_device': _deviceCtrl.text.trim(),
         'device_type': _selectedType,
@@ -164,6 +185,14 @@ class _StaticIpFormScreenState extends State<StaticIpFormScreen> {
                         prefixIcon: Icon(Icons.grid_3x3_rounded, size: 20),
                         hintText: '255.255.255.0',
                       ),
+                      validator: (v) {
+                        if (v == null || v.trim().isEmpty) return null;
+                        final parts = v.trim().split('.');
+                        if (parts.length != 4 || parts.any((p) => int.tryParse(p) == null || int.parse(p) < 0 || int.parse(p) > 255)) {
+                          return 'Enter a valid subnet mask (e.g. 255.255.255.0)';
+                        }
+                        return null;
+                      },
                     ),
                     const SizedBox(height: 14),
                     InputDecorator(

@@ -20,7 +20,16 @@ class WifiNetworkInfo {
     this.locationOrTag = '',
   });
 
-  String get qrString => 'WIFI:S:$ssid;T:$security;P:$password;;';
+  static String _escapeWifiValue(String val) {
+    return val
+        .replaceAll(r'\', r'\\')
+        .replaceAll(';', r'\;')
+        .replaceAll(',', r'\,')
+        .replaceAll(':', r'\:');
+  }
+
+  String get qrString =>
+      'WIFI:S:${_escapeWifiValue(ssid)};T:$security;P:${_escapeWifiValue(password)};;';
 }
 
 class WifiPdfService {

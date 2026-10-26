@@ -15,6 +15,7 @@ import '../models/log_entry.dart';
 import '../models/subscription.dart';
 import '../models/access_point.dart';
 import '../models/other_device.dart';
+import 'notification_service.dart';
 
 /// Result of an import operation
 class ImportResult {
@@ -99,6 +100,13 @@ class ExcelImportService {
         }
       });
     });
+
+    // C2 & F4: Always heal device statuses and reconcile notifications post-import
+    await _db.syncDeviceStatuses();
+    try {
+      final activeLogs = await _db.getBorrowLogs(activeOnly: true);
+      await NotificationService().reconcileReminders(activeLogs);
+    } catch (_) {}
 
     return ImportResult(inserted: inserted, skipped: skipped, errors: errors);
   }
@@ -354,7 +362,9 @@ class ExcelImportService {
   }
 
   // ── EXPENSES ─────────────────────────────────────────────────
-  // Columns: Date, Item, Price (EGP), Details
+  // Supported column layouts:
+  // Layout A (DataHub with index): #, Date, Item, Price (EGP), Details
+  // Layout B (ExcelService without index): Date, Item, Price (EGP), Details
   static Future<ImportResult> importExpenses(Excel excel, {bool replace = false}) async {
     final sheet = excel.sheets.values.first;
     final rows = _rows(sheet);
@@ -365,22 +375,41 @@ class ExcelImportService {
     for (var i = 0; i < rows.length; i++) {
       final row = rows[i];
       try {
-        // Skip the TOTAL summary row that ExcelService adds
         final col0 = _str(row.isNotEmpty ? row[0] : null);
         if (col0.toUpperCase() == 'TOTAL') { skipped++; continue; }
 
-        final date = _str(row.isNotEmpty ? row[0] : null);
-        final item = _str(row.length > 1 ? row[1] : null);
+        int dateCol = 0;
+        int itemCol = 1;
+        int priceCol = 2;
+        int detailsCol = 3;
+
+        // Detect if row[0] is an integer row index #
+        if (int.tryParse(col0) != null && row.length > 2) {
+          final candidateDate = _str(row[1]);
+          if (_parseDate(candidateDate) != null || candidateDate.contains('-') || candidateDate.contains('/')) {
+            dateCol = 1;
+            itemCol = 2;
+            priceCol = 3;
+            detailsCol = 4;
+          }
+        }
+
+        final rawDate = _str(row.length > dateCol ? row[dateCol] : null);
+        final item = _str(row.length > itemCol ? row[itemCol] : null);
         if (item.isEmpty) { skipped++; continue; }
 
-        // Normalise date: accept "dd MMM yyyy", "yyyy-MM-dd", or Excel serial
-        String normDate = _normalizeDate(date);
+        final normDate = _parseDate(rawDate);
+        if (normDate == null) {
+          errors.add('Row ${i + 2}: Invalid date format "$rawDate" for expense "$item".');
+          skipped++;
+          continue;
+        }
 
         items.add(Expense(
           date:    normDate,
           item:    item,
-          price:   _dbl(row.length > 2 ? row[2] : null),
-          details: _str(row.length > 3 ? row[3] : null),
+          price:   _dbl(row.length > priceCol ? row[priceCol] : null),
+          details: _str(row.length > detailsCol ? row[detailsCol] : null),
         ));
       } catch (e) { errors.add('Row ${i + 2}: $e'); skipped++; }
     }
@@ -424,11 +453,13 @@ class ExcelImportService {
       } catch (e) { errors.add('Row ${i + 2}: $e'); skipped++; }
     }
 
-    if (replace && items.isEmpty && maskedOrEmptyPassCount > 0) {
+    // C3: Abort replace whenever masked rows exist to prevent silent data destruction
+    if (replace && maskedOrEmptyPassCount > 0) {
       return ImportResult(
         inserted: 0,
         skipped: skipped,
-        errors: const ['No accounts with valid passwords found. Passwords in exported files are hidden for security and cannot replace database accounts.'],
+        errors: ['Import aborted: File contains $maskedOrEmptyPassCount masked/empty passwords. '
+                 'To prevent credential loss, "Replace All" is blocked when passwords are hidden. Use "Append" instead.'],
       );
     }
 
@@ -461,11 +492,18 @@ class ExcelImportService {
           (t) => t.toLowerCase() == rawType.toLowerCase(),
           orElse: () => 'Monthly',
         );
+        final rawDate = _str(row.length > 4 ? row[4] : null);
+        final normDate = _parseDate(rawDate);
+        if (normDate == null) {
+          errors.add('Row ${i + 2}: Invalid renewal date format "$rawDate" for subscription "$service".');
+          skipped++;
+          continue;
+        }
         items.add(Subscription(
           service:     service,
           type:        typeMatch,
           price:       _dbl(row.length > 3 ? row[3] : null),
-          renewalDate: _normalizeDate(_str(row.length > 4 ? row[4] : null)),
+          renewalDate: normDate,
           notes:       _str(row.length > 5 ? row[5] : null),
         ));
       } catch (e) { errors.add('Row ${i + 2}: $e'); skipped++; }
@@ -515,44 +553,71 @@ class ExcelImportService {
     );
   }
 
-  // ── Date normalizer ──────────────────────────────────────────
-  static String _normalizeDate(String raw) {
-    if (raw.isEmpty) return _today();
+  // ── Date parser ──────────────────────────────────────────────
+  /// C7: Strict date parser that safely handles various standard formats
+  /// (yyyy-MM-dd, dd MMM yyyy, dd/MM/yyyy, MM/dd/yyyy, and Excel serial numbers)
+  /// without silent fallback to today. Returns null on unrecognized input.
+  static String? _parseDate(String raw) {
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty) return null;
+
     // Already yyyy-MM-dd
-    if (RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(raw)) return raw;
-    // Try parsing "dd MMM yyyy" e.g. "15 May 2026"
+    if (RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(trimmed)) return trimmed;
+
+    // Slash format: dd/MM/yyyy or MM/dd/yyyy or yyyy/MM/dd
+    final slashParts = trimmed.split('/');
+    if (slashParts.length == 3) {
+      final p1 = int.tryParse(slashParts[0]);
+      final p2 = int.tryParse(slashParts[1]);
+      final p3 = int.tryParse(slashParts[2]);
+      if (p1 != null && p2 != null && p3 != null) {
+        if (p1 > 1000) {
+          // yyyy/MM/dd
+          return '${p1.toString().padLeft(4, '0')}-${p2.toString().padLeft(2, '0')}-${p3.toString().padLeft(2, '0')}';
+        } else if (p3 > 1000) {
+          // Check if p1 > 12 -> definitely dd/MM/yyyy
+          if (p1 > 12 && p2 <= 12) {
+            return '${p3.toString().padLeft(4, '0')}-${p2.toString().padLeft(2, '0')}-${p1.toString().padLeft(2, '0')}';
+          }
+          // Default standard international dd/MM/yyyy
+          return '${p3.toString().padLeft(4, '0')}-${p2.toString().padLeft(2, '0')}-${p1.toString().padLeft(2, '0')}';
+        }
+      }
+    }
+
+    // Try parsing "dd MMM yyyy" e.g. "15 May 2026" or "15-May-2026"
     try {
       final months = {
-        'jan':1,'feb':2,'mar':3,'apr':4,'may':5,'jun':6,
-        'jul':7,'aug':8,'sep':9,'oct':10,'nov':11,'dec':12,
+        'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6,
+        'jul': 7, 'aug': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12,
       };
-      final parts = raw.trim().split(RegExp(r'[\s,]+'));
+      final parts = trimmed.split(RegExp(r'[\s,\-]+'));
       if (parts.length >= 3) {
         final d = int.tryParse(parts[0]);
-        final m = months[parts[1].toLowerCase().substring(0, 3)];
+        final mToken = parts[1].toLowerCase();
+        final m = mToken.length >= 3 ? months[mToken.substring(0, 3)] : null;
         final y = int.tryParse(parts[2]);
-        if (d != null && m != null && y != null) {
-          return '${y.toString().padLeft(4,'0')}-${m.toString().padLeft(2,'0')}-${d.toString().padLeft(2,'0')}';
+        if (d != null && m != null && y != null && d >= 1 && d <= 31 && y > 1900) {
+          return '${y.toString().padLeft(4, '0')}-${m.toString().padLeft(2, '0')}-${d.toString().padLeft(2, '0')}';
         }
       }
     } catch (_) {}
-    // Excel serial date (days since 1900-01-01)
-    final serial = double.tryParse(raw);
-    if (serial != null && serial > 1000) {
+
+    // Excel serial date (days since 1899-12-30)
+    final serial = double.tryParse(trimmed);
+    if (serial != null && serial > 0 && serial < 100000) {
       final base = DateTime(1899, 12, 30);
       final date = base.add(Duration(days: serial.toInt()));
-      return '${date.year}-${date.month.toString().padLeft(2,'0')}-${date.day.toString().padLeft(2,'0')}';
+      return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
     }
-    return _today();
-  }
 
-  static String _today() {
-    final n = DateTime.now();
-    return '${n.year}-${n.month.toString().padLeft(2,'0')}-${n.day.toString().padLeft(2,'0')}';
+    return null;
   }
 
   // ── LOG ENTRIES ───────────────────────────────────────────────
-  // Columns: Date, Employee, Problem, Solution
+  // Supported column layouts:
+  // Layout A (DataHub with index): #, Date, Employee, Problem, Solution
+  // Layout B (without index): Date, Employee, Problem, Solution
   static Future<ImportResult> importLogEntries(Excel excel, {bool replace = false}) async {
     final sheet = excel.sheets.values.first;
     final rows = _rows(sheet);
@@ -563,14 +628,39 @@ class ExcelImportService {
     for (var i = 0; i < rows.length; i++) {
       final row = rows[i];
       try {
-        final date     = _normalizeDate(_str(row.isNotEmpty ? row[0] : null));
-        final employee = _str(row.length > 1 ? row[1] : null);
-        final problem  = _str(row.length > 2 ? row[2] : null);
+        final col0 = _str(row.isNotEmpty ? row[0] : null);
+        int dateCol = 0;
+        int empCol = 1;
+        int probCol = 2;
+        int solCol = 3;
+
+        // Detect if row[0] is an integer row index #
+        if (int.tryParse(col0) != null && row.length > 2) {
+          final candidateDate = _str(row[1]);
+          if (_parseDate(candidateDate) != null || candidateDate.contains('-') || candidateDate.contains('/')) {
+            dateCol = 1;
+            empCol = 2;
+            probCol = 3;
+            solCol = 4;
+          }
+        }
+
+        final rawDate  = _str(row.length > dateCol ? row[dateCol] : null);
+        final employee = _str(row.length > empCol ? row[empCol] : null);
+        final problem  = _str(row.length > probCol ? row[probCol] : null);
         if (problem.isEmpty) { skipped++; continue; }
-        final solution = _str(row.length > 3 ? row[3] : null);
+
+        final normDate = _parseDate(rawDate);
+        if (normDate == null) {
+          errors.add('Row ${i + 2}: Invalid date format "$rawDate" for ticket problem "$problem".');
+          skipped++;
+          continue;
+        }
+
+        final solution = _str(row.length > solCol ? row[solCol] : null);
 
         items.add(LogEntry(
-          date:         date,
+          date:         normDate,
           employeeName: employee,
           problem:      problem,
           solution:     solution,

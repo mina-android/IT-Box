@@ -424,8 +424,12 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                             children: [
                               Expanded(
                                 child: _SummaryCard(
-                                  label: 'This Month',
-                                  amount: _monthlyTotal,
+                                  label: (_selectedYear == null || _selectedYear == DateTime.now().year)
+                                      ? 'This Month'
+                                      : 'Monthly Avg',
+                                  amount: (_selectedYear == null || _selectedYear == DateTime.now().year)
+                                      ? _monthlyTotal
+                                      : (_yearlyTotal / 12),
                                   icon: Icons.calendar_today_rounded,
                                   color: _expenseColor,
                                 ),

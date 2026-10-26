@@ -3,6 +3,7 @@ import '../../database/database_helper.dart';
 import '../../models/laptop.dart';
 import '../../models/employee.dart';
 import '../../widgets/common_widgets.dart';
+import '../../utils/haptics.dart';
 
 class LaptopFormScreen extends StatefulWidget {
   final Laptop? laptop;
@@ -71,9 +72,23 @@ class _LaptopFormScreenState extends State<LaptopFormScreen> {
     }
     setState(() => _saving = true);
     try {
+      final tag = _num.text.trim();
+      final allLaptops = await _db.getLaptops();
+      final duplicate = allLaptops.any((lap) =>
+          lap.id != widget.laptop?.id &&
+          lap.laptopNumber.trim().toLowerCase() == tag.toLowerCase());
+      if (duplicate) {
+        if (!mounted) return;
+        _shakeKey.currentState?.shake();
+        AppHaptics.tap(context, HapticStrength.heavy);
+        showSnack(context, 'Laptop tag "$tag" already exists. Please choose a unique identifier.', error: true);
+        setState(() => _saving = false);
+        return;
+      }
+
       final l = Laptop(
         id: widget.laptop?.id,
-        laptopNumber: _num.text.trim(),
+        laptopNumber: tag,
         model: _model.text.trim(),
         cpu: _cpu.text.trim(),
         gpu: _gpu.text.trim(),

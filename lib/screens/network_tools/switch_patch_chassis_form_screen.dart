@@ -50,7 +50,7 @@ class _SwitchPatchChassisFormScreenState extends State<SwitchPatchChassisFormScr
     final location = _locationCtrl.text.trim();
 
     if (widget.chassis == null) {
-      final newId = DateTime.now().millisecondsSinceEpoch % 1000000;
+      final newId = DateTime.now().microsecondsSinceEpoch % 1000000000;
       final newChassis = PatchPanelChassis(
         id: newId,
         name: name,

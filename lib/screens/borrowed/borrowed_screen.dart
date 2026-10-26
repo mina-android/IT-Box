@@ -213,7 +213,7 @@ class _BorrowedScreenState extends State<BorrowedScreen>
       context: context,
       initialDate: initial,
       firstDate: outDate,
-      lastDate: initial.add(const Duration(days: 365)),
+      lastDate: now.isAfter(outDate) ? now : outDate,
       helpText: 'Select Return Date',
     );
     if (picked == null || !mounted) {

@@ -16,6 +16,26 @@ import 'screens/barcode_scanner/barcode_scanner_screen.dart';
 import 'screens/borrowed/add_borrow_screen.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+String? pendingQuickAction;
+
+void handleQuickAction(String type) {
+  final nav = navigatorKey.currentState;
+  if (nav == null) {
+    pendingQuickAction = type;
+    return;
+  }
+  switch (type) {
+    case 'action_scanner':
+      nav.push(MaterialPageRoute(builder: (_) => const NetworkScannerScreen()));
+      break;
+    case 'action_scan_tag':
+      nav.push(MaterialPageRoute(builder: (_) => const BarcodeScannerScreen()));
+      break;
+    case 'action_new_borrow':
+      nav.push(MaterialPageRoute(builder: (_) => const AddBorrowScreen()));
+      break;
+  }
+}
 
 Future<void> _cleanupOldTempFiles() async {
   try {
@@ -53,19 +73,7 @@ void main() async {
 
   const QuickActions quickActions = QuickActions();
   quickActions.initialize((shortcutType) {
-    final nav = navigatorKey.currentState;
-    if (nav == null) return;
-    switch (shortcutType) {
-      case 'action_scanner':
-        nav.push(MaterialPageRoute(builder: (_) => const NetworkScannerScreen()));
-        break;
-      case 'action_scan_tag':
-        nav.push(MaterialPageRoute(builder: (_) => const BarcodeScannerScreen()));
-        break;
-      case 'action_new_borrow':
-        nav.push(MaterialPageRoute(builder: (_) => const AddBorrowScreen()));
-        break;
-    }
+    handleQuickAction(shortcutType);
   });
 
   quickActions.setShortcutItems(<ShortcutItem>[
@@ -103,6 +111,13 @@ class _ITBoxAppState extends State<ITBoxApp> {
   void initState() {
     super.initState();
     _theme.addListener(_rebuild);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (pendingQuickAction != null) {
+        final act = pendingQuickAction!;
+        pendingQuickAction = null;
+        handleQuickAction(act);
+      }
+    });
   }
 
   @override
