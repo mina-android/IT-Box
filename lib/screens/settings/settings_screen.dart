@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../database/database_helper.dart';
 import '../../services/theme_service.dart';
 import '../../services/company_service.dart';
+import '../../services/workspace_service.dart';
 import '../../widgets/common_widgets.dart';
 import '../../theme/app_theme.dart';
 
@@ -132,6 +133,64 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 18),
           ],
 
+          const SectionLabel('ACTIVE WORKSPACE / TENANT'),
+          ListenableBuilder(
+            listenable: WorkspaceService(),
+            builder: (ctx, _) {
+              final wsService = WorkspaceService();
+              return FintechGroupedCard(
+                title: 'Data Workspace Isolation',
+                icon: Icons.workspaces_rounded,
+                children: [
+                  DropdownButtonFormField<String>(
+                    initialValue: wsService.activeId,
+                    decoration: const InputDecoration(
+                      labelText: 'Current Database Workspace',
+                      prefixIcon: Icon(Icons.corporate_fare_rounded),
+                    ),
+                    items: wsService.workspaces
+                        .map((w) => DropdownMenuItem(value: w.id, child: Text(w.name)))
+                        .toList(),
+                    onChanged: (val) async {
+                      if (val != null) {
+                        await wsService.switchWorkspace(val);
+                        await _loadCounts();
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: () async {
+                      final ctrl = TextEditingController();
+                      final ok = await showDialog<bool>(
+                        context: context,
+                        builder: (dCtx) => AlertDialog(
+                          title: const Text('New Database Workspace'),
+                          content: TextField(
+                            controller: ctrl,
+                            decoration: const InputDecoration(
+                              labelText: 'Workspace / Branch Name',
+                              hintText: 'e.g. Branch Alexandria',
+                            ),
+                          ),
+                          actions: [
+                            TextButton(onPressed: () => Navigator.pop(dCtx, false), child: const Text('Cancel')),
+                            FilledButton(onPressed: () => Navigator.pop(dCtx, true), child: const Text('Create')),
+                          ],
+                        ),
+                      );
+                      if (ok == true && ctrl.text.trim().isNotEmpty) {
+                        await wsService.createWorkspace(ctrl.text.trim());
+                      }
+                    },
+                    icon: const Icon(Icons.add_rounded),
+                    label: const Text('Create New Workspace Branch'),
+                  ),
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: 18),
           const SectionLabel('ORGANIZATION & BRANDING'),
           FintechGroupedCard(
             title: 'Organization Identity',
