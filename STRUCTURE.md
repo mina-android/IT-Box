@@ -46,6 +46,11 @@ flowchart TD
         F5 --> I11[LabelExportScreen]
         F5 --> I12[DataHubScreen]
         F5 --> I13[ActivityFeedScreen: Audit Trail]
+        F5 --> I14[VendorContactsScreen: Vendor Directory]
+        F5 --> I15[UnitConverterScreen: IT Unit Converter]
+        F5 --> I16[GlobalSearchScreen: Cross-Table Search]
+        F5 --> I17[NetworkDiagnosticsScreen: DNS, Ping, Port Probe]
+        F5 --> I18[MaintenanceCalendarScreen: Service Calendar]
     end
 
     subgraph Service_Layer ["Core Services (Singletons & Isolates)"]
@@ -60,6 +65,14 @@ flowchart TD
         S9[CustodyPdfService: pdf + signature + native mail launcher]
         S10[WifiPdfService: pdf + qr - Standard 3/page & Portable 7x4cm]
         S11[ExecutiveHealthPdfService: pdf infographic]
+        S12[AutoBackupService: rolling 7-snapshot background engine]
+        S13[BackupCryptoService: AES-256-GCM + SHA-256]
+        S14[GlobalSearchService: cross-table async search]
+        S15[NetworkDiagnosticsService: DNS, TCP port prober, HTTP speed]
+        S16[TopologyPdfService: multi-page vector network diagram]
+        S17[ConfigParserService: Cisco IOS parser]
+        S18[WorkspaceService: multi-tenant SQLite database switcher]
+        S19[AuditExportService: CSV & PDF audit trail exporter]
     end
 
     subgraph Persistence_Layer ["Data & Storage Layer"]
@@ -89,7 +102,7 @@ flowchart TD
 
 ## 2. Database Schema & Entity Relationship Diagram (ERD)
 
-The database engine is SQLite managed via **Drift** (`AppDatabase.instance`) over Dart FFI in a dedicated background isolate, with `DatabaseHelper` acting as a singleton facade using compile-time typed query builders and reactive streams (`.watch()`). Foreign keys are enforced via `PRAGMA foreign_keys = ON`. Current schema version is **14**.
+The database engine is SQLite managed via **Drift** (`AppDatabase.instance`) over Dart FFI in a dedicated background isolate, with `DatabaseHelper` acting as a singleton facade using compile-time typed query builders and reactive streams (`.watch()`). Foreign keys are enforced via `PRAGMA foreign_keys = ON`. Current schema version is **15** (21 tables).
 
 ```mermaid
 erDiagram
@@ -268,6 +281,19 @@ erDiagram
         string type "NOT NULL"
         string timestamp "NOT NULL (ISO-8601)"
     }
+
+    VENDOR_CONTACTS {
+        int id PK "AUTOINCREMENT"
+        string company_name "NOT NULL"
+        string service_type "NOT NULL"
+        string contact_person "DEFAULT ''"
+        string phone "DEFAULT ''"
+        string email "DEFAULT ''"
+        string website "DEFAULT ''"
+        string account_number "DEFAULT ''"
+        string notes "DEFAULT ''"
+        string sla_tier "DEFAULT 'Standard'"
+    }
 ```
 
 ---
@@ -390,23 +416,33 @@ HomeScreen (Floating Capsule Navigation Bar — 5 tabs)
 └── [4] MoreScreen (Hub)
     ├── Management & Directory:
     │   ├── Employee Directory -> EmployeesScreen, EmployeeFormScreen, Employee360Screen (Onboarding & Offboarding Checklist & Audit Trail)
+    │   ├── Vendor Runbook -> VendorContactsScreen & VendorContactFormScreen (ISP, Hardware, SaaS support hotlines, SLAs, account contracts, direct dial/email)
+    │   ├── Maintenance Calendar -> MaintenanceCalendarScreen (Monthly interactive service grid, planned vs completed logs, repair history)
     │   ├── Accounts & Passwords -> AccountsPasswordsScreen & AccountPasswordFormScreen (Platform credential vault with JetBrains Mono credentials and reveal toggles)
     │   ├── Recurring Bills -> BillsScreen & BillFormScreen (FintechDropdown category selector)
     │   ├── Subscriptions & SaaS -> SubscriptionsScreen & SubscriptionFormScreen (FintechDropdown billing interval)
     │   └── Expenses Ledger -> ExpensesScreen & ExpenseFormScreen (with live SearchBar2 filter & FintechDropdown year selector)
     ├── Network & Sysadmin Suite:
     │   ├── Network Scanner -> NetworkScannerScreen (Advanced IP Scanner architecture: Dual-pass sweep, Win32 SendARP FFI, Linux/Android ARP & TCP RST discovery, NetBIOS, mDNS, SSDP, 100+ OUI vendors, 1-tap itBox Inventory import; ValueNotifier progress bar decoupling & 140ms flush batching)
+    │   ├── Network Diagnostics -> NetworkDiagnosticsScreen (DNS record resolver, TCP port prober with banner grabbing, and HTTP link speed estimator)
+    │   ├── Unit Converter -> UnitConverterScreen (Bidirectional conversion for Network Speeds, Storage Units, and RF Power)
+    │   ├── Network Topology PDF -> TopologyPdfService (Automated multi-page landscape vector topology schematics export)
+    │   ├── Cisco Config Parser -> ConfigParserService (Parse Cisco IOS running-config into interfaces, IPs, subnets, and VLANs)
     │   ├── Wi-Fi Networks -> WifiNetworksScreen & WifiNetworkFormScreen (Aggregated Routers, MiFis, & standalone wireless credentials registry with SearchBar2; AutomaticKeepAliveClientMixin smooth scrolling)
     │   ├── Switch & Patch Matrix -> SwitchPatchMatrixScreen & SwitchPatchChassisFormScreen (Custom chassis 8-48 ports with edge-to-edge bay expansion, port mapping to DB)
     │   ├── CIDR Calculator -> CidrCalculatorScreen: Subnet Calculator
     │   ├── Static IP Registry -> StaticIpListScreen & StaticIpFormScreen (SearchBar2, subnet filter)
     │   └── Scan Barcode / QR -> BarcodeScannerScreen
     ├── Tools & Data:
+    │   ├── Global Search -> GlobalSearchScreen (Cross-table search across all 21 tables simultaneously)
     │   ├── Export Device Labels & QR Code Stickers -> LabelExportScreen (4-Col Labels with single-line Switches/Patch Panels, Printable A4 QR Stickers, and Wi-Fi Cards tab supporting Standard 3/page & Portable 7x4cm 20/page formats)
-    │   ├── Data Hub -> DataHubScreen (Excel templates, JSON backups, Excel exports, bulk laptop custody with SharePlus, infographic)
-    │   └── Audit Trail -> ActivityFeedScreen (System activity history, employee onboarding/offboarding log, and one-tap clear audit trail with confirmation)
+    │   ├── Data Hub -> DataHubScreen (Excel templates, JSON backups, Excel exports, bulk laptop custody with SharePlus, infographic, AES-256-GCM encrypted snapshots)
+    │   └── Audit Trail -> ActivityFeedScreen (System activity history, employee onboarding/offboarding log, one-tap clear audit trail, CSV & PDF export)
     └── System Settings -> SettingsScreen (top AppBar gear)
+        ├── Multi-Workspace Isolation -> WorkspaceService (Switch between isolated client/branch database instances)
         ├── Company profile renamer & logo management
+        ├── Appearance: 29 Seed colors, 10 Google fonts, Dynamic Color toggle, AMOLED mode with high contrast
+        └── About IT Box
         ├── Appearance: 29 Seed colors, 10 Google fonts, Dynamic Color toggle, AMOLED mode with high contrast
         └── About IT Box
 ```

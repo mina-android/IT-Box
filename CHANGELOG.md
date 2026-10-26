@@ -7,7 +7,40 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) co
 
 ---
 
-## [1.1.0] - 2026-10-20
+## [1.1.0] - 2026-10-26
+
+### Added & Hardened (Correctness Fixes C1-C11, Card Surface Standard & Feature Waves W1-W5)
+- **Correctness & Robustness Hardening (C1–C11)**:
+  - **C1: Maintenance Date Parsing Fallback**: Added robust `DateTime.tryParse()` fallback handling with current timestamp default in `device_maintenance_logs` to prevent crash loops when loading legacy or malformed timestamps.
+  - **C2: Case-Insensitive Trimmed Excel Import**: Implemented header trimming, normalization, and case-insensitive column matching across all table importers in `ExcelImportService` to eliminate failed batch rows from third-party spreadsheet variations.
+  - **C3: Dynamic RAM & Storage Form Inputs**: Replaced rigid dropdown selectors in `LaptopFormScreen` with free-form text inputs with auto-suggest chips, supporting custom hardware combinations (e.g. 20GB RAM, NVMe + SATA dual drives).
+  - **C4: Employee Phone Number Formatting & Uniqueness**: Added phone number normalization, duplicate phone detection warnings, and clean formatting in `EmployeeFormScreen`.
+  - **C5: Soft Delete Cascading & Recovery Integrity**: Added transaction-wrapped atomic soft-delete restores and cascading checks for dependent borrow logs and maintenance records.
+  - **C6: CIDR Subnet Validator & IP Conflict Prevention**: Added strict `/0` through `/32` prefix validation, network/broadcast range calculation, and duplicate static IP address detection in `StaticIpFormScreen`.
+  - **C7: Audit Trail Range Filter & Search Debouncing**: Added date range bounds filtering and a 250ms debouncer on activity search queries in `ActivityFeedScreen` to prevent redundant database hits.
+  - **C8: Barcode Scanner Error Toast & Graceful Recovery**: Hardened `BarcodeScannerScreen` with error toasts and camera exception recovery when scanning damaged or unparseable QR/barcodes.
+  - **C9: Financial Ledger Boundary Clamping**: Clamped year/month selectors in `ExpensesScreen` to prevent invalid future date selections and handle empty month buckets cleanly.
+  - **C10: Clipboard Auto-Clear for Platform Credentials**: Added 60-second automatic clipboard purge notification and toast feedback when copying passwords from `AccountsPasswordsScreen`.
+  - **C11: Wi-Fi Password Reveal Timeout**: Added a 30-second auto-obscure timer to revealed Wi-Fi passphrases across the Wi-Fi Networks Registry.
+- **UI Architecture & Theme Standardization (P3)**:
+  - **Unified Card Surfaces (`AppColors.cardSurface(context)`)**: Introduced centralized theme card surface resolver providing seamless support for Light, Dark, and Pure AMOLED (`#121212`) palettes without hardcoded color hacks.
+  - **Standardized Multi-Select Bar (`SelectionBottomBar`)**: Rolled out unified bottom multi-selection action bar across all 10 inventory and ledger list screens (`LaptopsScreen`, `NetworkDevicesScreen`, `MiFisScreen`, `AccessPointsScreen`, `PrintersScreen`, `ElectronicsScreen`, `OtherDevicesScreen`, `EmployeesScreen`, `ExpensesScreen`, `BillsScreen`, `SubscriptionsScreen`), supporting select-all, deselect, leading/trailing contextual actions, and batch deletions.
+- **Wave W1: Vendor Runbook, Unit Converter & Audit Export**:
+  - **Vendor & Support Runbook**: Added `vendor_contacts` Drift table (schema v15), `VendorContact` model, `VendorContactsScreen`, and `VendorContactFormScreen` with one-tap phone dialing, email drafting, SLA tier badges, and contract notes.
+  - **IT Unit Converter**: Added `UnitConverterScreen` supporting bidirectional real-time calculations across Network Speeds (bps, Kbps, Mbps, Gbps), Storage Units (B, KB, MB, GB, TB, KiB, MiB, GiB, TiB), and RF Signal Power (dBm <-> mW <-> W).
+  - **Audit Trail CSV & PDF Export**: Added `AuditExportService` enabling one-tap export of historical operational logs into formatted CSV sheets or executive PDF summaries.
+- **Wave W2: Global Cross-Table Search & Background Auto-Backup**:
+  - **Global Search Engine**: Added `GlobalSearchService` and `GlobalSearchScreen` executing simultaneous asynchronous queries across all 21 Drift tables (hardware, staff, IPs, credentials, vendors, logs) with category badge filtering and instant navigation.
+  - **Automated Background Backup Engine**: Added `AutoBackupService` running 24-hour cadence checks on app startup/resume, creating timestamped JSON snapshots with rolling 7-snapshot retention and automated pruning.
+  - **Military-Grade Backup Encryption**: Added `BackupCryptoService` implementing authenticated AES-256-GCM encryption with SHA-256 payload integrity validation for encrypted local backup archives (`.itbox.enc`).
+- **Wave W3: Network Diagnostics Suite & Topology Vector Map**:
+  - **Network Diagnostics Suite**: Added `NetworkDiagnosticsService` and `NetworkDiagnosticsScreen` with multi-mode DNS lookup (A, AAAA, MX, TXT), TCP port probe with socket banner grabbing, and HTTP link throughput speed estimator.
+  - **Network Topology PDF Map**: Added `TopologyPdfService` generating multi-page vector landscape schematics documenting network routers, switches, access points, and IPAM allocation maps.
+- **Wave W4: Cisco Config Parser & Preventive Maintenance Calendar**:
+  - **Cisco IOS Config Parser**: Added `ConfigParserService` parsing running-config files to extract physical/virtual interfaces, IP addresses, subnet masks, VLANs, and switchport access/trunk modes into structured models.
+  - **Maintenance Calendar**: Added `MaintenanceCalendarScreen` featuring an interactive month calendar grid, event dots, planned vs completed service badges, technician notes, and direct links to per-device service logs.
+- **Wave W5: Multi-Workspace Tenant Isolation**:
+  - **Multi-Tenant Database Switcher**: Added `WorkspaceService` managing isolated SQLite databases (`itbox_workspace_<id>.db`) per branch/site with dynamic isolate switching (`AppDatabase.switchDatabaseInstance`) and workspace manager UI in System Settings.
 
 ### Added & Changed (Documentation Overhaul, Performance, UI Fixes, Wi-Fi Cards Redesign & Dropdown Overhaul)
 - **License Update to GNU General Public License v3.0 (GPL-3.0)**:

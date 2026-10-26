@@ -20,16 +20,23 @@ It works completely offline, with no sign-ups or ads, and your data never leaves
 ## ✨ What you can do
 
 - **💻 Hardware & Peripheral Inventory**: Track Laptops, Routers, MiFis, Access Points, Printers, Electronics, and miscellaneous gear with specs, serial numbers, port maps, and assigned employees.
-- **🌐 Precision Advanced IP Scanner**: Dual-engine subnet discovery (Windows Win32 `SendARP` via FFI + Android/Linux ICMP/ARP sweeps) with multi-protocol identity resolution (NetBIOS, mDNS, SSDP, LLMNR, HTTP headers), 100+ IEEE OUI vendor database, Wake-on-LAN, and 1-tap addition to inventory or static IPs.
+- **🌐 Precision Advanced IP Scanner & Diagnostics Suite**: Dual-engine subnet discovery (Windows Win32 `SendARP` via FFI + Android/Linux ICMP/ARP sweeps) with multi-protocol identity resolution (NetBIOS, mDNS, SSDP, LLMNR, HTTP headers), 100+ IEEE OUI vendor database, Wake-on-LAN, DNS resolver, TCP port banner prober, and HTTP link speed benchmark.
+- **🗺️ Network Topology Vector Map (PDF)**: Multi-page vector topology diagram generator auto-mapping routers, switches, access points, and IPAM allocation into high-resolution printable schematics.
+- **📜 Cisco Running-Config Parser**: Ingest and parse Cisco IOS configuration files (`.txt`/`.cfg`) directly into structured interfaces, IPs, subnets, VLAN allocations, and switchport modes.
 - **🔄 Equipment Borrows & Overdue Alarms**: Hand equipment out to team members with automatic background overdue reminder alarms, active borrow tracking, and direct email app handoff.
 - **📝 Digital Equipment Custody Slips (PDF)**: Generate official custody receipts with company branding, hardware specs, condition notes, and an on-screen digital signature pad for individual or bulk laptop handovers.
 - **🏷️ Printable Asset Labels & QR Code Stickers**: Generate clean asset QR code stickers, 4-column equipment labels (with single-line switch/patch units), and print-ready Wi-Fi access cards.
 - **📇 Dual-Format Wi-Fi Access Cards**: Export print-ready Wi-Fi access cards in two optimized layouts: **Standard Cards** (compacted borders fitting 3 cards per A4 sheet) and **Portable Cards** (dense 7cm × 4cm pocket cards fitting 20 cards per Landscape A4 sheet).
 - **🎛️ Dynamic Switch & Patch Panel Matrix**: Interactive 8, 12, 16, 24, and 48-port switch and patch panel layouts with real-time port telemetry, connected host tags, and interactive port patch mapping.
 - **👥 Employee 360° Dossier & Exit Checklist**: Comprehensive employee profile view showing assigned laptops, active equipment borrows, corporate emails, and trouble tickets, complete with guided onboarding/offboarding checklists.
-- **🛠️ Per-Device Maintenance & Repair History**: Document hardware repairs, upgrades, and component replacements with technician notes, lifetime cost tracking, and direct expense ledger integration.
+- **📅 Preventive Maintenance Calendar**: Visual monthly schedule for scheduled servicing, inspections, and repair histories with lifetime cost tracking and direct expense ledger integration.
+- **🏢 Multi-Workspace Tenant Isolation**: Switch between completely isolated SQLite database instances for managing multiple client sites, subsidiaries, or branches without data leakage.
+- **🔎 Instant Global Search**: Cross-cutting search engine querying across all 21 Drift tables simultaneously with categorized real-time results.
+- **📇 Vendor & Support Runbook**: Dedicated directory for ISP, hardware, and software vendors with support hotlines, SLAs, account contracts, and one-tap dialing/emailing.
+- **⚡ IT Unit Converter**: Real-time bidirectional converter for Network Speeds (bps to Gbps), Storage Units (Bytes to TiB), and RF Signal Power (dBm, mW, W).
 - **📶 Centralized Wi-Fi Networks Registry**: Aggregate Wi-Fi credentials across Routers, MiFis, and standalone networks (SSID, password, phone number, location, admin credentials) with quick search and reveal toggles.
 - **🔐 Accounts & Passwords Vault**: Secure offline platform credentials repository (platform, email/username, password) with reveal toggles and 1-tap clipboard copying.
+- **🔒 AES-256-GCM Background Auto-Backup**: Automatic 24-hour snapshot engine with rolling 7-snapshot retention and military-grade AES-256-GCM encryption with SHA-256 verification.
 - **📊 Executive Infographics & Financial Ledgers**: Export one-page department health vector infographics, track expenses/bills with receipt image attachments, and perform two-way multi-table Excel (`.xlsx`) import and export.
 
 ---
@@ -116,10 +123,10 @@ Not right now. IT Box is engineered specifically for Android with native Materia
 
 - **Flutter & Dart**: Flutter SDK `>=3.19.0` / Dart SDK `>=3.3.0 <4.0.0` targeting Android (minSdk 21, compileSdk 36).
 - **Toolchain**: Gradle 9.3.1, AGP 9.1.0, Kotlin 2.4.0 with Core Desugaring 2.1.5.
-- **Drift & SQLite**: Compile-time type-safe persistence executing in a dedicated background isolate via Drift & SQLite over Dart FFI (`itbox.db`, schema `v14`) with typed query builders, reactive streams (`.watch()`), and self-healing borrow synchronization.
+- **Drift & SQLite**: Compile-time type-safe persistence executing in a dedicated background isolate via Drift & SQLite over Dart FFI (`itbox.db`, schema `v15` with 21 lockstep tables) with typed query builders, reactive streams (`.watch()`), multi-tenant database switcher, and self-healing borrow synchronization.
 - **State Architecture**: Zero-overhead `setState` + `async/await` design with native `StreamSubscription` for reactive Drift tables without third-party framework lock-in.
 - **System Architecture**: Complete database ERD diagrams, lifecycle sequence charts, and data flow pipelines are documented in [`STRUCTURE.md`](STRUCTURE.md).
-- **Key Packages**: `drift`, `sqlite3_flutter_libs`, `ffi`, `fl_chart`, `pdf`, `printing`, `excel`, `file_picker`, `share_plus`, `flutter_local_notifications`, `dynamic_color`, `google_fonts`, `shimmer`, `mobile_scanner`, `signature`.
+- **Key Packages**: `drift`, `sqlite3_flutter_libs`, `ffi`, `fl_chart`, `pdf`, `printing`, `excel`, `file_picker`, `share_plus`, `flutter_local_notifications`, `dynamic_color`, `google_fonts`, `shimmer`, `mobile_scanner`, `signature`, `cryptography`, `crypto`.
 
 </details>
 
