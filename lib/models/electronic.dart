@@ -5,6 +5,7 @@ class Electronic {
   final String details;
   final String status;
   final bool excludeFromBorrowing;
+  final String notes;
 
   const Electronic({
     this.id,
@@ -13,6 +14,7 @@ class Electronic {
     this.details = '',
     this.status = 'Available',
     this.excludeFromBorrowing = false,
+    this.notes = '',
   });
 
   Map<String, dynamic> toMap() => {
@@ -22,6 +24,7 @@ class Electronic {
     'details': details,
     'status': status,
     'exclude_borrowing': excludeFromBorrowing ? 1 : 0,
+    'notes': notes,
   };
 
   factory Electronic.fromMap(Map<String, dynamic> m) => Electronic(
@@ -31,9 +34,18 @@ class Electronic {
     details: (m['details'] ?? '') as String,
     status: (m['status'] ?? 'Available') as String,
     excludeFromBorrowing: (m['exclude_borrowing'] ?? 0) == 1,
+    notes: (m['notes'] ?? '') as String,
   );
 
-  Electronic copyWith({int? id, String? deviceNumber, String? deviceName, String? details, String? status, bool? excludeFromBorrowing}) =>
+  Electronic copyWith({
+    int? id,
+    String? deviceNumber,
+    String? deviceName,
+    String? details,
+    String? status,
+    bool? excludeFromBorrowing,
+    String? notes,
+  }) =>
     Electronic(
       id: id ?? this.id,
       deviceNumber: deviceNumber ?? this.deviceNumber,
@@ -41,5 +53,6 @@ class Electronic {
       details: details ?? this.details,
       status: status ?? this.status,
       excludeFromBorrowing: excludeFromBorrowing ?? this.excludeFromBorrowing,
+      notes: notes ?? this.notes,
     );
 }

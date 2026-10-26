@@ -51,11 +51,6 @@ public final class GeneratedPluginRegistrant {
       Log.e(TAG, "Error registering plugin network_info_plus, dev.fluttercommunity.plus.network_info.NetworkInfoPlusPlugin", e);
     }
     try {
-      flutterEngine.getPlugins().add(new net.nfet.flutter.printing.PrintingPlugin());
-    } catch (Exception e) {
-      Log.e(TAG, "Error registering plugin printing, net.nfet.flutter.printing.PrintingPlugin", e);
-    }
-    try {
       flutterEngine.getPlugins().add(new io.flutter.plugins.quickactions.QuickActionsPlugin());
     } catch (Exception e) {
       Log.e(TAG, "Error registering plugin quick_actions_android, io.flutter.plugins.quickactions.QuickActionsPlugin", e);
@@ -79,6 +74,11 @@ public final class GeneratedPluginRegistrant {
       flutterEngine.getPlugins().add(new io.flutter.plugins.urllauncher.UrlLauncherPlugin());
     } catch (Exception e) {
       Log.e(TAG, "Error registering plugin url_launcher_android, io.flutter.plugins.urllauncher.UrlLauncherPlugin", e);
+    }
+    try {
+      flutterEngine.getPlugins().add(new dev.fluttercommunity.workmanager.WorkmanagerPlugin());
+    } catch (Exception e) {
+      Log.e(TAG, "Error registering plugin workmanager, dev.fluttercommunity.workmanager.WorkmanagerPlugin", e);
     }
   }
 }

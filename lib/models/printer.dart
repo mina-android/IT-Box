@@ -4,6 +4,7 @@ class Printer {
   final String model;
   final String condition;
   final String location;
+  final String notes;
 
   const Printer({
     this.id,
@@ -11,6 +12,7 @@ class Printer {
     required this.model,
     this.condition = 'Good',
     this.location = '',
+    this.notes = '',
   });
 
   Map<String, dynamic> toMap() => {
@@ -19,6 +21,7 @@ class Printer {
     'model': model,
     'condition': condition,
     'location': location,
+    'notes': notes,
   };
 
   factory Printer.fromMap(Map<String, dynamic> m) => Printer(
@@ -27,14 +30,23 @@ class Printer {
     model: (m['model'] ?? '') as String,
     condition: (m['condition'] ?? 'Good') as String,
     location: (m['location'] ?? '') as String,
+    notes: (m['notes'] ?? '') as String,
   );
 
-  Printer copyWith({int? id, String? printerNumber, String? model, String? condition, String? location}) =>
+  Printer copyWith({
+    int? id,
+    String? printerNumber,
+    String? model,
+    String? condition,
+    String? location,
+    String? notes,
+  }) =>
     Printer(
       id: id ?? this.id,
       printerNumber: printerNumber ?? this.printerNumber,
       model: model ?? this.model,
       condition: condition ?? this.condition,
       location: location ?? this.location,
+      notes: notes ?? this.notes,
     );
 }

@@ -12,6 +12,7 @@ class MiFi {
   final String status; // 'Available' | 'Borrowed'
   final bool excludeFromBorrowing;
   final String tag;
+  final String notes;
 
   const MiFi({
     this.id,
@@ -27,6 +28,7 @@ class MiFi {
     this.status = 'Available',
     this.excludeFromBorrowing = false,
     this.tag = '',
+    this.notes = '',
   });
 
   Map<String, dynamic> toMap() => {
@@ -43,6 +45,7 @@ class MiFi {
     'status': status,
     'exclude_borrowing': excludeFromBorrowing ? 1 : 0,
     'tag': tag,
+    'notes': notes,
   };
 
   factory MiFi.fromMap(Map<String, dynamic> m) => MiFi(
@@ -59,13 +62,14 @@ class MiFi {
     status: (m['status'] ?? 'Available') as String,
     excludeFromBorrowing: (m['exclude_borrowing'] ?? 0) == 1,
     tag: (m['tag'] ?? '') as String,
+    notes: (m['notes'] ?? '') as String,
   );
 
   MiFi copyWith({
     int? id, String? deviceNumber, String? model, String? phoneNumber,
     String? wifiName, String? wifiPassword, String? quota,
     String? serviceProvider, String? gateway, String? adminPassword, String? status,
-    bool? excludeFromBorrowing, String? tag,
+    bool? excludeFromBorrowing, String? tag, String? notes,
   }) => MiFi(
     id: id ?? this.id,
     deviceNumber: deviceNumber ?? this.deviceNumber,
@@ -80,5 +84,6 @@ class MiFi {
     status: status ?? this.status,
     excludeFromBorrowing: excludeFromBorrowing ?? this.excludeFromBorrowing,
     tag: tag ?? this.tag,
+    notes: notes ?? this.notes,
   );
 }

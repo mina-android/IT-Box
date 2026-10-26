@@ -19,6 +19,7 @@ import 'package:itbox/models/access_point.dart';
 import 'package:itbox/models/wifi_network.dart';
 import 'package:itbox/models/account_password.dart';
 import 'package:itbox/models/other_device.dart';
+import 'package:itbox/models/vendor_contact.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -456,25 +457,24 @@ void main() {
       await helper.deleteMaintenanceLog(mId);
       expect(await helper.getMaintenanceLogsForDevice('laptop', 1), isEmpty);
 
-      // Consumables & Stock
-      final cId = await helper.insertConsumable({
-        'item_name': 'RJ45 Connectors',
-        'category': 'Networking',
-        'quantity': 100,
-        'minimum_threshold': 20,
-        'location': 'Cabinet B',
-        'unit_price': 1.5,
-      });
-      expect((await helper.getConsumables()).length, 1);
-
-      // Adjust quantity
-      final newQty = await helper.adjustConsumableQuantity(cId, -15, 'Patch cables creation', null);
-      expect(newQty, 85);
-      final cLogs = await helper.getConsumableLogs(cId);
-      expect(cLogs.length, 1);
-      expect(cLogs.first['change_amount'], -15);
-      await helper.deleteConsumable(cId);
-      expect(await helper.getConsumables(), isEmpty);
+      // Vendor Contacts CRUD (Schema v15)
+      final vcId = await helper.insertVendorContact(VendorContact(
+        name: 'Khaled Mohamed',
+        company: 'Al-Nasr Tech',
+        contactType: 'Hardware',
+        phoneNumber: '01012345678',
+      ));
+      expect(vcId, isPositive);
+      expect((await helper.getVendorContacts()).length, 1);
+      await helper.updateVendorContact(VendorContact(
+        id: vcId,
+        name: 'Khaled Mohamed',
+        company: 'Al-Nasr Solutions',
+        contactType: 'Hardware',
+      ));
+      expect((await helper.getVendorContacts()).first.company, 'Al-Nasr Solutions');
+      await helper.deleteVendorContact(vcId);
+      expect(await helper.getVendorContacts(), isEmpty);
 
       // Audit Activities
       final aId = await helper.logAuditActivity('CHECKOUT', 'MiFi', entityId: 5, description: 'Checked out to Sara');
@@ -486,21 +486,6 @@ void main() {
       expect(clearedCount, 1);
       final emptyAudits = await helper.getAuditActivities(limit: 10);
       expect(emptyAudits.isEmpty, isTrue);
-
-      // Soft Deletes
-      final sdId = await helper.insertSoftDelete({
-        'original_table': 'laptops',
-        'original_id': 99,
-        'display_name': 'ThinkPad T480',
-        'serialized_data': '{"id": 99, "laptop_number": "L-99"}',
-        'deleted_at': DateTime.now().toIso8601String(),
-      });
-      expect(sdId, isPositive);
-      final sds = await helper.getSoftDeletes();
-      expect(sds.length, 1);
-      expect(sds.first['original_table'], 'laptops');
-      await helper.deleteSoftDelete(sdId);
-      expect(await helper.getSoftDeletes(), isEmpty);
 
       // Port Deletions (Phase 5 typed deletion)
       final port1Id = await helper.insertSwitchPatchPort({

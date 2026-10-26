@@ -1,0 +1,76 @@
+// lib/widgets/selection_bottom_bar.dart
+import 'package:flutter/material.dart';
+
+/// Reusable multi-select bottom action bar used across list screens.
+class SelectionBottomBar extends StatelessWidget {
+  final int selectedCount;
+  final VoidCallback onDelete;
+  final VoidCallback onClose;
+  final String? actionLabel;
+
+  const SelectionBottomBar({
+    super.key,
+    required this.selectedCount,
+    required this.onDelete,
+    required this.onClose,
+    this.actionLabel,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF131318) : theme.colorScheme.surface,
+        border: Border(
+          top: BorderSide(
+            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.2),
+            width: 1,
+          ),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.08),
+            blurRadius: 8,
+            offset: const Offset(0, -2),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: SafeArea(
+        top: false,
+        child: Row(
+          children: [
+            IconButton(
+              icon: const Icon(Icons.close_rounded),
+              onPressed: onClose,
+              tooltip: 'Clear selection',
+            ),
+            const SizedBox(width: 8),
+            Text(
+              '$selectedCount selected',
+              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+            ),
+            const Spacer(),
+            FilledButton.icon(
+              onPressed: selectedCount > 0 ? onDelete : null,
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.red.shade700,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              icon: const Icon(Icons.delete_outline_rounded, size: 18),
+              label: Text(
+                actionLabel ?? 'Delete ($selectedCount)',
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

@@ -13,6 +13,7 @@ class Laptops extends Table {
   TextColumn get condition => text().named('condition').withDefault(const Constant('Good'))();
   TextColumn get user => text().named('user').withDefault(const Constant(''))();
   TextColumn get password => text().named('password').withDefault(const Constant(''))();
+  TextColumn get notes => text().named('notes').withDefault(const Constant(''))();
   TextColumn get createdAt => text().named('created_at').nullable()();
 }
 
@@ -29,6 +30,7 @@ class NetworkDevices extends Table {
   TextColumn get gateway => text().named('gateway').withDefault(const Constant(''))();
   TextColumn get adminPassword => text().named('admin_password').withDefault(const Constant(''))();
   TextColumn get status => text().named('status').withDefault(const Constant('Available'))();
+  TextColumn get notes => text().named('notes').withDefault(const Constant(''))();
 }
 
 @DataClassName('PrinterEntry')
@@ -38,6 +40,7 @@ class Printers extends Table {
   TextColumn get model => text().named('model')();
   TextColumn get condition => text().named('condition').withDefault(const Constant('Good'))();
   TextColumn get location => text().named('location').withDefault(const Constant(''))();
+  TextColumn get notes => text().named('notes').withDefault(const Constant(''))();
 }
 
 @DataClassName('ElectronicEntry')
@@ -48,6 +51,7 @@ class Electronics extends Table {
   TextColumn get details => text().named('details').withDefault(const Constant(''))();
   TextColumn get status => text().named('status').withDefault(const Constant('Available'))();
   IntColumn get excludeBorrowing => integer().named('exclude_borrowing').withDefault(const Constant(0))();
+  TextColumn get notes => text().named('notes').withDefault(const Constant(''))();
 }
 
 @DataClassName('EmployeeEntry')
@@ -89,6 +93,7 @@ class Mifis extends Table {
   TextColumn get status => text().named('status').withDefault(const Constant('Available'))();
   IntColumn get excludeBorrowing => integer().named('exclude_borrowing').withDefault(const Constant(0))();
   TextColumn get tag => text().named('tag').withDefault(const Constant(''))();
+  TextColumn get notes => text().named('notes').withDefault(const Constant(''))();
 }
 
 @DataClassName('ExpenseEntry')
@@ -148,6 +153,7 @@ class AccessPoints extends Table {
   TextColumn get model => text().named('model')();
   TextColumn get portNumber => text().named('port_number').withDefault(const Constant(''))();
   TextColumn get location => text().named('location').withDefault(const Constant(''))();
+  TextColumn get notes => text().named('notes').withDefault(const Constant(''))();
 }
 
 @DataClassName('MaintenanceEntry')
@@ -160,27 +166,8 @@ class DeviceMaintenanceLogs extends Table {
   RealColumn get cost => real().named('cost').withDefault(const Constant(0.0))();
   TextColumn get details => text().named('details').withDefault(const Constant(''))();
   TextColumn get performedBy => text().named('performed_by').withDefault(const Constant(''))();
-}
-
-@DataClassName('ConsumableEntry')
-class Consumables extends Table {
-  IntColumn get id => integer().autoIncrement()();
-  TextColumn get itemName => text().named('item_name')();
-  TextColumn get category => text().named('category').withDefault(const Constant('General'))();
-  IntColumn get quantity => integer().named('quantity').withDefault(const Constant(0))();
-  IntColumn get minimumThreshold => integer().named('minimum_threshold').withDefault(const Constant(5))();
-  TextColumn get location => text().named('location').withDefault(const Constant(''))();
-  RealColumn get unitPrice => real().named('unit_price').withDefault(const Constant(0.0))();
-}
-
-@DataClassName('ConsumableLogEntry')
-class ConsumableLogs extends Table {
-  IntColumn get id => integer().autoIncrement()();
-  IntColumn get consumableId => integer().named('consumable_id')();
-  IntColumn get employeeId => integer().named('employee_id').nullable()();
-  IntColumn get changeAmount => integer().named('change_amount')();
-  TextColumn get reason => text().named('reason').withDefault(const Constant(''))();
-  TextColumn get date => text().named('date')();
+  IntColumn get isPlanned => integer().named('is_planned').withDefault(const Constant(0))();
+  TextColumn get plannedDate => text().named('planned_date').withDefault(const Constant(''))();
 }
 
 @DataClassName('StaticIpEntry')
@@ -215,16 +202,6 @@ class AuditActivities extends Table {
   TextColumn get timestamp => text().named('timestamp')(); // ISO-8601
 }
 
-@DataClassName('SoftDeleteEntry')
-class SoftDeletes extends Table {
-  IntColumn get id => integer().autoIncrement()();
-  TextColumn get originalTable => text().named('original_table')();
-  IntColumn get originalId => integer().named('original_id')();
-  TextColumn get displayName => text().named('display_name')();
-  TextColumn get serializedData => text().named('serialized_data')(); // JSON
-  TextColumn get deletedAt => text().named('deleted_at')(); // ISO-8601
-}
-
 @DataClassName('WifiNetworkEntry')
 class WifiNetworks extends Table {
   IntColumn get id => integer().autoIncrement()();
@@ -257,3 +234,17 @@ class OtherDevices extends Table {
   TextColumn get createdAt => text().named('created_at').nullable()();
 }
 
+@DataClassName('VendorContactEntry')
+class VendorContacts extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get contactType => text().named('contact_type')(); // 'ISP', 'Vendor', 'Domain/Registrar', 'Cloud/SaaS', 'Internal'
+  TextColumn get name => text().named('name')();
+  TextColumn get company => text().named('company').withDefault(const Constant(''))();
+  TextColumn get role => text().named('role').withDefault(const Constant(''))();
+  TextColumn get phoneNumber => text().named('phone_number').withDefault(const Constant(''))();
+  TextColumn get email => text().named('email').withDefault(const Constant(''))();
+  TextColumn get portalUrl => text().named('portal_url').withDefault(const Constant(''))();
+  TextColumn get accountNumber => text().named('account_number').withDefault(const Constant(''))();
+  TextColumn get notes => text().named('notes').withDefault(const Constant(''))();
+  TextColumn get createdAt => text().named('created_at').nullable()();
+}

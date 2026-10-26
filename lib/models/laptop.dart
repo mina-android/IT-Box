@@ -9,6 +9,7 @@ class Laptop {
   final String condition;
   final String user;
   final String password;
+  final String notes;
   final DateTime? createdAt;
 
   const Laptop({
@@ -22,6 +23,7 @@ class Laptop {
     this.condition = 'Good',
     this.user = '',
     this.password = '',
+    this.notes = '',
     this.createdAt,
   });
 
@@ -36,6 +38,7 @@ class Laptop {
     'condition': condition,
     'user': user,
     'password': password,
+    'notes': notes,
     'created_at': createdAt?.toIso8601String() ?? DateTime.now().toIso8601String(),
   };
 
@@ -50,12 +53,14 @@ class Laptop {
     condition: (m['condition'] ?? 'Good') as String,
     user: (m['user'] ?? '') as String,
     password: (m['password'] ?? '') as String,
+    notes: (m['notes'] ?? '') as String,
     createdAt: m['created_at'] != null ? DateTime.tryParse(m['created_at'] as String) : null,
   );
 
   Laptop copyWith({
     int? id, String? laptopNumber, String? model, String? cpu, String? gpu,
     String? ram, String? storage, String? condition, String? user, String? password,
+    String? notes,
   }) => Laptop(
     id: id ?? this.id,
     laptopNumber: laptopNumber ?? this.laptopNumber,
@@ -67,6 +72,7 @@ class Laptop {
     condition: condition ?? this.condition,
     user: user ?? this.user,
     password: password ?? this.password,
+    notes: notes ?? this.notes,
     createdAt: createdAt,
   );
 }

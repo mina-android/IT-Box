@@ -4,6 +4,7 @@ class AccessPoint {
   final String model;
   final String portNumber;
   final String location;
+  final String notes;
 
   const AccessPoint({
     this.id,
@@ -11,6 +12,7 @@ class AccessPoint {
     required this.model,
     this.portNumber = '',
     this.location = '',
+    this.notes = '',
   });
 
   Map<String, dynamic> toMap() => {
@@ -19,6 +21,7 @@ class AccessPoint {
     'model': model,
     'port_number': portNumber,
     'location': location,
+    'notes': notes,
   };
 
   factory AccessPoint.fromMap(Map<String, dynamic> m) => AccessPoint(
@@ -27,16 +30,18 @@ class AccessPoint {
     model: (m['model'] ?? '') as String,
     portNumber: (m['port_number'] ?? '') as String,
     location: (m['location'] ?? '') as String,
+    notes: (m['notes'] ?? '') as String,
   );
 
   AccessPoint copyWith({
     int? id, String? deviceNumber, String? model,
-    String? portNumber, String? location,
+    String? portNumber, String? location, String? notes,
   }) => AccessPoint(
     id: id ?? this.id,
     deviceNumber: deviceNumber ?? this.deviceNumber,
     model: model ?? this.model,
     portNumber: portNumber ?? this.portNumber,
     location: location ?? this.location,
+    notes: notes ?? this.notes,
   );
 }

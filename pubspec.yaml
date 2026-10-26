@@ -16,7 +16,6 @@ dependencies:
   share_plus: ^13.3.1
   file_picker: ^13.1.0
   pdf: ^3.12.0
-  printing: ^5.14.3
   shared_preferences: ^2.3.2
   excel: ^4.0.6
   flutter_local_notifications: ^22.3.1
@@ -25,7 +24,6 @@ dependencies:
   url_launcher: ^6.3.0
   google_fonts: '>=8.2.1 <9.0.0'
   dynamic_color: '>=1.9.0 <2.0.0'
-  cupertino_icons: ^2.0.0
   shimmer: ^4.0.0
   animations: ^2.2.0
   drift: ^2.35.0
@@ -35,6 +33,9 @@ dependencies:
   signature: ^5.5.0
   network_info_plus: ^8.2.1
   quick_actions: ^1.0.7
+  cryptography: ^2.7.0
+  crypto: ^3.0.6
+  workmanager: ^0.5.2
 
 dev_dependencies:
   flutter_test:
@@ -57,4 +58,3 @@ flutter:
   uses-material-design: true
   assets:
     - assets/icon/
-    - assets/icon/app_icon_mono.png

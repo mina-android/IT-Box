@@ -106,12 +106,13 @@ void main() {
       AppDatabase.testInstance = null;
     });
 
-    test('Schema migration v14 creates tables and indexes correctly', () async {
-      expect(db.schemaVersion, 14);
+    test('Schema migration v15 creates tables and indexes correctly', () async {
+      expect(db.schemaVersion, 15);
       final count = await helper.getCounts();
       expect(count['electronics'], 0);
       expect(count['employees'], 0);
       expect(count['active_borrows'], 0);
+      expect(count['vendor_contacts'], 0);
     });
 
     test('Full Borrow lifecycle: borrow, conflict checks, return, and status healing', () async {
@@ -347,7 +348,15 @@ void main() {
       await helper.deleteMiFi(mifiId);
       expect((await helper.getMiFis()).where((m) => m.id == mifiId).isEmpty, true);
 
-      // Deleting employee succeeds
+      // Attempting to delete employee while linked to email fails (C4 guard)
+      expect(() => helper.deleteEmployee(empId), throwsA(isA<StateError>()));
+
+      // Clean up linked email
+      final emails = await helper.getEmailAccounts();
+      final empEmail = emails.firstWhere((e) => e.employeeId == empId);
+      await helper.deleteEmailAccount(empEmail.id!);
+
+      // Now deleting employee succeeds
       await helper.deleteEmployee(empId);
       expect((await helper.getEmployees()).where((e) => e.id == empId).isEmpty, true);
     });

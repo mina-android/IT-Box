@@ -1,6 +1,12 @@
 // lib/database/database_helper.dart
 import 'dart:convert';
+import 'dart:io';
 import 'package:drift/drift.dart';
+import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:path_provider/path_provider.dart';
+import 'dart:async';
+
 import 'app_database.dart';
 import '../models/laptop.dart';
 import '../models/network_device.dart';
@@ -14,19 +20,45 @@ import '../models/bill.dart';
 import '../models/email_account.dart';
 import '../models/log_entry.dart';
 import '../models/subscription.dart';
-import 'package:flutter/foundation.dart';
 import '../models/access_point.dart';
 import '../models/wifi_network.dart';
 import '../models/account_password.dart';
 import '../models/other_device.dart';
+import '../models/vendor_contact.dart';
 import '../services/company_service.dart';
-
-import 'dart:async';
-import 'package:shared_preferences/shared_preferences.dart';
+import '../services/theme_service.dart';
 import '../services/notification_service.dart';
+import '../services/backup_crypto_service.dart';
 
 class TableNotifier extends ChangeNotifier {
   void notify() => notifyListeners();
+}
+
+/// Metadata and validation summary returned by [DatabaseHelper.inspectBackupJson].
+class BackupManifestSummary {
+  final int schemaVersion;
+  final String appVersion;
+  final String exportedAt;
+  final String companyName;
+  final Map<String, int> tableCounts;
+  final bool hasLogo;
+  final bool hasThemePrefs;
+  final bool isEncrypted;
+  final bool isValid;
+  final String? validationError;
+
+  const BackupManifestSummary({
+    required this.schemaVersion,
+    required this.appVersion,
+    required this.exportedAt,
+    required this.companyName,
+    required this.tableCounts,
+    required this.hasLogo,
+    required this.hasThemePrefs,
+    required this.isEncrypted,
+    required this.isValid,
+    this.validationError,
+  });
 }
 
 /// DatabaseHelper backed by Drift [AppDatabase] executing SQLite in a background isolate.
@@ -91,29 +123,6 @@ class DatabaseHelper extends ChangeNotifier {
     return res;
   }
 
-  @Deprecated('Use typed Drift query builders and Companions instead')
-  Future<int> updateMap(
-      String table, Map<String, dynamic> map, String idCol, dynamic idVal) async {
-    final keys = map.keys.where((k) => k != idCol).toList();
-    final setClause = keys.map((k) => '$k = ?').join(', ');
-    final sql = 'UPDATE $table SET $setClause WHERE $idCol = ?';
-    final values = [
-      ...keys.map((k) => Variable<Object>(map[k])),
-      Variable<Object>(idVal)
-    ];
-    final res = await drift.customUpdate(sql, variables: values);
-    notifyTableChanged(table);
-    return res;
-  }
-
-  @Deprecated('Use typed Drift query builders instead')
-  Future<int> deleteRow(String table, String idCol, dynamic idVal) async {
-    final res = await drift.customUpdate('DELETE FROM $table WHERE $idCol = ?',
-        variables: [Variable<Object>(idVal)]);
-    notifyTableChanged(table);
-    return res;
-  }
-
   // ── Raw query compatibility for Settings & Exports ────────────────────────
   @Deprecated('Use typed Drift query builders instead')
   Future<List<Map<String, dynamic>>> query(
@@ -163,6 +172,7 @@ class DatabaseHelper extends ChangeNotifier {
         condition: e.condition,
         user: e.user,
         password: e.password,
+        notes: e.notes,
         createdAt: e.createdAt != null ? DateTime.tryParse(e.createdAt!) : null,
       );
 
@@ -177,6 +187,7 @@ class DatabaseHelper extends ChangeNotifier {
         condition: Value(l.condition),
         user: Value(l.user),
         password: Value(l.password),
+        notes: Value(l.notes),
         createdAt: Value(l.createdAt?.toIso8601String() ?? DateTime.now().toIso8601String()),
       );
 
@@ -192,6 +203,7 @@ class DatabaseHelper extends ChangeNotifier {
         gateway: e.gateway,
         adminPassword: e.adminPassword,
         status: e.status,
+        notes: e.notes,
       );
 
   NetworkDevicesCompanion _networkDeviceToCompanion(NetworkDevice d) => NetworkDevicesCompanion(
@@ -206,6 +218,7 @@ class DatabaseHelper extends ChangeNotifier {
         gateway: Value(d.gateway),
         adminPassword: Value(d.adminPassword),
         status: Value(d.status),
+        notes: Value(d.notes),
       );
 
   Printer _printerFromEntry(PrinterEntry e) => Printer(
@@ -214,6 +227,7 @@ class DatabaseHelper extends ChangeNotifier {
         model: e.model,
         condition: e.condition,
         location: e.location,
+        notes: e.notes,
       );
 
   PrintersCompanion _printerToCompanion(Printer p) => PrintersCompanion(
@@ -222,6 +236,7 @@ class DatabaseHelper extends ChangeNotifier {
         model: Value(p.model),
         condition: Value(p.condition),
         location: Value(p.location),
+        notes: Value(p.notes),
       );
 
   Electronic _electronicFromEntry(ElectronicEntry e) => Electronic(
@@ -231,6 +246,7 @@ class DatabaseHelper extends ChangeNotifier {
         details: e.details,
         status: e.status,
         excludeFromBorrowing: e.excludeBorrowing == 1,
+        notes: e.notes,
       );
 
   ElectronicsCompanion _electronicToCompanion(Electronic e) => ElectronicsCompanion(
@@ -240,6 +256,7 @@ class DatabaseHelper extends ChangeNotifier {
         details: Value(e.details),
         status: Value(e.status),
         excludeBorrowing: Value(e.excludeFromBorrowing ? 1 : 0),
+        notes: Value(e.notes),
       );
 
   Employee _employeeFromEntry(EmployeeEntry e) => Employee(
@@ -268,6 +285,7 @@ class DatabaseHelper extends ChangeNotifier {
         status: e.status,
         excludeFromBorrowing: e.excludeBorrowing == 1,
         tag: e.tag,
+        notes: e.notes,
       );
 
   MifisCompanion _mifiToCompanion(MiFi m) => MifisCompanion(
@@ -284,6 +302,7 @@ class DatabaseHelper extends ChangeNotifier {
         status: Value(m.status),
         excludeBorrowing: Value(m.excludeFromBorrowing ? 1 : 0),
         tag: Value(m.tag),
+        notes: Value(m.notes),
       );
 
   BorrowLog _borrowLogFromEntry(BorrowLogEntry e) => BorrowLog(
@@ -379,16 +398,26 @@ class DatabaseHelper extends ChangeNotifier {
         priority: e.priority,
       );
 
-  LogEntriesCompanion _logEntryToCompanion(LogEntry le) => LogEntriesCompanion(
+  LogEntriesCompanion _logEntryToCompanion(LogEntry le) {
+    String st = le.state.trim();
+    if (st.toLowerCase() == 'resolved') {
+      st = 'Resolved';
+    } else if (st.toLowerCase() == 'closed') {
+      st = 'Closed';
+    } else {
+      st = 'Open';
+    }
+    return LogEntriesCompanion(
         id: le.id != null ? Value(le.id!) : const Value.absent(),
         date: Value(le.date),
         employeeId: le.employeeId != null ? Value(le.employeeId) : const Value.absent(),
         employeeName: Value(le.employeeName),
         problem: Value(le.problem),
         solution: Value(le.solution),
-        state: Value(le.state),
+        state: Value(st),
         priority: Value(le.priority),
       );
+  }
 
   Subscription _subscriptionFromEntry(SubscriptionEntry e) => Subscription(
         id: e.id,
@@ -414,6 +443,7 @@ class DatabaseHelper extends ChangeNotifier {
         model: e.model,
         portNumber: e.portNumber,
         location: e.location,
+        notes: e.notes,
       );
 
   AccessPointsCompanion _accessPointToCompanion(AccessPoint ap) => AccessPointsCompanion(
@@ -422,6 +452,7 @@ class DatabaseHelper extends ChangeNotifier {
         model: Value(ap.model),
         portNumber: Value(ap.portNumber),
         location: Value(ap.location),
+        notes: Value(ap.notes),
       );
 
   WifiNetwork _wifiNetworkFromEntry(WifiNetworkEntry e) => WifiNetwork(
@@ -482,6 +513,34 @@ class DatabaseHelper extends ChangeNotifier {
         createdAt: Value(od.createdAt ?? DateTime.now().toIso8601String()),
       );
 
+  VendorContact _vendorContactFromEntry(VendorContactEntry e) => VendorContact(
+        id: e.id,
+        contactType: e.contactType,
+        name: e.name,
+        company: e.company,
+        role: e.role,
+        phoneNumber: e.phoneNumber,
+        email: e.email,
+        portalUrl: e.portalUrl,
+        accountNumber: e.accountNumber,
+        notes: e.notes,
+        createdAt: e.createdAt,
+      );
+
+  VendorContactsCompanion _vendorContactToCompanion(VendorContact v) => VendorContactsCompanion(
+        id: v.id != null ? Value(v.id!) : const Value.absent(),
+        contactType: Value(v.contactType),
+        name: Value(v.name),
+        company: Value(v.company),
+        role: Value(v.role),
+        phoneNumber: Value(v.phoneNumber),
+        email: Value(v.email),
+        portalUrl: Value(v.portalUrl),
+        accountNumber: Value(v.accountNumber),
+        notes: Value(v.notes),
+        createdAt: Value(v.createdAt ?? DateTime.now().toIso8601String()),
+      );
+
   Map<String, dynamic> _maintenanceEntryToMap(MaintenanceEntry e) => {
         'id': e.id,
         'device_type': e.deviceType,
@@ -491,6 +550,8 @@ class DatabaseHelper extends ChangeNotifier {
         'cost': e.cost,
         'details': e.details,
         'performed_by': e.performedBy,
+        'is_planned': e.isPlanned,
+        'planned_date': e.plannedDate,
       };
 
   DeviceMaintenanceLogsCompanion _maintenanceLogToCompanion(Map<String, dynamic> m) =>
@@ -503,36 +564,9 @@ class DatabaseHelper extends ChangeNotifier {
         cost: Value((m['cost'] as num? ?? 0.0).toDouble()),
         details: Value((m['details'] ?? '') as String),
         performedBy: Value((m['performed_by'] ?? '') as String),
+        isPlanned: Value((m['is_planned'] as num? ?? 0).toInt()),
+        plannedDate: Value((m['planned_date'] ?? '') as String),
       );
-
-  Map<String, dynamic> _consumableEntryToMap(ConsumableEntry e) => {
-        'id': e.id,
-        'item_name': e.itemName,
-        'category': e.category,
-        'quantity': e.quantity,
-        'minimum_threshold': e.minimumThreshold,
-        'location': e.location,
-        'unit_price': e.unitPrice,
-      };
-
-  ConsumablesCompanion _consumableToCompanion(Map<String, dynamic> m) => ConsumablesCompanion(
-        id: m['id'] != null ? Value(m['id'] as int) : const Value.absent(),
-        itemName: Value((m['item_name'] ?? '') as String),
-        category: Value((m['category'] ?? 'General') as String),
-        quantity: Value((m['quantity'] ?? 0) as int),
-        minimumThreshold: Value((m['minimum_threshold'] ?? 5) as int),
-        location: Value((m['location'] ?? '') as String),
-        unitPrice: Value((m['unit_price'] as num? ?? 0.0).toDouble()),
-      );
-
-  Map<String, dynamic> _consumableLogEntryToMap(ConsumableLogEntry e) => {
-        'id': e.id,
-        'consumable_id': e.consumableId,
-        'employee_id': e.employeeId,
-        'change_amount': e.changeAmount,
-        'reason': e.reason,
-        'date': e.date,
-      };
 
   Map<String, dynamic> _staticIpEntryToMap(StaticIpEntry e) => {
         'id': e.id,
@@ -583,24 +617,6 @@ class DatabaseHelper extends ChangeNotifier {
         'description': e.description,
         'timestamp': e.timestamp,
       };
-
-  Map<String, dynamic> _softDeleteEntryToMap(SoftDeleteEntry e) => {
-        'id': e.id,
-        'original_table': e.originalTable,
-        'original_id': e.originalId,
-        'display_name': e.displayName,
-        'serialized_data': e.serializedData,
-        'deleted_at': e.deletedAt,
-      };
-
-  SoftDeletesCompanion _softDeleteToCompanion(Map<String, dynamic> m) => SoftDeletesCompanion(
-        id: m['id'] != null ? Value(m['id'] as int) : const Value.absent(),
-        originalTable: Value((m['original_table'] ?? '') as String),
-        originalId: Value((m['original_id'] ?? 0) as int),
-        displayName: Value((m['display_name'] ?? '') as String),
-        serializedData: Value((m['serialized_data'] ?? '') as String),
-        deletedAt: Value((m['deleted_at'] ?? DateTime.now().toIso8601String()) as String),
-      );
 
   // ── Laptops ───────────────────────────────────────────────────────────────
   Future<int> insertLaptop(Laptop l) async {
@@ -662,15 +678,15 @@ class DatabaseHelper extends ChangeNotifier {
     return rows;
   }
 
-  Future<int> updateNetworkDeviceStatus(int id, String s) async {
-    final rows = await (drift.update(drift.networkDevices)..where((tbl) => tbl.id.equals(id)))
-        .write(NetworkDevicesCompanion(status: Value(s)));
+  Future<int> deleteNetworkDevice(int id) async {
+    final rows = await (drift.delete(drift.networkDevices)..where((tbl) => tbl.id.equals(id))).go();
     notifyTableChanged('network_devices');
     return rows;
   }
 
-  Future<int> deleteNetworkDevice(int id) async {
-    final rows = await (drift.delete(drift.networkDevices)..where((tbl) => tbl.id.equals(id))).go();
+  Future<int> updateNetworkDeviceStatus(int id, String s) async {
+    final rows = await (drift.update(drift.networkDevices)..where((tbl) => tbl.id.equals(id)))
+        .write(NetworkDevicesCompanion(status: Value(s)));
     notifyTableChanged('network_devices');
     return rows;
   }
@@ -687,12 +703,6 @@ class DatabaseHelper extends ChangeNotifier {
       ..orderBy([(tbl) => OrderingTerm.asc(tbl.printerNumber)]);
     final rows = await query.get();
     return rows.map(_printerFromEntry).toList();
-  }
-
-  Stream<List<Printer>> watchPrinters() {
-    final query = drift.select(drift.printers)
-      ..orderBy([(tbl) => OrderingTerm.asc(tbl.printerNumber)]);
-    return query.watch().map((rows) => rows.map(_printerFromEntry).toList());
   }
 
   Future<int> updatePrinter(Printer p) async {
@@ -768,26 +778,42 @@ class DatabaseHelper extends ChangeNotifier {
     final emailCountExp = drift.emailAccounts.id.count();
     final logCountExp = drift.logEntries.id.count();
 
+    // Check active borrows
     final borrowsRow = await (drift.selectOnly(drift.borrowLogs)
           ..addColumns([borrowCountExp])
           ..where(drift.borrowLogs.employeeId.equals(employeeId) &
               drift.borrowLogs.isReturned.equals(0)))
         .getSingle();
 
+    // Check email accounts assigned
     final emailsRow = await (drift.selectOnly(drift.emailAccounts)
           ..addColumns([emailCountExp])
           ..where(drift.emailAccounts.employeeId.equals(employeeId)))
         .getSingle();
 
+    // Check tickets logged
     final logsRow = await (drift.selectOnly(drift.logEntries)
           ..addColumns([logCountExp])
           ..where(drift.logEntries.employeeId.equals(employeeId)))
         .getSingle();
 
+    // Check assigned laptops
+    final emp = await (drift.select(drift.employees)..where((tbl) => tbl.id.equals(employeeId))).getSingleOrNull();
+    int laptopsCount = 0;
+    if (emp != null && emp.name.isNotEmpty) {
+      final laptopCountExp = drift.laptops.id.count();
+      final lRow = await (drift.selectOnly(drift.laptops)
+            ..addColumns([laptopCountExp])
+            ..where(drift.laptops.user.lower().equals(emp.name.toLowerCase())))
+          .getSingle();
+      laptopsCount = lRow.read(laptopCountExp) ?? 0;
+    }
+
     return {
       'active_borrows': borrowsRow.read(borrowCountExp) ?? 0,
       'emails': emailsRow.read(emailCountExp) ?? 0,
       'tickets': logsRow.read(logCountExp) ?? 0,
+      'laptops': laptopsCount,
     };
   }
 
@@ -825,17 +851,65 @@ class DatabaseHelper extends ChangeNotifier {
     return query.watch().map((rows) => rows.map(_employeeFromEntry).toList());
   }
 
+  /// Updates an employee and cascades any name changes to laptops.user,
+  /// email_accounts.employee_name, borrow_logs.employee_name, and log_entries.employee_name.
   Future<int> updateEmployee(Employee e) async {
-    final rows = await (drift.update(drift.employees)..where((tbl) => tbl.id.equals(e.id!)))
-        .write(_employeeToCompanion(e));
-    notifyTableChanged('employees');
-    return rows;
+    return await drift.transaction(() async {
+      final oldEmp = await (drift.select(drift.employees)..where((tbl) => tbl.id.equals(e.id!)))
+          .getSingleOrNull();
+      final oldName = oldEmp?.name ?? '';
+
+      final rows = await (drift.update(drift.employees)..where((tbl) => tbl.id.equals(e.id!)))
+          .write(_employeeToCompanion(e));
+
+      if (oldName.isNotEmpty && oldName != e.name) {
+        // Cascade to assigned laptops
+        await (drift.update(drift.laptops)..where((tbl) => tbl.user.equals(oldName)))
+            .write(LaptopsCompanion(user: Value(e.name)));
+
+        // Cascade to linked email accounts
+        await (drift.update(drift.emailAccounts)
+              ..where((tbl) => tbl.employeeId.equals(e.id!) | tbl.employeeName.equals(oldName)))
+            .write(EmailAccountsCompanion(employeeName: Value(e.name)));
+
+        // Cascade to borrow logs
+        await (drift.update(drift.borrowLogs)
+              ..where((tbl) => tbl.employeeId.equals(e.id!) | tbl.employeeName.equals(oldName)))
+            .write(BorrowLogsCompanion(employeeName: Value(e.name)));
+
+        // Cascade to log entries
+        await (drift.update(drift.logEntries)
+              ..where((tbl) => tbl.employeeId.equals(e.id!) | tbl.employeeName.equals(oldName)))
+            .write(LogEntriesCompanion(employeeName: Value(e.name)));
+
+        notifyTableChanged('laptops');
+        notifyTableChanged('email_accounts');
+        notifyTableChanged('borrow_logs');
+        notifyTableChanged('log_entries');
+      }
+
+      notifyTableChanged('employees');
+      return rows;
+    });
   }
 
+  /// Deletes an employee only if they have no active borrows, assigned laptops, or linked email accounts.
   Future<int> deleteEmployee(int id) async {
-    if (await getEmployeeActiveBorrowsCount(id) > 0) {
+    final deps = await getEmployeeDependentCounts(id);
+    final activeBorrows = deps['active_borrows'] ?? 0;
+    final laptops = deps['laptops'] ?? 0;
+    final emails = deps['emails'] ?? 0;
+
+    if (activeBorrows > 0) {
       throw StateError('Cannot delete employee while they have active borrowed devices.');
     }
+    if (laptops > 0) {
+      throw StateError('Cannot delete employee while they have assigned laptops. Unassign laptop(s) first.');
+    }
+    if (emails > 0) {
+      throw StateError('Cannot delete employee while linked to active email accounts. Unlink email(s) first.');
+    }
+
     final rows = await (drift.delete(drift.employees)..where((tbl) => tbl.id.equals(id))).go();
     notifyTableChanged('employees');
     return rows;
@@ -921,7 +995,6 @@ class DatabaseHelper extends ChangeNotifier {
       final returnStatusChanged = oldLog.isReturned != newLog.isReturned;
 
       if (deviceChanged) {
-        // Revert old device to Available only if oldLog was active AND no other active borrow exists
         if (!oldLog.isReturned) {
           final remainingOld = await (drift.select(drift.borrowLogs)
                 ..where((tbl) =>
@@ -939,7 +1012,6 @@ class DatabaseHelper extends ChangeNotifier {
           }
         }
 
-        // Mark new device as Borrowed only if newLog is active
         if (!newLog.isReturned) {
           if (newLog.deviceType.toLowerCase() == 'electronic') {
             await updateElectronicStatus(newLog.deviceId, 'Borrowed');
@@ -949,15 +1021,14 @@ class DatabaseHelper extends ChangeNotifier {
         }
       } else if (returnStatusChanged) {
         if (newLog.isReturned) {
-          // Changed from active to returned: check if any other active borrow exists
-          final remaining = await (drift.select(drift.borrowLogs)
+          final remainingActive = await (drift.select(drift.borrowLogs)
                 ..where((tbl) =>
                     tbl.deviceType.lower().equals(newLog.deviceType.toLowerCase()) &
                     tbl.deviceId.equals(newLog.deviceId) &
                     tbl.isReturned.equals(0) &
                     tbl.id.equals(logId).not()))
               .get();
-          if (remaining.isEmpty) {
+          if (remainingActive.isEmpty) {
             if (newLog.deviceType.toLowerCase() == 'electronic') {
               await updateElectronicStatus(newLog.deviceId, 'Available');
             } else if (newLog.deviceType.toLowerCase() == 'mifi') {
@@ -965,7 +1036,6 @@ class DatabaseHelper extends ChangeNotifier {
             }
           }
         } else {
-          // Changed from returned back to active borrow
           if (newLog.deviceType.toLowerCase() == 'electronic') {
             await updateElectronicStatus(newLog.deviceId, 'Borrowed');
           } else if (newLog.deviceType.toLowerCase() == 'mifi') {
@@ -973,6 +1043,7 @@ class DatabaseHelper extends ChangeNotifier {
           }
         }
       }
+
       return 1;
     });
   }
@@ -983,7 +1054,7 @@ class DatabaseHelper extends ChangeNotifier {
       query.where((tbl) => tbl.isReturned.equals(0));
     }
     query.orderBy([
-      (tbl) => OrderingTerm.desc(tbl.outDate),
+      (tbl) => OrderingTerm.asc(tbl.isReturned),
       (tbl) => OrderingTerm.desc(tbl.id),
     ]);
     final rows = await query.get();
@@ -996,7 +1067,7 @@ class DatabaseHelper extends ChangeNotifier {
       query.where((tbl) => tbl.isReturned.equals(0));
     }
     query.orderBy([
-      (tbl) => OrderingTerm.desc(tbl.outDate),
+      (tbl) => OrderingTerm.asc(tbl.isReturned),
       (tbl) => OrderingTerm.desc(tbl.id),
     ]);
     return query.watch().map((rows) => rows.map(_borrowLogFromEntry).toList());
@@ -1109,8 +1180,7 @@ class DatabaseHelper extends ChangeNotifier {
               ..where((tbl) => tbl.status.equals('Borrowed') & tbl.id.isNotIn(activeElecIds)))
             .write(const ElectronicsCompanion(status: Value('Available')));
         await (drift.update(drift.electronics)
-              ..where(
-                  (tbl) => tbl.status.equals('Borrowed').not() & tbl.id.isIn(activeElecIds)))
+              ..where((tbl) => tbl.status.equals('Borrowed').not() & tbl.id.isIn(activeElecIds)))
             .write(const ElectronicsCompanion(status: Value('Borrowed')));
       }
     });
@@ -1125,14 +1195,7 @@ class DatabaseHelper extends ChangeNotifier {
     return id;
   }
 
-  Future<List<Expense>> getExpenses() async {
-    final query = drift.select(drift.expenses)
-      ..orderBy([(tbl) => OrderingTerm.desc(tbl.date), (tbl) => OrderingTerm.desc(tbl.id)]);
-    final rows = await query.get();
-    return rows.map(_expenseFromEntry).toList();
-  }
-
-  Stream<List<Expense>> watchExpenses({int? year, int? month}) {
+  Future<List<Expense>> getExpenses({int? year, int? month}) async {
     final query = drift.select(drift.expenses);
     if (year != null) {
       if (month != null) {
@@ -1143,7 +1206,41 @@ class DatabaseHelper extends ChangeNotifier {
       }
     }
     query.orderBy([(tbl) => OrderingTerm.desc(tbl.date), (tbl) => OrderingTerm.desc(tbl.id)]);
-    return query.watch().map((rows) => rows.map(_expenseFromEntry).toList());
+    final rows = await query.get();
+    return rows.map(_expenseFromEntry).toList();
+  }
+
+  Future<int> updateExpense(Expense e) async {
+    final rows = await (drift.update(drift.expenses)..where((tbl) => tbl.id.equals(e.id!)))
+        .write(_expenseToCompanion(e));
+    notifyTableChanged('expenses');
+    return rows;
+  }
+
+  Future<int> deleteExpense(int id) async {
+    final rows = await (drift.delete(drift.expenses)..where((tbl) => tbl.id.equals(id))).go();
+    notifyTableChanged('expenses');
+    return rows;
+  }
+
+  Future<List<Expense>> getExpensesByYear(int year) async {
+    final query = drift.select(drift.expenses)
+      ..where((tbl) => tbl.date.like('$year%'))
+      ..orderBy([(tbl) => OrderingTerm.desc(tbl.date)]);
+    final rows = await query.get();
+    return rows.map(_expenseFromEntry).toList();
+  }
+
+  Future<List<int>> getExpenseYears() async {
+    final yearExp = drift.expenses.date.substr(1, 4);
+    final query = drift.selectOnly(drift.expenses, distinct: true)
+      ..addColumns([yearExp])
+      ..orderBy([OrderingTerm.desc(yearExp)]);
+    final rows = await query.get();
+    return rows
+        .map((r) => int.tryParse(r.read(yearExp) ?? '') ?? 0)
+        .where((y) => y > 0)
+        .toList();
   }
 
   Future<double> getTotalExpenses({int? year, int? month}) async {
@@ -1175,48 +1272,6 @@ class DatabaseHelper extends ChangeNotifier {
     return query.watchSingle().map((row) => row.read(sumExp) ?? 0.0);
   }
 
-  Future<int> updateExpense(Expense e) async {
-    final rows = await (drift.update(drift.expenses)..where((tbl) => tbl.id.equals(e.id!)))
-        .write(_expenseToCompanion(e));
-    notifyTableChanged('expenses');
-    return rows;
-  }
-
-  Future<int> deleteExpense(int id) async {
-    final rows = await (drift.delete(drift.expenses)..where((tbl) => tbl.id.equals(id))).go();
-    notifyTableChanged('expenses');
-    return rows;
-  }
-
-  Future<List<Expense>> getExpensesByYear(int year) async {
-    final query = drift.select(drift.expenses)
-      ..where((tbl) => tbl.date.like('$year%'))
-      ..orderBy([(tbl) => OrderingTerm.desc(tbl.date)]);
-    final rows = await query.get();
-    return rows.map(_expenseFromEntry).toList();
-  }
-
-  Future<List<Expense>> getExpensesByMonth(int year, int month) async {
-    final prefix = '$year-${month.toString().padLeft(2, '0')}';
-    final query = drift.select(drift.expenses)
-      ..where((tbl) => tbl.date.like('$prefix%'))
-      ..orderBy([(tbl) => OrderingTerm.desc(tbl.date)]);
-    final rows = await query.get();
-    return rows.map(_expenseFromEntry).toList();
-  }
-
-  Future<List<int>> getExpenseYears() async {
-    final yearExp = drift.expenses.date.substr(1, 4);
-    final query = drift.selectOnly(drift.expenses, distinct: true)
-      ..addColumns([yearExp])
-      ..orderBy([OrderingTerm.desc(yearExp)]);
-    final rows = await query.get();
-    return rows
-        .map((r) => int.tryParse(r.read(yearExp) ?? '') ?? 0)
-        .where((y) => y > 0)
-        .toList();
-  }
-
   // ── Bills ─────────────────────────────────────────────────────────────────
   Future<int> insertBill(Bill b) async {
     final id = await drift.into(drift.bills).insert(_billToCompanion(b));
@@ -1225,27 +1280,10 @@ class DatabaseHelper extends ChangeNotifier {
   }
 
   Future<List<Bill>> getBills() async {
-    final query = drift.select(drift.bills)..orderBy([(tbl) => OrderingTerm.desc(tbl.id)]);
+    final query = drift.select(drift.bills)
+      ..orderBy([(tbl) => OrderingTerm.asc(tbl.person)]);
     final rows = await query.get();
     return rows.map(_billFromEntry).toList();
-  }
-
-  Stream<List<Bill>> watchBills() {
-    final query = drift.select(drift.bills)..orderBy([(tbl) => OrderingTerm.desc(tbl.id)]);
-    return query.watch().map((rows) => rows.map(_billFromEntry).toList());
-  }
-
-  Future<double> getTotalBills() async {
-    final sumExp = drift.bills.price.sum();
-    final query = drift.selectOnly(drift.bills)..addColumns([sumExp]);
-    final row = await query.getSingle();
-    return row.read(sumExp) ?? 0.0;
-  }
-
-  Stream<double> watchTotalBills() {
-    final sumExp = drift.bills.price.sum();
-    final query = drift.selectOnly(drift.bills)..addColumns([sumExp]);
-    return query.watchSingle().map((row) => row.read(sumExp) ?? 0.0);
   }
 
   Future<int> updateBill(Bill b) async {
@@ -1261,29 +1299,36 @@ class DatabaseHelper extends ChangeNotifier {
     return rows;
   }
 
+  Future<double> getTotalBills() async {
+    final sumExp = drift.bills.price.sum();
+    final query = drift.selectOnly(drift.bills)..addColumns([sumExp]);
+    final row = await query.getSingle();
+    return row.read(sumExp) ?? 0.0;
+  }
+
+  Stream<double> watchTotalBills() {
+    final sumExp = drift.bills.price.sum();
+    final query = drift.selectOnly(drift.bills)..addColumns([sumExp]);
+    return query.watchSingle().map((row) => row.read(sumExp) ?? 0.0);
+  }
+
   // ── Email Accounts ────────────────────────────────────────────────────────
-  Future<int> insertEmailAccount(EmailAccount e) async {
-    final id = await drift.into(drift.emailAccounts).insert(_emailAccountToCompanion(e));
+  Future<int> insertEmailAccount(EmailAccount a) async {
+    final id = await drift.into(drift.emailAccounts).insert(_emailAccountToCompanion(a));
     notifyTableChanged('email_accounts');
     return id;
   }
 
   Future<List<EmailAccount>> getEmailAccounts() async {
     final query = drift.select(drift.emailAccounts)
-      ..orderBy([(tbl) => OrderingTerm.asc(tbl.employeeName), (tbl) => OrderingTerm.asc(tbl.email)]);
+      ..orderBy([(tbl) => OrderingTerm.asc(tbl.email)]);
     final rows = await query.get();
     return rows.map(_emailAccountFromEntry).toList();
   }
 
-  Stream<List<EmailAccount>> watchEmailAccounts() {
-    final query = drift.select(drift.emailAccounts)
-      ..orderBy([(tbl) => OrderingTerm.asc(tbl.employeeName), (tbl) => OrderingTerm.asc(tbl.email)]);
-    return query.watch().map((rows) => rows.map(_emailAccountFromEntry).toList());
-  }
-
-  Future<int> updateEmailAccount(EmailAccount e) async {
-    final rows = await (drift.update(drift.emailAccounts)..where((tbl) => tbl.id.equals(e.id!)))
-        .write(_emailAccountToCompanion(e));
+  Future<int> updateEmailAccount(EmailAccount a) async {
+    final rows = await (drift.update(drift.emailAccounts)..where((tbl) => tbl.id.equals(a.id!)))
+        .write(_emailAccountToCompanion(a));
     notifyTableChanged('email_accounts');
     return rows;
   }
@@ -1295,22 +1340,33 @@ class DatabaseHelper extends ChangeNotifier {
   }
 
   // ── Log Entries ───────────────────────────────────────────────────────────
-  Future<int> insertLogEntry(LogEntry e) async {
-    final id = await drift.into(drift.logEntries).insert(_logEntryToCompanion(e));
+  Future<int> insertLogEntry(LogEntry l) async {
+    final id = await drift.into(drift.logEntries).insert(_logEntryToCompanion(l));
     notifyTableChanged('log_entries');
     return id;
   }
 
-  Future<List<LogEntry>> getLogEntries() async {
-    final query = drift.select(drift.logEntries)
-      ..orderBy([(tbl) => OrderingTerm.desc(tbl.date), (tbl) => OrderingTerm.desc(tbl.id)]);
+  Future<List<LogEntry>> getLogEntries({String? stateFilter, int? year, int? month}) async {
+    final query = drift.select(drift.logEntries);
+    if (stateFilter != null && stateFilter != 'All') {
+      query.where((tbl) => tbl.state.lower().equals(stateFilter.toLowerCase()));
+    }
+    if (year != null) {
+      if (month != null) {
+        final prefix = '$year-${month.toString().padLeft(2, '0')}';
+        query.where((tbl) => tbl.date.like('$prefix%'));
+      } else {
+        query.where((tbl) => tbl.date.like('$year%'));
+      }
+    }
+    query.orderBy([(tbl) => OrderingTerm.desc(tbl.date), (tbl) => OrderingTerm.desc(tbl.id)]);
     final rows = await query.get();
     return rows.map(_logEntryFromEntry).toList();
   }
 
   Stream<List<LogEntry>> watchLogEntries({String? stateFilter, int? year, int? month}) {
     final query = drift.select(drift.logEntries);
-    if (stateFilter != null && stateFilter.isNotEmpty) {
+    if (stateFilter != null && stateFilter != 'All') {
       query.where((tbl) => tbl.state.lower().equals(stateFilter.toLowerCase()));
     }
     if (year != null) {
@@ -1326,20 +1382,11 @@ class DatabaseHelper extends ChangeNotifier {
   }
 
   Future<List<LogEntry>> getLogEntriesByYear(int year) async {
-    final query = drift.select(drift.logEntries)
-      ..where((tbl) => tbl.date.like('$year%'))
-      ..orderBy([(tbl) => OrderingTerm.desc(tbl.date), (tbl) => OrderingTerm.desc(tbl.id)]);
-    final rows = await query.get();
-    return rows.map(_logEntryFromEntry).toList();
+    return getLogEntries(year: year);
   }
 
   Future<List<LogEntry>> getLogEntriesByMonth(int year, int month) async {
-    final prefix = '$year-${month.toString().padLeft(2, '0')}';
-    final query = drift.select(drift.logEntries)
-      ..where((tbl) => tbl.date.like('$prefix%'))
-      ..orderBy([(tbl) => OrderingTerm.desc(tbl.date), (tbl) => OrderingTerm.desc(tbl.id)]);
-    final rows = await query.get();
-    return rows.map(_logEntryFromEntry).toList();
+    return getLogEntries(year: year, month: month);
   }
 
   Future<List<LogEntry>> getOpenLogEntries() async {
@@ -1348,6 +1395,19 @@ class DatabaseHelper extends ChangeNotifier {
       ..orderBy([(tbl) => OrderingTerm.desc(tbl.date), (tbl) => OrderingTerm.desc(tbl.id)]);
     final rows = await query.get();
     return rows.map(_logEntryFromEntry).toList();
+  }
+
+  Future<int> updateLogEntry(LogEntry l) async {
+    final rows = await (drift.update(drift.logEntries)..where((tbl) => tbl.id.equals(l.id!)))
+        .write(_logEntryToCompanion(l));
+    notifyTableChanged('log_entries');
+    return rows;
+  }
+
+  Future<int> deleteLogEntry(int id) async {
+    final rows = await (drift.delete(drift.logEntries)..where((tbl) => tbl.id.equals(id))).go();
+    notifyTableChanged('log_entries');
+    return rows;
   }
 
   Future<List<int>> getLogYears() async {
@@ -1362,19 +1422,6 @@ class DatabaseHelper extends ChangeNotifier {
         .toList();
   }
 
-  Future<int> updateLogEntry(LogEntry e) async {
-    final rows = await (drift.update(drift.logEntries)..where((tbl) => tbl.id.equals(e.id!)))
-        .write(_logEntryToCompanion(e));
-    notifyTableChanged('log_entries');
-    return rows;
-  }
-
-  Future<int> deleteLogEntry(int id) async {
-    final rows = await (drift.delete(drift.logEntries)..where((tbl) => tbl.id.equals(id))).go();
-    notifyTableChanged('log_entries');
-    return rows;
-  }
-
   // ── Subscriptions ─────────────────────────────────────────────────────────
   Future<int> insertSubscription(Subscription s) async {
     final id = await drift.into(drift.subscriptions).insert(_subscriptionToCompanion(s));
@@ -1384,15 +1431,9 @@ class DatabaseHelper extends ChangeNotifier {
 
   Future<List<Subscription>> getSubscriptions() async {
     final query = drift.select(drift.subscriptions)
-      ..orderBy([(tbl) => OrderingTerm.desc(tbl.id)]);
+      ..orderBy([(tbl) => OrderingTerm.asc(tbl.service)]);
     final rows = await query.get();
     return rows.map(_subscriptionFromEntry).toList();
-  }
-
-  Stream<List<Subscription>> watchSubscriptions() {
-    final query = drift.select(drift.subscriptions)
-      ..orderBy([(tbl) => OrderingTerm.desc(tbl.id)]);
-    return query.watch().map((rows) => rows.map(_subscriptionFromEntry).toList());
   }
 
   Future<int> updateSubscription(Subscription s) async {
@@ -1422,12 +1463,6 @@ class DatabaseHelper extends ChangeNotifier {
     return rows.map(_accessPointFromEntry).toList();
   }
 
-  Stream<List<AccessPoint>> watchAccessPoints() {
-    final query = drift.select(drift.accessPoints)
-      ..orderBy([(tbl) => OrderingTerm.asc(tbl.deviceNumber)]);
-    return query.watch().map((rows) => rows.map(_accessPointFromEntry).toList());
-  }
-
   Future<int> updateAccessPoint(AccessPoint a) async {
     final rows = await (drift.update(drift.accessPoints)..where((tbl) => tbl.id.equals(a.id!)))
         .write(_accessPointToCompanion(a));
@@ -1441,7 +1476,7 @@ class DatabaseHelper extends ChangeNotifier {
     return rows;
   }
 
-  // ── Wi-Fi Networks ─────────────────────────────────────────────────────────
+  // ── Wi-Fi Networks (Credentials Vault) ────────────────────────────────────
   Future<int> insertWifiNetwork(WifiNetwork w) async {
     final id = await drift.into(drift.wifiNetworks).insert(_wifiNetworkToCompanion(w));
     notifyTableChanged('wifi_networks');
@@ -1450,15 +1485,9 @@ class DatabaseHelper extends ChangeNotifier {
 
   Future<List<WifiNetwork>> getWifiNetworks() async {
     final query = drift.select(drift.wifiNetworks)
-      ..orderBy([(tbl) => OrderingTerm.asc(tbl.networkName.collate(Collate.noCase))]);
+      ..orderBy([(tbl) => OrderingTerm.asc(tbl.networkName)]);
     final rows = await query.get();
     return rows.map(_wifiNetworkFromEntry).toList();
-  }
-
-  Stream<List<WifiNetwork>> watchWifiNetworks() {
-    final query = drift.select(drift.wifiNetworks)
-      ..orderBy([(tbl) => OrderingTerm.asc(tbl.networkName.collate(Collate.noCase))]);
-    return query.watch().map((rows) => rows.map(_wifiNetworkFromEntry).toList());
   }
 
   Future<int> updateWifiNetwork(WifiNetwork w) async {
@@ -1474,7 +1503,7 @@ class DatabaseHelper extends ChangeNotifier {
     return rows;
   }
 
-  // ── Account Passwords ───────────────────────────────────────────────────────
+  // ── Account Passwords (Credentials Vault) ─────────────────────────────────
   Future<int> insertAccountPassword(AccountPassword a) async {
     final id = await drift.into(drift.accountPasswords).insert(_accountPasswordToCompanion(a));
     notifyTableChanged('account_passwords');
@@ -1483,15 +1512,9 @@ class DatabaseHelper extends ChangeNotifier {
 
   Future<List<AccountPassword>> getAccountPasswords() async {
     final query = drift.select(drift.accountPasswords)
-      ..orderBy([(tbl) => OrderingTerm.asc(tbl.platform.collate(Collate.noCase))]);
+      ..orderBy([(tbl) => OrderingTerm.asc(tbl.platform)]);
     final rows = await query.get();
     return rows.map(_accountPasswordFromEntry).toList();
-  }
-
-  Stream<List<AccountPassword>> watchAccountPasswords() {
-    final query = drift.select(drift.accountPasswords)
-      ..orderBy([(tbl) => OrderingTerm.asc(tbl.platform.collate(Collate.noCase))]);
-    return query.watch().map((rows) => rows.map(_accountPasswordFromEntry).toList());
   }
 
   Future<int> updateAccountPassword(AccountPassword a) async {
@@ -1507,7 +1530,7 @@ class DatabaseHelper extends ChangeNotifier {
     return rows;
   }
 
-  // ── Other Devices ──────────────────────────────────────────────────────────
+  // ── Other Devices ─────────────────────────────────────────────────────────
   Future<int> insertOtherDevice(OtherDevice d) async {
     final id = await drift.into(drift.otherDevices).insert(_otherDeviceToCompanion(d));
     notifyTableChanged('other_devices');
@@ -1516,15 +1539,9 @@ class DatabaseHelper extends ChangeNotifier {
 
   Future<List<OtherDevice>> getOtherDevices() async {
     final query = drift.select(drift.otherDevices)
-      ..orderBy([(tbl) => OrderingTerm.asc(tbl.deviceName.collate(Collate.noCase))]);
+      ..orderBy([(tbl) => OrderingTerm.asc(tbl.deviceName)]);
     final rows = await query.get();
     return rows.map(_otherDeviceFromEntry).toList();
-  }
-
-  Stream<List<OtherDevice>> watchOtherDevices() {
-    final query = drift.select(drift.otherDevices)
-      ..orderBy([(tbl) => OrderingTerm.asc(tbl.deviceName.collate(Collate.noCase))]);
-    return query.watch().map((rows) => rows.map(_otherDeviceFromEntry).toList());
   }
 
   Future<int> updateOtherDevice(OtherDevice d) async {
@@ -1537,6 +1554,36 @@ class DatabaseHelper extends ChangeNotifier {
   Future<int> deleteOtherDevice(int id) async {
     final rows = await (drift.delete(drift.otherDevices)..where((tbl) => tbl.id.equals(id))).go();
     notifyTableChanged('other_devices');
+    return rows;
+  }
+
+  // ── Vendor Contacts (IT Runbook) ──────────────────────────────────────────
+  Future<int> insertVendorContact(VendorContact v) async {
+    final id = await drift.into(drift.vendorContacts).insert(_vendorContactToCompanion(v));
+    notifyTableChanged('vendor_contacts');
+    return id;
+  }
+
+  Future<List<VendorContact>> getVendorContacts({String? contactType}) async {
+    final query = drift.select(drift.vendorContacts);
+    if (contactType != null && contactType.isNotEmpty && contactType != 'All') {
+      query.where((tbl) => tbl.contactType.equals(contactType));
+    }
+    query.orderBy([(tbl) => OrderingTerm.asc(tbl.name)]);
+    final rows = await query.get();
+    return rows.map(_vendorContactFromEntry).toList();
+  }
+
+  Future<int> updateVendorContact(VendorContact v) async {
+    final rows = await (drift.update(drift.vendorContacts)..where((tbl) => tbl.id.equals(v.id!)))
+        .write(_vendorContactToCompanion(v));
+    notifyTableChanged('vendor_contacts');
+    return rows;
+  }
+
+  Future<int> deleteVendorContact(int id) async {
+    final rows = await (drift.delete(drift.vendorContacts)..where((tbl) => tbl.id.equals(id))).go();
+    notifyTableChanged('vendor_contacts');
     return rows;
   }
 
@@ -1556,89 +1603,10 @@ class DatabaseHelper extends ChangeNotifier {
     return rows.map(_maintenanceEntryToMap).toList();
   }
 
-  Stream<List<Map<String, dynamic>>> watchMaintenanceLogsForDevice(
-      String deviceType, int deviceId) {
-    final query = drift.select(drift.deviceMaintenanceLogs)
-      ..where((tbl) => tbl.deviceType.equals(deviceType) & tbl.deviceId.equals(deviceId))
-      ..orderBy([(tbl) => OrderingTerm.desc(tbl.date), (tbl) => OrderingTerm.desc(tbl.id)]);
-    return query.watch().map((rows) => rows.map(_maintenanceEntryToMap).toList());
-  }
-
   Future<int> deleteMaintenanceLog(int id) async {
     final rows = await (drift.delete(drift.deviceMaintenanceLogs)..where((tbl) => tbl.id.equals(id))).go();
     notifyTableChanged('device_maintenance_logs');
     return rows;
-  }
-
-  // ── Consumables & Stock ───────────────────────────────────────────────────
-  Future<int> insertConsumable(Map<String, dynamic> item) async {
-    final id = await drift.into(drift.consumables).insert(_consumableToCompanion(item));
-    notifyTableChanged('consumables');
-    return id;
-  }
-
-  Future<List<Map<String, dynamic>>> getConsumables() async {
-    final query = drift.select(drift.consumables)
-      ..orderBy([(tbl) => OrderingTerm.asc(tbl.itemName)]);
-    final rows = await query.get();
-    return rows.map(_consumableEntryToMap).toList();
-  }
-
-  Stream<List<Map<String, dynamic>>> watchConsumables() {
-    final query = drift.select(drift.consumables)
-      ..orderBy([(tbl) => OrderingTerm.asc(tbl.itemName)]);
-    return query.watch().map((rows) => rows.map(_consumableEntryToMap).toList());
-  }
-
-  Future<int> updateConsumable(Map<String, dynamic> item, int id) async {
-    final rows = await (drift.update(drift.consumables)..where((tbl) => tbl.id.equals(id)))
-        .write(_consumableToCompanion(item));
-    notifyTableChanged('consumables');
-    return rows;
-  }
-
-  Future<int> adjustConsumableQuantity(
-      int consumableId, int delta, String reason, int? employeeId) async {
-    return await drift.transaction(() async {
-      final cur = await (drift.select(drift.consumables)..where((t) => t.id.equals(consumableId)))
-          .getSingleOrNull();
-      final currentQty = cur?.quantity ?? 0;
-      final newQty = (currentQty + delta) < 0 ? 0 : (currentQty + delta);
-      await (drift.update(drift.consumables)..where((t) => t.id.equals(consumableId)))
-          .write(ConsumablesCompanion(quantity: Value(newQty)));
-      notifyTableChanged('consumables');
-
-      await drift.into(drift.consumableLogs).insert(ConsumableLogsCompanion(
-            consumableId: Value(consumableId),
-            employeeId: employeeId != null ? Value(employeeId) : const Value.absent(),
-            changeAmount: Value(delta),
-            reason: Value(reason),
-            date: Value(DateTime.now().toIso8601String().split('T').first),
-          ));
-      notifyTableChanged('consumable_logs');
-      return newQty;
-    });
-  }
-
-  Future<int> deleteConsumable(int id) async {
-    final rows = await (drift.delete(drift.consumables)..where((tbl) => tbl.id.equals(id))).go();
-    notifyTableChanged('consumables');
-    return rows;
-  }
-
-  Future<List<Map<String, dynamic>>> getConsumableLogs(int consumableId) async {
-    final query = drift.select(drift.consumableLogs)
-      ..where((tbl) => tbl.consumableId.equals(consumableId))
-      ..orderBy([(tbl) => OrderingTerm.desc(tbl.date), (tbl) => OrderingTerm.desc(tbl.id)]);
-    final rows = await query.get();
-    return rows.map(_consumableLogEntryToMap).toList();
-  }
-
-  Stream<List<Map<String, dynamic>>> watchConsumableLogs(int consumableId) {
-    final query = drift.select(drift.consumableLogs)
-      ..where((tbl) => tbl.consumableId.equals(consumableId))
-      ..orderBy([(tbl) => OrderingTerm.desc(tbl.date), (tbl) => OrderingTerm.desc(tbl.id)]);
-    return query.watch().map((rows) => rows.map(_consumableLogEntryToMap).toList());
   }
 
   // ── Static IPs (IPAM) ─────────────────────────────────────────────────────
@@ -1654,11 +1622,6 @@ class DatabaseHelper extends ChangeNotifier {
     return rows.map(_staticIpEntryToMap).toList();
   }
 
-  Stream<List<Map<String, dynamic>>> watchStaticIps() {
-    final query = drift.select(drift.staticIps)..orderBy([(tbl) => OrderingTerm.asc(tbl.ipAddress)]);
-    return query.watch().map((rows) => rows.map(_staticIpEntryToMap).toList());
-  }
-
   Future<int> updateStaticIp(Map<String, dynamic> ip, int id) async {
     final rows = await (drift.update(drift.staticIps)..where((tbl) => tbl.id.equals(id)))
         .write(_staticIpToCompanion(ip));
@@ -1672,26 +1635,19 @@ class DatabaseHelper extends ChangeNotifier {
     return rows;
   }
 
-  // ── Switch Patch Ports ─────────────────────────────────────────────────────
+  // ── Switch Patch Ports ────────────────────────────────────────────────────
   Future<int> insertSwitchPatchPort(Map<String, dynamic> port) async {
     final id = await drift.into(drift.switchPatchPorts).insert(_switchPatchPortToCompanion(port));
     notifyTableChanged('switch_patch_ports');
     return id;
   }
 
-  Future<List<Map<String, dynamic>>> getSwitchPatchPorts(int switchId) async {
+  Future<List<Map<String, dynamic>>> getSwitchPatchPorts(int switchDeviceId) async {
     final query = drift.select(drift.switchPatchPorts)
-      ..where((tbl) => tbl.switchDeviceId.equals(switchId))
+      ..where((tbl) => tbl.switchDeviceId.equals(switchDeviceId))
       ..orderBy([(tbl) => OrderingTerm.asc(tbl.portNumber)]);
     final rows = await query.get();
     return rows.map(_switchPatchPortEntryToMap).toList();
-  }
-
-  Stream<List<Map<String, dynamic>>> watchSwitchPatchPorts(int switchId) {
-    final query = drift.select(drift.switchPatchPorts)
-      ..where((tbl) => tbl.switchDeviceId.equals(switchId))
-      ..orderBy([(tbl) => OrderingTerm.asc(tbl.portNumber)]);
-    return query.watch().map((rows) => rows.map(_switchPatchPortEntryToMap).toList());
   }
 
   Future<int> updateSwitchPatchPort(Map<String, dynamic> port, int id) async {
@@ -1713,12 +1669,16 @@ class DatabaseHelper extends ChangeNotifier {
     return rows;
   }
 
-  // ── Audit Activities ───────────────────────────────────────────────────────
-  Future<int> logAuditActivity(String action, String entityType,
-      {int? entityId, required String description}) async {
+  // ── Audit Activities ──────────────────────────────────────────────────────
+  Future<int> logAuditActivity(
+    String actionType,
+    String entityType, {
+    int? entityId,
+    required String description,
+  }) async {
     final id = await drift.into(drift.auditActivities).insert(
           AuditActivitiesCompanion(
-            actionType: Value(action),
+            actionType: Value(actionType),
             entityType: Value(entityType),
             entityId: entityId != null ? Value(entityId) : const Value.absent(),
             description: Value(description),
@@ -1737,47 +1697,13 @@ class DatabaseHelper extends ChangeNotifier {
     return rows.map(_auditActivityEntryToMap).toList();
   }
 
-  Stream<List<Map<String, dynamic>>> watchAuditActivities({int limit = 100}) {
-    final query = drift.select(drift.auditActivities)
-      ..orderBy([(tbl) => OrderingTerm.desc(tbl.id)])
-      ..limit(limit);
-    return query.watch().map((rows) => rows.map(_auditActivityEntryToMap).toList());
-  }
-
   Future<int> clearAuditActivities() async {
     final count = await drift.delete(drift.auditActivities).go();
     notifyTableChanged('audit_activities');
     return count;
   }
 
-  // ── Soft Deletes ──────────────────────────────────────────────────────────
-  Future<int> insertSoftDelete(Map<String, dynamic> sd) async {
-    final id = await drift.into(drift.softDeletes).insert(_softDeleteToCompanion(sd));
-    notifyTableChanged('soft_deletes');
-    return id;
-  }
-
-  Future<List<Map<String, dynamic>>> getSoftDeletes() async {
-    final query = drift.select(drift.softDeletes)
-      ..orderBy([(tbl) => OrderingTerm.desc(tbl.deletedAt)]);
-    final rows = await query.get();
-    return rows.map(_softDeleteEntryToMap).toList();
-  }
-
-  Stream<List<Map<String, dynamic>>> watchSoftDeletes() {
-    final query = drift.select(drift.softDeletes)
-      ..orderBy([(tbl) => OrderingTerm.desc(tbl.deletedAt)]);
-    return query.watch().map((rows) => rows.map(_softDeleteEntryToMap).toList());
-  }
-
-  Future<int> deleteSoftDelete(int id) async {
-    final rows = await (drift.delete(drift.softDeletes)..where((tbl) => tbl.id.equals(id))).go();
-    notifyTableChanged('soft_deletes');
-    return rows;
-  }
-
-
-  // ── Backup / Restore ──────────────────────────────────────────────────────
+  // ── Backup / Restore (Schema v15: 21 Lockstep Tables) ──────────────────────
   static const List<String> _allBackupTables = [
     'laptops',
     'network_devices',
@@ -1798,43 +1724,243 @@ class DatabaseHelper extends ChangeNotifier {
     'static_ips',
     'switch_patch_ports',
     'device_maintenance_logs',
-    'consumables',
-    'consumable_logs',
+    'vendor_contacts',
     'audit_activities',
-    'soft_deletes',
   ];
 
-  Future<String> exportJson() async {
+  static const Map<String, List<String>> restoreDependencyGroups = {
+    'borrow_logs': ['employees', 'mifis', 'electronics'],
+    'device_maintenance_logs': ['laptops', 'network_devices', 'printers', 'electronics', 'mifis'],
+  };
+
+  /// Exports an offline backup JSON payload containing all 21 tables,
+  /// embedded company logo image, complete theme preferences, table manifest,
+  /// and SHA-256 integrity checksum. Optionally encrypts the output with AES-256-GCM.
+  Future<String> exportJson({String? passphrase}) async {
     final prefs = await SharedPreferences.getInstance();
     final chassisJson = prefs.getString('custom_switch_patch_chassis_v1') ?? '';
 
-    final map = <String, dynamic>{
-      'version': 8,
-      'exported_at': DateTime.now().toIso8601String(),
-      'company_name': CompanyService().name,
-      'prefs': {
-        'custom_switch_patch_chassis_v1': chassisJson,
-      },
-    };
+    // Encode company logo file to base64 if present
+    String logoBase64 = '';
+    String logoExt = 'png';
+    if (CompanyService().hasLogo) {
+      final logoFile = File(CompanyService().logoPath);
+      if (logoFile.existsSync()) {
+        try {
+          final bytes = await logoFile.readAsBytes();
+          logoBase64 = base64Encode(bytes);
+          logoExt = logoFile.path.split('.').last;
+        } catch (_) {}
+      }
+    }
+
+    final tableManifest = <String, int>{};
+    final tableData = <String, dynamic>{};
 
     for (final t in _allBackupTables) {
-      map[t] = await query(t);
+      final rows = await query(t);
+      tableData[t] = rows;
+      tableManifest[t] = rows.length;
     }
-    return jsonEncode(map);
+
+    final payload = <String, dynamic>{
+      'version': AppDatabase.currentVersion,
+      'app_version': '1.1.0+5',
+      'exported_at': DateTime.now().toIso8601String(),
+      'platform': Platform.operatingSystem,
+      'company_name': CompanyService().name,
+      'manifest': tableManifest,
+      'prefs': {
+        'custom_switch_patch_chassis_v1': chassisJson,
+        'company_logo_base64': logoBase64,
+        'company_logo_ext': logoExt,
+        'themeMode': ThemeService().themeMode,
+        'themeSeed': ThemeService().themeSeed,
+        'appFont': ThemeService().appFont,
+        'amoledSurfaces': ThemeService().amoledSurfaces,
+        'dynamicColorEnabled': ThemeService().dynamicColorEnabled,
+      },
+      ...tableData,
+    };
+
+    // Calculate integrity checksum over canonical json content
+    final rawJson = jsonEncode(payload);
+    final sha256 = BackupCryptoService().computeSha256(rawJson);
+    payload['sha256'] = sha256;
+
+    final finalPlaintext = jsonEncode(payload);
+
+    if (passphrase != null && passphrase.trim().isNotEmpty) {
+      return await BackupCryptoService().encryptBackup(finalPlaintext, passphrase.trim());
+    }
+
+    return finalPlaintext;
   }
 
-  Future<void> importJson(String jsonStr) async {
-    final data = jsonDecode(jsonStr) as Map<String, dynamic>;
+  /// Inspects and validates a backup string (plaintext JSON or AES-encrypted envelope)
+  /// without mutating the database, returning a structured summary.
+  Future<BackupManifestSummary> inspectBackupJson(String rawJson, {String? passphrase}) async {
+    final crypto = BackupCryptoService();
+    final isEnc = crypto.isEncryptedBackup(rawJson);
+    String jsonStr = rawJson;
+
+    if (isEnc) {
+      if (passphrase == null || passphrase.isEmpty) {
+        return const BackupManifestSummary(
+          schemaVersion: 0,
+          appVersion: '',
+          exportedAt: '',
+          companyName: '',
+          tableCounts: {},
+          hasLogo: false,
+          hasThemePrefs: false,
+          isEncrypted: true,
+          isValid: false,
+          validationError: 'Backup is encrypted. Passphrase required.',
+        );
+      }
+      try {
+        jsonStr = await crypto.decryptBackup(rawJson, passphrase);
+      } catch (e) {
+        return const BackupManifestSummary(
+          schemaVersion: 0,
+          appVersion: '',
+          exportedAt: '',
+          companyName: '',
+          tableCounts: {},
+          hasLogo: false,
+          hasThemePrefs: false,
+          isEncrypted: true,
+          isValid: false,
+          validationError: 'Incorrect password or corrupted encrypted backup.',
+        );
+      }
+    }
+
+    try {
+      final decoded = jsonDecode(jsonStr);
+      if (decoded is! Map<String, dynamic> || decoded.isEmpty) {
+        return const BackupManifestSummary(
+          schemaVersion: 0,
+          appVersion: '',
+          exportedAt: '',
+          companyName: '',
+          tableCounts: {},
+          hasLogo: false,
+          hasThemePrefs: false,
+          isEncrypted: false,
+          isValid: false,
+          validationError: 'Invalid or empty backup file format.',
+        );
+      }
+
+      final version = (decoded['version'] as num?)?.toInt() ?? 0;
+      if (version > AppDatabase.currentVersion) {
+        return BackupManifestSummary(
+          schemaVersion: version,
+          appVersion: decoded['app_version']?.toString() ?? '',
+          exportedAt: decoded['exported_at']?.toString() ?? '',
+          companyName: decoded['company_name']?.toString() ?? '',
+          tableCounts: {},
+          hasLogo: false,
+          hasThemePrefs: false,
+          isEncrypted: isEnc,
+          isValid: false,
+          validationError: 'Incompatible backup created by a newer version (Schema v$version).',
+        );
+      }
+
+      // Verify SHA-256 digest if present
+      if (decoded.containsKey('sha256')) {
+        final expectedHash = decoded['sha256'] as String;
+        final payloadWithoutHash = Map<String, dynamic>.from(decoded)..remove('sha256');
+        final calculated = crypto.computeSha256(jsonEncode(payloadWithoutHash));
+        if (calculated.toLowerCase() != expectedHash.toLowerCase()) {
+          return BackupManifestSummary(
+            schemaVersion: version,
+            appVersion: decoded['app_version']?.toString() ?? '',
+            exportedAt: decoded['exported_at']?.toString() ?? '',
+            companyName: decoded['company_name']?.toString() ?? '',
+            tableCounts: {},
+            hasLogo: false,
+            hasThemePrefs: false,
+            isEncrypted: isEnc,
+            isValid: false,
+            validationError: 'Backup integrity checksum failed. File may be corrupted or modified.',
+          );
+        }
+      }
+
+      final tableCounts = <String, int>{};
+      for (final t in _allBackupTables) {
+        if (decoded.containsKey(t) && decoded[t] is List) {
+          tableCounts[t] = (decoded[t] as List).length;
+        }
+      }
+
+      final prefs = (decoded['prefs'] is Map) ? decoded['prefs'] as Map : {};
+      final hasLogo = (prefs['company_logo_base64'] as String?)?.isNotEmpty ?? false;
+      final hasThemePrefs = prefs.containsKey('themeMode');
+
+      return BackupManifestSummary(
+        schemaVersion: version,
+        appVersion: decoded['app_version']?.toString() ?? '',
+        exportedAt: decoded['exported_at']?.toString() ?? '',
+        companyName: decoded['company_name']?.toString() ?? '',
+        tableCounts: tableCounts,
+        hasLogo: hasLogo,
+        hasThemePrefs: hasThemePrefs,
+        isEncrypted: isEnc,
+        isValid: true,
+      );
+    } catch (e) {
+      return BackupManifestSummary(
+        schemaVersion: 0,
+        appVersion: '',
+        exportedAt: '',
+        companyName: '',
+        tableCounts: {},
+        hasLogo: false,
+        hasThemePrefs: false,
+        isEncrypted: isEnc,
+        isValid: false,
+        validationError: 'Failed to parse backup content: $e',
+      );
+    }
+  }
+
+  /// Restores all or selectively chosen tables from a backup string with atomic transaction rollback.
+  Future<void> importJson(String jsonStr, {String? passphrase}) async {
+    await importJsonSelective(jsonStr, _allBackupTables.toSet(), passphrase: passphrase);
+  }
+
+  /// Restores only [selectedTables] from a verified backup string.
+  Future<void> importJsonSelective(
+    String jsonStr,
+    Set<String> selectedTables, {
+    String? passphrase,
+  }) async {
+    final summary = await inspectBackupJson(jsonStr, passphrase: passphrase);
+    if (!summary.isValid) {
+      throw StateError(summary.validationError ?? 'Invalid backup file.');
+    }
+
+    String plaintext = jsonStr;
+    if (summary.isEncrypted) {
+      plaintext = await BackupCryptoService().decryptBackup(jsonStr, passphrase!);
+    }
+
+    final data = jsonDecode(plaintext) as Map<String, dynamic>;
+
     await batchScope(() async {
       await drift.transaction(() async {
-        for (final t in _allBackupTables) {
+        for (final t in selectedTables) {
           if (!data.containsKey(t) && !data.containsKey(t.toLowerCase())) continue;
           final dynamic rawList = data[t] ?? data[t.toLowerCase()];
           if (rawList is! List) continue;
 
           await deleteTable(t);
 
-          // Get column allowlist from SQLite schema
           final pragma = await drift.customSelect('PRAGMA table_info($t)').get();
           final allowedCols = pragma.map((r) => r.data['name'] as String).toSet();
 
@@ -1855,6 +1981,7 @@ class DatabaseHelper extends ChangeNotifier {
       });
     });
 
+    // Restore branding if present
     if (data.containsKey('company_name') && data['company_name'] != null) {
       final name = data['company_name'].toString();
       if (name.isNotEmpty) {
@@ -1862,9 +1989,11 @@ class DatabaseHelper extends ChangeNotifier {
       }
     }
 
+    // Restore preferences, logo, and theme tokens if present
     if (data.containsKey('prefs') && data['prefs'] is Map) {
       final prefsMap = data['prefs'] as Map;
       final prefs = await SharedPreferences.getInstance();
+
       if (prefsMap.containsKey('custom_switch_patch_chassis_v1') &&
           prefsMap['custom_switch_patch_chassis_v1'] != null) {
         await prefs.setString(
@@ -1872,11 +2001,34 @@ class DatabaseHelper extends ChangeNotifier {
           prefsMap['custom_switch_patch_chassis_v1'].toString(),
         );
       }
+
+      // Restore base64 logo to local storage
+      final logoBase64 = prefsMap['company_logo_base64']?.toString();
+      if (logoBase64 != null && logoBase64.isNotEmpty) {
+        try {
+          final ext = prefsMap['company_logo_ext']?.toString() ?? 'png';
+          final docsDir = await getApplicationDocumentsDirectory();
+          final destFile = File('${docsDir.path}/company_logo.$ext');
+          await destFile.writeAsBytes(base64Decode(logoBase64));
+          await CompanyService().setCompanyLogo(destFile.path);
+        } catch (_) {}
+      }
+
+      // Restore theme settings
+      final theme = ThemeService();
+      if (prefsMap.containsKey('themeMode')) await theme.updateSetting('themeMode', prefsMap['themeMode']);
+      if (prefsMap.containsKey('themeSeed')) await theme.updateSetting('themeSeed', prefsMap['themeSeed']);
+      if (prefsMap.containsKey('appFont')) await theme.updateSetting('appFont', prefsMap['appFont']);
+      if (prefsMap.containsKey('amoledSurfaces')) await theme.updateSetting('amoledSurfaces', prefsMap['amoledSurfaces'] == true);
+      if (prefsMap.containsKey('dynamicColorEnabled')) await theme.updateSetting('dynamicColorEnabled', prefsMap['dynamicColorEnabled'] == true);
     }
 
     await syncDeviceStatuses();
     final activeLogs = await getBorrowLogs();
     await NotificationService().reconcileReminders(activeLogs);
+
+    // Foreign key integrity check
+    await drift.customSelect('PRAGMA foreign_key_check').get();
   }
 
   Future<Map<String, int>> getCounts() async {
@@ -1899,7 +2051,8 @@ class DatabaseHelper extends ChangeNotifier {
         (SELECT COUNT(*) FROM access_points) AS access_points,
         (SELECT COUNT(*) FROM wifi_networks) AS wifi_networks,
         (SELECT COUNT(*) FROM account_passwords) AS account_passwords,
-        (SELECT COUNT(*) FROM other_devices) AS other_devices
+        (SELECT COUNT(*) FROM other_devices) AS other_devices,
+        (SELECT COUNT(*) FROM vendor_contacts) AS vendor_contacts
     ''').getSingle();
 
     return res.data.map((key, value) => MapEntry(key, value as int? ?? 0));
@@ -1925,7 +2078,8 @@ class DatabaseHelper extends ChangeNotifier {
         (SELECT COUNT(*) FROM access_points) AS access_points,
         (SELECT COUNT(*) FROM wifi_networks) AS wifi_networks,
         (SELECT COUNT(*) FROM account_passwords) AS account_passwords,
-        (SELECT COUNT(*) FROM other_devices) AS other_devices
+        (SELECT COUNT(*) FROM other_devices) AS other_devices,
+        (SELECT COUNT(*) FROM vendor_contacts) AS vendor_contacts
     ''', readsFrom: {
       drift.laptops,
       drift.networkDevices,
@@ -1943,6 +2097,7 @@ class DatabaseHelper extends ChangeNotifier {
       drift.wifiNetworks,
       drift.accountPasswords,
       drift.otherDevices,
+      drift.vendorContacts,
     }).watchSingle().map((row) => row.data.map((key, value) => MapEntry(key, value as int? ?? 0)));
   }
 }

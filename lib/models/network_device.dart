@@ -10,6 +10,7 @@ class NetworkDevice {
   final String gateway;
   final String adminPassword;
   final String status;
+  final String notes;
 
   const NetworkDevice({
     this.id,
@@ -23,6 +24,7 @@ class NetworkDevice {
     this.gateway = '',
     this.adminPassword = '',
     this.status = 'Available',
+    this.notes = '',
   });
 
   Map<String, dynamic> toMap() => {
@@ -37,6 +39,7 @@ class NetworkDevice {
     'gateway': gateway,
     'admin_password': adminPassword,
     'status': status,
+    'notes': notes,
   };
 
   factory NetworkDevice.fromMap(Map<String, dynamic> m) => NetworkDevice(
@@ -51,12 +54,13 @@ class NetworkDevice {
     gateway: (m['gateway'] ?? '') as String,
     adminPassword: (m['admin_password'] ?? '') as String,
     status: (m['status'] ?? 'Available') as String,
+    notes: (m['notes'] ?? '') as String,
   );
 
   NetworkDevice copyWith({
     int? id, String? deviceNumber, String? phoneNumber, String? deviceLocation,
     String? model, String? serviceProvider, String? wifiName, String? wifiPassword,
-    String? gateway, String? adminPassword, String? status,
+    String? gateway, String? adminPassword, String? status, String? notes,
   }) => NetworkDevice(
     id: id ?? this.id,
     deviceNumber: deviceNumber ?? this.deviceNumber,
@@ -69,5 +73,6 @@ class NetworkDevice {
     gateway: gateway ?? this.gateway,
     adminPassword: adminPassword ?? this.adminPassword,
     status: status ?? this.status,
+    notes: notes ?? this.notes,
   );
 }
