@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/theme_service.dart';
+import '../services/auto_backup_service.dart';
 import '../utils/haptics.dart';
 import '../widgets/rounded_square_border.dart';
 import 'dashboard/dashboard_screen.dart';
@@ -38,6 +39,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       // Refresh UI on day/date rollover or return from background
+      AutoBackupService().runIfDue();
       setState(() {});
     }
   }

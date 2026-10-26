@@ -7,6 +7,7 @@ import 'package:quick_actions/quick_actions.dart';
 import 'services/theme_service.dart';
 import 'services/company_service.dart';
 import 'services/notification_service.dart';
+import 'services/auto_backup_service.dart';
 import 'database/database_helper.dart';
 import 'theme/app_theme.dart';
 import 'screens/home_screen.dart';
@@ -70,6 +71,7 @@ void main() async {
   ]);
 
   _cleanupOldTempFiles();
+  AutoBackupService().runIfDue();
 
   const QuickActions quickActions = QuickActions();
   quickActions.initialize((shortcutType) {

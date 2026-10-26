@@ -19,6 +19,7 @@ import 'wifi_networks/wifi_networks_screen.dart';
 import 'accounts_passwords/accounts_passwords_screen.dart';
 import 'vendor_contacts/vendor_contacts_screen.dart';
 import 'network_tools/unit_converter_screen.dart';
+import 'search/global_search_screen.dart';
 import 'package:itbox/widgets/common_widgets.dart';
 
 class _MoreItem {
@@ -155,6 +156,13 @@ class MoreScreen extends StatelessWidget {
       const _MoreSection(
         title: 'TOOLS & EXPORTS',
         items: [
+          _MoreItem(
+            icon: Icons.search_rounded,
+            label: 'Global Search',
+            sub: 'Search all 21 tables & assets',
+            color: Color(0xFF6366F1),
+            screen: GlobalSearchScreen(),
+          ),
           _MoreItem(
             icon: Icons.qr_code_scanner_rounded,
             label: 'Scan Barcode / QR',

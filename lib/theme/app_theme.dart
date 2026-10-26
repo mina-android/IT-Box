@@ -27,6 +27,7 @@ class AppColors {
   static const Color poor = Color(0xFFEF4444);       // Coral
   static const Color borrowed = Color(0xFFF59E0B);   // Amber
   static const Color available = Color(0xFF10B981);  // Emerald
+  static const Color laptopColor = Color(0xFF2E7D32); // Forest Green
   static const Color networkColor = Color(0xFF8B5CF6); // Electric Violet
   static const Color printerColor = Color(0xFF06B6D4); // Cyan
   static const Color electronicColor = Color(0xFF6366F1); // Indigo
