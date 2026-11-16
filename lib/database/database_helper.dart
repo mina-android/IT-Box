@@ -77,6 +77,72 @@ class DatabaseHelper extends ChangeNotifier {
   bool _batchNotification = false;
   final Set<String> _dirtyTables = {};
   Timer? _debounceTimer;
+  final StreamController<void> _dbSwitchController = StreamController<void>.broadcast();
+
+  Stream<T> _watchSwitchable<T>(Stream<T> Function() streamFactory) {
+    late StreamController<T> controller;
+    StreamSubscription<T>? innerSub;
+    StreamSubscription<void>? switchSub;
+
+    void attach() {
+      innerSub?.cancel();
+      innerSub = streamFactory().listen(
+        (data) {
+          if (!controller.isClosed) {
+            controller.add(data);
+          }
+        },
+        onError: (Object err, StackTrace st) {
+          if (!controller.isClosed) {
+            controller.addError(err, st);
+          }
+        },
+      );
+    }
+
+    controller = StreamController<T>(
+      onListen: () {
+        attach();
+        switchSub = _dbSwitchController.stream.listen((_) => attach());
+      },
+      onCancel: () async {
+        await innerSub?.cancel();
+        await switchSub?.cancel();
+      },
+    );
+    return controller.stream;
+  }
+
+  /// Called after switching the active organization database instance.
+  /// Re-binds all active watch*() streams and notifies every table listener without restart.
+  Future<void> onDatabaseSwitched() async {
+    await syncDeviceStatuses();
+    _dbSwitchController.add(null);
+    for (final notifier in _tableNotifiers.values) {
+      notifier.notify();
+    }
+    notifyListeners();
+  }
+
+  /// Converts all stored financial amounts across expenses, bills, subscriptions,
+  /// and maintenance logs by [factor] inside an atomic transaction.
+  Future<void> convertAllFinancialAmounts(double factor) async {
+    if (factor <= 0 || factor == 1.0) {
+      return;
+    }
+    await drift.transaction(() async {
+      await drift.customStatement('UPDATE expenses SET price = ROUND(price * ?, 2)', [factor]);
+      await drift.customStatement('UPDATE bills SET price = ROUND(price * ?, 2)', [factor]);
+      await drift.customStatement('UPDATE subscriptions SET price = ROUND(price * ?, 2)', [factor]);
+      await drift.customStatement('UPDATE device_maintenance_logs SET cost = ROUND(cost * ?, 2)', [factor]);
+    });
+    notifyTableChanged('expenses');
+    notifyTableChanged('bills');
+    notifyTableChanged('subscriptions');
+    notifyTableChanged('device_maintenance_logs');
+    _dbSwitchController.add(null);
+    notifyListeners();
+  }
 
   void notifyTableChanged(String table) {
     _dirtyTables.add(table);
@@ -633,9 +699,11 @@ class DatabaseHelper extends ChangeNotifier {
   }
 
   Stream<List<Laptop>> watchLaptops() {
-    final query = drift.select(drift.laptops)
-      ..orderBy([(tbl) => OrderingTerm.asc(tbl.laptopNumber)]);
-    return query.watch().map((rows) => rows.map(_laptopFromEntry).toList());
+    return _watchSwitchable(() {
+      final query = drift.select(drift.laptops)
+        ..orderBy([(tbl) => OrderingTerm.asc(tbl.laptopNumber)]);
+      return query.watch().map((rows) => rows.map(_laptopFromEntry).toList());
+    });
   }
 
   Future<int> updateLaptop(Laptop l) async {
@@ -666,9 +734,11 @@ class DatabaseHelper extends ChangeNotifier {
   }
 
   Stream<List<NetworkDevice>> watchNetworkDevices() {
-    final query = drift.select(drift.networkDevices)
-      ..orderBy([(tbl) => OrderingTerm.asc(tbl.deviceNumber)]);
-    return query.watch().map((rows) => rows.map(_networkDeviceFromEntry).toList());
+    return _watchSwitchable(() {
+      final query = drift.select(drift.networkDevices)
+        ..orderBy([(tbl) => OrderingTerm.asc(tbl.deviceNumber)]);
+      return query.watch().map((rows) => rows.map(_networkDeviceFromEntry).toList());
+    });
   }
 
   Future<int> updateNetworkDevice(NetworkDevice d) async {
@@ -733,9 +803,11 @@ class DatabaseHelper extends ChangeNotifier {
   }
 
   Stream<List<Electronic>> watchElectronics() {
-    final query = drift.select(drift.electronics)
-      ..orderBy([(tbl) => OrderingTerm.asc(tbl.deviceNumber)]);
-    return query.watch().map((rows) => rows.map(_electronicFromEntry).toList());
+    return _watchSwitchable(() {
+      final query = drift.select(drift.electronics)
+        ..orderBy([(tbl) => OrderingTerm.asc(tbl.deviceNumber)]);
+      return query.watch().map((rows) => rows.map(_electronicFromEntry).toList());
+    });
   }
 
   Future<int> updateElectronic(Electronic e) async {
@@ -842,13 +914,15 @@ class DatabaseHelper extends ChangeNotifier {
   }
 
   Stream<List<Employee>> watchEmployees({String? search}) {
-    final query = drift.select(drift.employees);
-    if (search != null && search.trim().isNotEmpty) {
-      final term = '%${search.trim().toLowerCase()}%';
-      query.where((tbl) => tbl.name.lower().like(term) | tbl.phoneNumber.like(term));
-    }
-    query.orderBy([(tbl) => OrderingTerm.asc(tbl.name)]);
-    return query.watch().map((rows) => rows.map(_employeeFromEntry).toList());
+    return _watchSwitchable(() {
+      final query = drift.select(drift.employees);
+      if (search != null && search.trim().isNotEmpty) {
+        final term = '%${search.trim().toLowerCase()}%';
+        query.where((tbl) => tbl.name.lower().like(term) | tbl.phoneNumber.like(term));
+      }
+      query.orderBy([(tbl) => OrderingTerm.asc(tbl.name)]);
+      return query.watch().map((rows) => rows.map(_employeeFromEntry).toList());
+    });
   }
 
   /// Updates an employee and cascades any name changes to laptops.user,
@@ -930,9 +1004,11 @@ class DatabaseHelper extends ChangeNotifier {
   }
 
   Stream<List<MiFi>> watchMiFis() {
-    final query = drift.select(drift.mifis)
-      ..orderBy([(tbl) => OrderingTerm.asc(tbl.deviceNumber)]);
-    return query.watch().map((rows) => rows.map(_mifiFromEntry).toList());
+    return _watchSwitchable(() {
+      final query = drift.select(drift.mifis)
+        ..orderBy([(tbl) => OrderingTerm.asc(tbl.deviceNumber)]);
+      return query.watch().map((rows) => rows.map(_mifiFromEntry).toList());
+    });
   }
 
   Future<int> updateMiFi(MiFi m) async {
@@ -1062,15 +1138,17 @@ class DatabaseHelper extends ChangeNotifier {
   }
 
   Stream<List<BorrowLog>> watchBorrowLogs({bool? activeOnly}) {
-    final query = drift.select(drift.borrowLogs);
-    if (activeOnly == true) {
-      query.where((tbl) => tbl.isReturned.equals(0));
-    }
-    query.orderBy([
-      (tbl) => OrderingTerm.asc(tbl.isReturned),
-      (tbl) => OrderingTerm.desc(tbl.id),
-    ]);
-    return query.watch().map((rows) => rows.map(_borrowLogFromEntry).toList());
+    return _watchSwitchable(() {
+      final query = drift.select(drift.borrowLogs);
+      if (activeOnly == true) {
+        query.where((tbl) => tbl.isReturned.equals(0));
+      }
+      query.orderBy([
+        (tbl) => OrderingTerm.asc(tbl.isReturned),
+        (tbl) => OrderingTerm.desc(tbl.id),
+      ]);
+      return query.watch().map((rows) => rows.map(_borrowLogFromEntry).toList());
+    });
   }
 
   Future<void> markReturned(
@@ -1259,17 +1337,19 @@ class DatabaseHelper extends ChangeNotifier {
   }
 
   Stream<double> watchTotalExpenses({int? year, int? month}) {
-    final sumExp = drift.expenses.price.sum();
-    final query = drift.selectOnly(drift.expenses)..addColumns([sumExp]);
-    if (year != null) {
-      if (month != null) {
-        final prefix = '$year-${month.toString().padLeft(2, '0')}';
-        query.where(drift.expenses.date.like('$prefix%'));
-      } else {
-        query.where(drift.expenses.date.like('$year%'));
+    return _watchSwitchable(() {
+      final sumExp = drift.expenses.price.sum();
+      final query = drift.selectOnly(drift.expenses)..addColumns([sumExp]);
+      if (year != null) {
+        if (month != null) {
+          final prefix = '$year-${month.toString().padLeft(2, '0')}';
+          query.where(drift.expenses.date.like('$prefix%'));
+        } else {
+          query.where(drift.expenses.date.like('$year%'));
+        }
       }
-    }
-    return query.watchSingle().map((row) => row.read(sumExp) ?? 0.0);
+      return query.watchSingle().map((row) => row.read(sumExp) ?? 0.0);
+    });
   }
 
   // ── Bills ─────────────────────────────────────────────────────────────────
@@ -1307,9 +1387,11 @@ class DatabaseHelper extends ChangeNotifier {
   }
 
   Stream<double> watchTotalBills() {
-    final sumExp = drift.bills.price.sum();
-    final query = drift.selectOnly(drift.bills)..addColumns([sumExp]);
-    return query.watchSingle().map((row) => row.read(sumExp) ?? 0.0);
+    return _watchSwitchable(() {
+      final sumExp = drift.bills.price.sum();
+      final query = drift.selectOnly(drift.bills)..addColumns([sumExp]);
+      return query.watchSingle().map((row) => row.read(sumExp) ?? 0.0);
+    });
   }
 
   // ── Email Accounts ────────────────────────────────────────────────────────
@@ -1365,20 +1447,22 @@ class DatabaseHelper extends ChangeNotifier {
   }
 
   Stream<List<LogEntry>> watchLogEntries({String? stateFilter, int? year, int? month}) {
-    final query = drift.select(drift.logEntries);
-    if (stateFilter != null && stateFilter != 'All') {
-      query.where((tbl) => tbl.state.lower().equals(stateFilter.toLowerCase()));
-    }
-    if (year != null) {
-      if (month != null) {
-        final prefix = '$year-${month.toString().padLeft(2, '0')}';
-        query.where((tbl) => tbl.date.like('$prefix%'));
-      } else {
-        query.where((tbl) => tbl.date.like('$year%'));
+    return _watchSwitchable(() {
+      final query = drift.select(drift.logEntries);
+      if (stateFilter != null && stateFilter != 'All') {
+        query.where((tbl) => tbl.state.lower().equals(stateFilter.toLowerCase()));
       }
-    }
-    query.orderBy([(tbl) => OrderingTerm.desc(tbl.date), (tbl) => OrderingTerm.desc(tbl.id)]);
-    return query.watch().map((rows) => rows.map(_logEntryFromEntry).toList());
+      if (year != null) {
+        if (month != null) {
+          final prefix = '$year-${month.toString().padLeft(2, '0')}';
+          query.where((tbl) => tbl.date.like('$prefix%'));
+        } else {
+          query.where((tbl) => tbl.date.like('$year%'));
+        }
+      }
+      query.orderBy([(tbl) => OrderingTerm.desc(tbl.date), (tbl) => OrderingTerm.desc(tbl.id)]);
+      return query.watch().map((rows) => rows.map(_logEntryFromEntry).toList());
+    });
   }
 
   Future<List<LogEntry>> getLogEntriesByYear(int year) async {
@@ -2067,45 +2151,47 @@ class DatabaseHelper extends ChangeNotifier {
   }
 
   Stream<Map<String, int>> watchCounts() {
-    return drift.customSelect('''
-      SELECT
-        (SELECT COUNT(*) FROM laptops) AS laptops,
-        (SELECT COUNT(*) FROM network_devices) AS network_devices,
-        (SELECT COUNT(*) FROM printers) AS printers,
-        (SELECT COUNT(*) FROM electronics) AS electronics,
-        (SELECT COUNT(*) FROM employees) AS employees,
-        (SELECT COUNT(*) FROM mifis) AS mifis,
-        (SELECT COUNT(*) FROM expenses) AS expenses,
-        (SELECT COUNT(*) FROM bills) AS bills,
-        (SELECT COUNT(*) FROM email_accounts) AS email_accounts,
-        (SELECT COUNT(*) FROM borrow_logs WHERE is_returned=0) AS active_borrows,
-        (SELECT COUNT(*) FROM borrow_logs WHERE is_returned=0 AND due_date IS NOT NULL AND due_date != '' AND due_date < date('now')) AS overdue_borrows,
-        (SELECT COUNT(*) FROM log_entries) AS log_entries,
-        (SELECT COUNT(*) FROM log_entries WHERE state='Open') AS open_log_entries,
-        (SELECT COUNT(*) FROM subscriptions) AS subscriptions,
-        (SELECT COUNT(*) FROM access_points) AS access_points,
-        (SELECT COUNT(*) FROM wifi_networks) AS wifi_networks,
-        (SELECT COUNT(*) FROM account_passwords) AS account_passwords,
-        (SELECT COUNT(*) FROM other_devices) AS other_devices,
-        (SELECT COUNT(*) FROM vendor_contacts) AS vendor_contacts
-    ''', readsFrom: {
-      drift.laptops,
-      drift.networkDevices,
-      drift.printers,
-      drift.electronics,
-      drift.employees,
-      drift.mifis,
-      drift.expenses,
-      drift.bills,
-      drift.emailAccounts,
-      drift.borrowLogs,
-      drift.logEntries,
-      drift.subscriptions,
-      drift.accessPoints,
-      drift.wifiNetworks,
-      drift.accountPasswords,
-      drift.otherDevices,
-      drift.vendorContacts,
-    }).watchSingle().map((row) => row.data.map((key, value) => MapEntry(key, value as int? ?? 0)));
+    return _watchSwitchable(() {
+      return drift.customSelect('''
+        SELECT
+          (SELECT COUNT(*) FROM laptops) AS laptops,
+          (SELECT COUNT(*) FROM network_devices) AS network_devices,
+          (SELECT COUNT(*) FROM printers) AS printers,
+          (SELECT COUNT(*) FROM electronics) AS electronics,
+          (SELECT COUNT(*) FROM employees) AS employees,
+          (SELECT COUNT(*) FROM mifis) AS mifis,
+          (SELECT COUNT(*) FROM expenses) AS expenses,
+          (SELECT COUNT(*) FROM bills) AS bills,
+          (SELECT COUNT(*) FROM email_accounts) AS email_accounts,
+          (SELECT COUNT(*) FROM borrow_logs WHERE is_returned=0) AS active_borrows,
+          (SELECT COUNT(*) FROM borrow_logs WHERE is_returned=0 AND due_date IS NOT NULL AND due_date != '' AND due_date < date('now')) AS overdue_borrows,
+          (SELECT COUNT(*) FROM log_entries) AS log_entries,
+          (SELECT COUNT(*) FROM log_entries WHERE state='Open') AS open_log_entries,
+          (SELECT COUNT(*) FROM subscriptions) AS subscriptions,
+          (SELECT COUNT(*) FROM access_points) AS access_points,
+          (SELECT COUNT(*) FROM wifi_networks) AS wifi_networks,
+          (SELECT COUNT(*) FROM account_passwords) AS account_passwords,
+          (SELECT COUNT(*) FROM other_devices) AS other_devices,
+          (SELECT COUNT(*) FROM vendor_contacts) AS vendor_contacts
+      ''', readsFrom: {
+        drift.laptops,
+        drift.networkDevices,
+        drift.printers,
+        drift.electronics,
+        drift.employees,
+        drift.mifis,
+        drift.expenses,
+        drift.bills,
+        drift.emailAccounts,
+        drift.borrowLogs,
+        drift.logEntries,
+        drift.subscriptions,
+        drift.accessPoints,
+        drift.wifiNetworks,
+        drift.accountPasswords,
+        drift.otherDevices,
+        drift.vendorContacts,
+      }).watchSingle().map((row) => row.data.map((key, value) => MapEntry(key, value as int? ?? 0)));
+    });
   }
 }

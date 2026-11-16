@@ -270,39 +270,9 @@ class _LogFormScreenState extends State<LogFormScreen> {
   Widget build(BuildContext context) {
     final isEdit = widget.entry != null;
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
     return Scaffold(
-      appBar: AppBar(
-        title: Text(isEdit ? 'Edit Ticket' : 'New Support Ticket'),
-      ),
-      bottomNavigationBar: SafeArea(
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-          decoration: BoxDecoration(
-            color: isDark ? AppColors.darkCard : Colors.white,
-            border: Border(top: BorderSide(color: isDark ? AppColors.darkBorder : AppColors.lightBorder)),
-          ),
-          child: SizedBox(
-            height: 52,
-            child: ElevatedButton.icon(
-              onPressed: _saving ? null : _save,
-              icon: _saving
-                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                  : const Icon(Icons.check_circle_outline, size: 20),
-              label: Text(
-                isEdit ? 'Save Ticket Changes' : 'Submit Support Ticket',
-                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _logColor,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                elevation: 0,
-              ),
-            ),
-          ),
-        ),
+      appBar: FintechAppBar(
+        title: isEdit ? 'Edit Ticket' : 'New Support Ticket',
       ),
       body: ShakeWidget(
         key: _shakeKey,
@@ -438,6 +408,24 @@ class _LogFormScreenState extends State<LogFormScreen> {
                     ),
                   ),
                 ],
+              ),
+              const SizedBox(height: 28),
+              ElevatedButton.icon(
+                onPressed: _saving ? null : _save,
+                icon: _saving
+                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : const Icon(Icons.check_circle_outline, size: 20),
+                label: Text(
+                  isEdit ? 'Save Ticket Changes' : 'Submit Support Ticket',
+                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _logColor,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size.fromHeight(52),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  elevation: 0,
+                ),
               ),
             ],
           ),

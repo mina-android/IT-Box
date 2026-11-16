@@ -77,7 +77,7 @@ class _CidrCalculatorScreenState extends State<CidrCalculatorScreen> {
             FintechGroupedCard(
               title: 'IP & Prefix Configuration',
               children: [
-                TextFormField(
+                AppTextField(
                   controller: _ipController,
                   decoration: const InputDecoration(
                     labelText: 'IP Address',
@@ -85,8 +85,6 @@ class _CidrCalculatorScreenState extends State<CidrCalculatorScreen> {
                     prefixIcon: Icon(Icons.lan_rounded),
                   ),
                   keyboardType: TextInputType.datetime,
-                  enableSuggestions: false,
-                  autocorrect: false,
                   onChanged: (_) => _calculate(),
                 ),
                 const SizedBox(height: 16),

@@ -388,9 +388,9 @@ ThemeData _base(ColorScheme cs, String appFont, {bool isAmoled = false}) {
           ? const Color(0xFF131318)
           : cs.surfaceContainerHighest.withValues(alpha: 0.3),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         borderSide: BorderSide(
           color: isAmoled
               ? const Color(0xFF2E2E3C)
@@ -399,16 +399,30 @@ ThemeData _base(ColorScheme cs, String appFont, {bool isAmoled = false}) {
         ),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         borderSide: BorderSide(color: cs.primary, width: 2),
       ),
       errorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         borderSide: BorderSide(color: cs.error, width: 1.5),
       ),
       focusedErrorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         borderSide: BorderSide(color: cs.error, width: 2),
+      ),
+    ),
+    popupMenuTheme: PopupMenuThemeData(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      color: isAmoled
+          ? const Color(0xFF1B1B22)
+          : (cs.brightness == Brightness.dark ? const Color(0xFF22222E) : cs.surfaceContainerHighest),
+      elevation: 6,
+    ),
+    dropdownMenuTheme: DropdownMenuThemeData(
+      menuStyle: MenuStyle(
+        shape: WidgetStatePropertyAll(
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        ),
       ),
     ),
     dividerTheme: DividerThemeData(

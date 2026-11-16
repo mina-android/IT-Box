@@ -4,6 +4,7 @@ import 'package:excel/excel.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'currency_service.dart';
 
 class ExcelService {
   static final _dateFmt  = DateFormat('dd MMM yyyy');
@@ -92,7 +93,7 @@ class ExcelService {
     final sheet = excel['Expenses'];
     excel.setDefaultSheet('Expenses');
 
-    final headers = ['Date', 'Item', 'Price (EGP)', 'Details'];
+    final headers = ['Date', 'Item', 'Price (${CurrencyService().currency})', 'Details'];
     final rows = expenses.map((e) {
       String dateStr = e['date'] as String? ?? '';
       try { dateStr = _dateFmt.format(DateTime.parse(dateStr)); } catch (_) {}

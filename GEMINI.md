@@ -70,9 +70,11 @@ This document contains critical architectural decisions, engineering standards, 
   19. `static_ips` (IPAM registry)
   20. `switch_patch_ports` (24/48 port matrix)
   21. `vendor_contacts` (ISP, hardware, and software vendor support runbook with SLA tiers)
-- **Multi-Tenant Workspace Isolation**:
-  - `WorkspaceService` dynamically switches the active database instance via `AppDatabase.switchDatabaseInstance(dbName)`.
-  - Supports separate isolated databases (e.g. `itbox_workspace_<id>.db`) per office or client branch.
+- **Multi-Organization Isolation**:
+  - `CompanyService` (`OrganizationProfile`) dynamically switches the active database instance via `AppDatabase.switchDatabaseInstance(dbName)` and `DatabaseHelper().onDatabaseSwitched()` (`_watchSwitchable` streams).
+  - Supports separate isolated organizations (`itbox.db` for primary, `itbox_org_<id>.db` for additional orgs) with independent names, logos, and databases, hot-swappable in Settings without app restart or data loss.
+- **Multi-Currency & Exchange Rates**:
+  - `CurrencyService` & `ExchangeRateService` (ported from Expensy) support 62 currencies, live `open.er-api.com` rates with offline fallback, and atomic ledger conversion.
 
 ---
 

@@ -99,11 +99,8 @@ class _ElectronicFormScreenState extends State<ElectronicFormScreen> {
     final isNew = widget.electronic == null;
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          isNew ? 'Add Electronic Device' : 'Edit Electronic Device',
-          style: const TextStyle(fontWeight: FontWeight.w800),
-        ),
+      appBar: FintechAppBar(
+        title: isNew ? 'Add Electronic Device' : 'Edit Electronic Device',
       ),
       body: GestureDetector(
         onTap: () => FocusScope.of(context).unfocus(),

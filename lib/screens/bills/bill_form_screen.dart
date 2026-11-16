@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../database/database_helper.dart';
 import '../../models/bill.dart';
+import '../../services/currency_service.dart';
 import '../../widgets/common_widgets.dart';
 
 const Color _billColor = Color(0xFF8B5CF6);
@@ -85,11 +86,8 @@ class _BillFormScreenState extends State<BillFormScreen> {
     final isEdit = widget.bill != null;
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          isEdit ? 'Edit Bill' : 'Add Bill',
-          style: const TextStyle(fontWeight: FontWeight.w800),
-        ),
+      appBar: FintechAppBar(
+        title: isEdit ? 'Edit Bill' : 'Add Bill',
       ),
       body: GestureDetector(
         onTap: () => FocusScope.of(context).unfocus(),
@@ -133,15 +131,15 @@ class _BillFormScreenState extends State<BillFormScreen> {
                       controller: _price,
                       keyboardType:
                           const TextInputType.numberWithOptions(decimal: true),
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         labelText: 'Recurring Amount (Price) *',
                         prefixIcon: Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 14),
+                          padding: const EdgeInsets.symmetric(horizontal: 14),
                           child: Center(
                             widthFactor: 1,
                             child: Text(
-                              'EGP',
-                              style: TextStyle(
+                              CurrencyService().currency,
+                              style: const TextStyle(
                                 fontWeight: FontWeight.w800,
                                 fontSize: 15,
                                 color: _billColor,

@@ -5,6 +5,7 @@ import 'package:fl_chart/fl_chart.dart';
 import '../../database/database_helper.dart';
 import '../../models/expense.dart';
 import '../../services/pdf_report_service.dart';
+import '../../services/currency_service.dart';
 import '../../widgets/common_widgets.dart';
 import '../../widgets/selection_bottom_bar.dart';
 import '../../theme/app_theme.dart';
@@ -335,7 +336,6 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     _load();
   }
 
-  String _fmt(double v) => NumberFormat('#,##0.00').format(v);
   String _fmtDate(String d) {
     try {
       return DateFormat('dd MMM yyyy').format(DateTime.parse(d));
@@ -552,7 +552,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                                           ),
                                         ),
                                         child: Text(
-                                          'EGP ${_fmt(monthTotal)}',
+                                          CurrencyService().format(monthTotal),
                                           style: TextStyle(
                                             fontSize: 11.5,
                                             fontWeight: FontWeight.w800,
@@ -593,7 +593,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                                               CrossAxisAlignment.end,
                                           children: [
                                             Text(
-                                              '${_fmt(e.price)} EGP',
+                                              CurrencyService().format(e.price),
                                               style: const TextStyle(
                                                 fontWeight: FontWeight.w800,
                                                 fontSize: 14,
@@ -707,7 +707,7 @@ class _SummaryCard extends StatelessWidget {
               ),
             ),
             Text(
-              'EGP Total',
+              '${CurrencyService().currency} Total',
               style: TextStyle(
                 fontSize: 10.5,
                 color: color.withValues(alpha: 0.75),
@@ -761,7 +761,7 @@ class _MonthlyChartCard extends StatelessWidget {
                 ],
               ),
               Text(
-                'Peak: EGP ${NumberFormat('#,##0').format(maxVal)}',
+                'Peak: ${CurrencyService().format(maxVal, decimalDigits: 0)}',
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
@@ -786,7 +786,7 @@ class _MonthlyChartCard extends StatelessWidget {
                         'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
                       ];
                       return BarTooltipItem(
-                        '${months[group.x.toInt()]}\nEGP ${NumberFormat('#,##0.00').format(rod.toY)}',
+                        '${months[group.x.toInt()]}\n${CurrencyService().format(rod.toY)}',
                         TextStyle(
                           color: theme.colorScheme.onInverseSurface,
                           fontWeight: FontWeight.bold,
@@ -873,7 +873,6 @@ class _ExpenseDetailSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final fmt = NumberFormat('#,##0.00', 'en_US');
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
@@ -911,7 +910,7 @@ class _ExpenseDetailSheet extends StatelessWidget {
                       ),
                       const SizedBox(height: 3),
                       Text(
-                        'EGP ${fmt.format(expense.price)}',
+                        CurrencyService().format(expense.price),
                         style: const TextStyle(
                           color: _expenseColor,
                           fontWeight: FontWeight.w900,
@@ -973,7 +972,7 @@ class _ExpenseDetailSheet extends StatelessWidget {
               ),
               DetailRow(
                 label: 'Amount Paid',
-                value: 'EGP ${fmt.format(expense.price)}',
+                value: CurrencyService().format(expense.price),
                 icon: Icons.payments_rounded,
                 copyable: true,
               ),

@@ -48,14 +48,13 @@ flowchart TD
         F5 --> I13[ActivityFeedScreen: Audit Trail]
         F5 --> I14[VendorContactsScreen: Vendor Directory]
         F5 --> I15[UnitConverterScreen: IT Unit Converter]
-        F5 --> I16[GlobalSearchScreen: Cross-Table Search]
         F5 --> I17[NetworkDiagnosticsScreen: DNS, Ping, Port Probe]
         F5 --> I18[MaintenanceCalendarScreen: Service Calendar]
     end
 
     subgraph Service_Layer ["Core Services (Singletons & Isolates)"]
         S1[ThemeService: ChangeNotifier]
-        S2[CompanyService: SharedPreferences & Logo]
+        S2[CompanyService: Multi-Organization DB & Branding]
         S3[NotificationService: Local Notifications + Timezone]
         S4[PdfReportService: pdf + share_plus]
         S5[LabelService: pdf + share_plus]
@@ -67,12 +66,13 @@ flowchart TD
         S11[ExecutiveHealthPdfService: pdf infographic]
         S12[AutoBackupService: rolling 7-snapshot background engine]
         S13[BackupCryptoService: AES-256-GCM + SHA-256]
-        S14[GlobalSearchService: cross-table async search]
+        S14[GlobalSearchService: cross-table async search on Home]
         S15[NetworkDiagnosticsService: DNS, TCP port prober, HTTP speed]
         S16[TopologyPdfService: multi-page vector network diagram]
         S17[ConfigParserService: Cisco IOS parser]
-        S18[WorkspaceService: multi-tenant SQLite database switcher]
-        S19[AuditExportService: CSV & PDF audit trail exporter]
+        S18[CurrencyService: 62 currencies & picker]
+        S19[ExchangeRateService: open.er-api & offline fallback]
+        S20[AuditExportService: CSV & PDF audit trail exporter]
     end
 
     subgraph Persistence_Layer ["Data & Storage Layer"]
@@ -434,15 +434,12 @@ HomeScreen (Floating Capsule Navigation Bar — 5 tabs)
     │   ├── Static IP Registry -> StaticIpListScreen & StaticIpFormScreen (SearchBar2, subnet filter)
     │   └── Scan Barcode / QR -> BarcodeScannerScreen
     ├── Tools & Data:
-    │   ├── Global Search -> GlobalSearchScreen (Cross-table search across all 21 tables simultaneously)
     │   ├── Export Device Labels & QR Code Stickers -> LabelExportScreen (4-Col Labels with single-line Switches/Patch Panels, Printable A4 QR Stickers, and Wi-Fi Cards tab supporting Standard 3/page & Portable 7x4cm 20/page formats)
     │   ├── Data Hub -> DataHubScreen (Excel templates, JSON backups, Excel exports, bulk laptop custody with SharePlus, infographic, AES-256-GCM encrypted snapshots)
     │   └── Audit Trail -> ActivityFeedScreen (System activity history, employee onboarding/offboarding log, one-tap clear audit trail, CSV & PDF export)
     └── System Settings -> SettingsScreen (top AppBar gear)
-        ├── Multi-Workspace Isolation -> WorkspaceService (Switch between isolated client/branch database instances)
-        ├── Company profile renamer & logo management
-        ├── Appearance: 29 Seed colors, 10 Google fonts, Dynamic Color toggle, AMOLED mode with high contrast
-        └── About IT Box
+        ├── Multi-Organization Isolation -> CompanyService & OrganizationFormScreen (Create & hot-switch isolated SQLite DBs + organization name/logo without restart)
+        ├── Currency & Exchange Rates -> CurrencyService & ExchangeRateService (62 currencies, live/offline rates, optional ledger conversion)
         ├── Appearance: 29 Seed colors, 10 Google fonts, Dynamic Color toggle, AMOLED mode with high contrast
         └── About IT Box
 ```

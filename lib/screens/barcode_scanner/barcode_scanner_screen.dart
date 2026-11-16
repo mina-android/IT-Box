@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import '../../database/database_helper.dart';
+import '../../widgets/common_widgets.dart';
 
 class BarcodeScannerScreen extends StatefulWidget {
   final bool returnCodeOnly;
@@ -102,13 +103,10 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
   }
 
   void _showAssetSheet(Map<String, dynamic> asset) {
-    showModalBottomSheet(
+    showFintechBottomSheet(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => Padding(
-        padding: const EdgeInsets.all(20),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -162,7 +160,7 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
               height: 48,
               child: ElevatedButton(
                 onPressed: () {
-                  Navigator.pop(ctx);
+                  Navigator.pop(context);
                   setState(() => _isProcessing = false);
                 },
                 child: const Text('Scan Next Item'),
@@ -179,15 +177,17 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Asset Barcode / QR Scanner'),
+      appBar: FintechAppBar(
+        title: 'Asset Barcode / QR Scanner',
         actions: [
-          IconButton(
-            icon: const Icon(Icons.flash_on_rounded),
+          FintechCircleButton(
+            icon: Icons.flash_on_rounded,
+            tooltip: 'Toggle Flash',
             onPressed: () => _controller.toggleTorch(),
           ),
-          IconButton(
-            icon: const Icon(Icons.cameraswitch_rounded),
+          FintechCircleButton(
+            icon: Icons.cameraswitch_rounded,
+            tooltip: 'Switch Camera',
             onPressed: () => _controller.switchCamera(),
           ),
         ],

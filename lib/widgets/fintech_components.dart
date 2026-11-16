@@ -148,8 +148,11 @@ class FintechAppBar extends StatelessWidget implements PreferredSizeWidget {
           ),
       actions: actions != null
           ? [
-              ...actions!,
-              const SizedBox(width: 8),
+              for (int i = 0; i < actions!.length; i++) ...[
+                if (i > 0) const SizedBox(width: 8),
+                actions![i],
+              ],
+              const SizedBox(width: 12),
             ]
           : null,
       bottom: bottom,

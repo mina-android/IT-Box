@@ -4,6 +4,7 @@ import '../../models/network_device.dart';
 import '../../widgets/common_widgets.dart';
 import '../../widgets/selection_bottom_bar.dart';
 import '../../theme/app_theme.dart';
+import '../maintenance/device_maintenance_screen.dart';
 import 'network_device_form_screen.dart';
 
 class NetworkDevicesScreen extends StatefulWidget {
@@ -408,6 +409,32 @@ class _DetailSheetState extends State<_DetailSheet> {
                   theme: theme,
                 ),
             ],
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              icon: const Icon(Icons.build_circle_outlined, size: 18),
+              label: const Text('View Maintenance & Repair History', style: TextStyle(fontWeight: FontWeight.w700)),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 13),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              ),
+              onPressed: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => DeviceMaintenanceScreen(
+                      deviceType: 'router',
+                      deviceId: d.id!,
+                      deviceName: d.model,
+                      deviceNumber: d.deviceNumber,
+                    ),
+                  ),
+                );
+              },
+            ),
           ),
         ],
       ),

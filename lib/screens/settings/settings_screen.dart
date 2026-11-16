@@ -6,9 +6,10 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../database/database_helper.dart';
 import '../../services/theme_service.dart';
 import '../../services/company_service.dart';
-import '../../services/workspace_service.dart';
+import '../../services/currency_service.dart';
 import '../../widgets/common_widgets.dart';
 import '../../theme/app_theme.dart';
+import 'organization_form_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   final ThemeService themeService;
@@ -95,6 +96,120 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Future<void> _switchOrganization(String orgId) async {
+    await CompanyService().switchOrganization(orgId);
+    if (!mounted) {
+      return;
+    }
+    _companyCtrl.text = CompanyService().name;
+    await _loadCounts();
+    if (!mounted) {
+      return;
+    }
+    showSnack(context, 'Switched to ${CompanyService().name}');
+  }
+
+  Future<void> _openAddOrganization() async {
+    final created = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(builder: (_) => const OrganizationFormScreen()),
+    );
+    if (created == true && mounted) {
+      _companyCtrl.text = CompanyService().name;
+      await _loadCounts();
+    }
+  }
+
+  Future<void> _deleteActiveOrganization() async {
+    final company = CompanyService();
+    final target = company.activeOrganization;
+    if (target.id == 'default' || company.organizations.length <= 1) {
+      return;
+    }
+
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'Delete Organization?',
+      message:
+          'This will permanently delete "${target.name}" and its isolated database. Other organizations will not be affected.',
+      confirmText: 'Delete',
+    );
+    if (!confirmed || !mounted) {
+      return;
+    }
+
+    final deleted = await company.deleteOrganization(target.id);
+    if (!mounted) {
+      return;
+    }
+    if (deleted) {
+      _companyCtrl.text = company.name;
+      await _loadCounts();
+      if (!mounted) {
+        return;
+      }
+      showSnack(context, 'Deleted "${target.name}"');
+    }
+  }
+
+  Future<void> _pickCurrency() async {
+    final cs = CurrencyService();
+    final oldCode = cs.currency;
+    final picked = await showCurrencyPicker(context, current: oldCode);
+    if (picked == null || picked == oldCode || !mounted) {
+      return;
+    }
+
+    final factor = cs.convertBetween(1.0, oldCode, picked);
+    bool shouldConvert = false;
+
+    if (factor != null && factor > 0) {
+      final choice = await showDialog<String>(
+        context: context,
+        builder: (dCtx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+          title: const Text('Convert Existing Amounts?', style: TextStyle(fontWeight: FontWeight.w800)),
+          content: Text(
+            'Do you want to convert existing Expenses, Bills, Subscriptions, and Maintenance costs from $oldCode to $picked?\n\n'
+            'Rate: 1 $oldCode ≈ ${factor.toStringAsFixed(4)} $picked',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dCtx, 'cancel'),
+              child: const Text('Cancel'),
+            ),
+            OutlinedButton(
+              onPressed: () => Navigator.pop(dCtx, 'symbol_only'),
+              child: const Text('Symbol Only'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dCtx, 'convert'),
+              child: const Text('Convert Amounts'),
+            ),
+          ],
+        ),
+      );
+      if (choice == null || choice == 'cancel' || !mounted) {
+        return;
+      }
+      shouldConvert = choice == 'convert';
+    }
+
+    if (shouldConvert && factor != null) {
+      await _db.convertAllFinancialAmounts(factor);
+    }
+    await cs.setCurrency(picked);
+    if (!mounted) {
+      return;
+    }
+    showSnack(
+      context,
+      shouldConvert
+          ? 'Currency switched to $picked and financial records converted'
+          : 'Currency switched to $picked',
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -133,166 +248,244 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 18),
           ],
 
-          const SectionLabel('ACTIVE WORKSPACE / TENANT'),
+          const SectionLabel('ORGANIZATION & BRANDING'),
           ListenableBuilder(
-            listenable: WorkspaceService(),
+            listenable: CompanyService(),
             builder: (ctx, _) {
-              final wsService = WorkspaceService();
+              final company = CompanyService();
               return FintechGroupedCard(
-                title: 'Data Workspace Isolation',
-                icon: Icons.workspaces_rounded,
+                title: 'Organization Identity',
+                icon: Icons.business_outlined,
                 children: [
-                  DropdownButtonFormField<String>(
-                    initialValue: wsService.activeId,
-                    decoration: const InputDecoration(
-                      labelText: 'Current Database Workspace',
-                      prefixIcon: Icon(Icons.corporate_fare_rounded),
-                    ),
-                    items: wsService.workspaces
-                        .map((w) => DropdownMenuItem(value: w.id, child: Text(w.name)))
+                  FintechDropdown<String>(
+                    labelText: 'Active Organization',
+                    prefixIcon: const Icon(Icons.corporate_fare_rounded),
+                    value: company.activeOrganizationId,
+                    items: company.organizations
+                        .map((o) => DropdownMenuItem(value: o.id, child: Text(o.name)))
                         .toList(),
-                    onChanged: (val) async {
+                    onChanged: (val) {
                       if (val != null) {
-                        await wsService.switchWorkspace(val);
-                        await _loadCounts();
+                        _switchOrganization(val);
                       }
                     },
                   ),
-                  const SizedBox(height: 12),
-                  OutlinedButton.icon(
-                    onPressed: () async {
-                      final ctrl = TextEditingController();
-                      final ok = await showDialog<bool>(
-                        context: context,
-                        builder: (dCtx) => AlertDialog(
-                          title: const Text('New Database Workspace'),
-                          content: TextField(
-                            controller: ctrl,
-                            decoration: const InputDecoration(
-                              labelText: 'Workspace / Branch Name',
-                              hintText: 'e.g. Branch Alexandria',
-                            ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _openAddOrganization,
+                          icon: const Icon(Icons.add_business_rounded, size: 18),
+                          label: const Text('Add New Organization'),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                           ),
-                          actions: [
-                            TextButton(onPressed: () => Navigator.pop(dCtx, false), child: const Text('Cancel')),
-                            FilledButton(onPressed: () => Navigator.pop(dCtx, true), child: const Text('Create')),
+                        ),
+                      ),
+                      if (company.activeOrganizationId != 'default' &&
+                          company.organizations.length > 1) ...[
+                        const SizedBox(width: 10),
+                        OutlinedButton.icon(
+                          onPressed: _deleteActiveOrganization,
+                          icon: Icon(
+                            Icons.delete_outline_rounded,
+                            size: 18,
+                            color: theme.colorScheme.error,
+                          ),
+                          label: Text(
+                            'Delete',
+                            style: TextStyle(color: theme.colorScheme.error),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            side: BorderSide(
+                              color: theme.colorScheme.error.withValues(alpha: 0.5),
+                            ),
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  const Divider(height: 1),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: AppTextField(
+                          controller: _companyCtrl,
+                          decoration: const InputDecoration(
+                            labelText: 'Organization Name',
+                            prefixIcon: Icon(Icons.edit_outlined),
+                            hintText: 'e.g. Acme Corp',
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      ElevatedButton(
+                        onPressed: _saveCompany,
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        ),
+                        child: const Text('Save', style: TextStyle(fontWeight: FontWeight.w700)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  const Divider(height: 1),
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      Container(
+                        width: 54,
+                        height: 54,
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
+                            width: 1,
+                          ),
+                        ),
+                        clipBehavior: Clip.antiAlias,
+                        child: company.hasLogo
+                            ? Image.file(
+                                File(company.logoPath),
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => const Icon(Icons.broken_image_rounded),
+                              )
+                            : Icon(
+                                Icons.image_outlined,
+                                color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
+                                size: 26,
+                              ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Organization Logo',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 14,
+                                color: theme.colorScheme.onSurface,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              company.hasLogo
+                                  ? 'Appears on Home & Custody PDFs'
+                                  : 'Upload PNG/JPG logo for custody slips',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+                              ),
+                            ),
                           ],
                         ),
-                      );
-                      if (ok == true && ctrl.text.trim().isNotEmpty) {
-                        await wsService.createWorkspace(ctrl.text.trim());
-                      }
-                    },
-                    icon: const Icon(Icons.add_rounded),
-                    label: const Text('Create New Workspace Branch'),
+                      ),
+                      const SizedBox(width: 8),
+                      if (company.hasLogo)
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline_rounded, color: Colors.red),
+                          tooltip: 'Remove Logo',
+                          onPressed: _removeLogo,
+                        ),
+                      OutlinedButton.icon(
+                        onPressed: _pickLogo,
+                        icon: Icon(company.hasLogo ? Icons.edit_outlined : Icons.upload_rounded, size: 16),
+                        label: Text(company.hasLogo ? 'Change' : 'Upload'),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               );
             },
           ),
           const SizedBox(height: 18),
-          const SectionLabel('ORGANIZATION & BRANDING'),
-          FintechGroupedCard(
-            title: 'Organization Identity',
-            icon: Icons.business_outlined,
-            children: [
-              Row(
+
+          const SectionLabel('CURRENCY & EXCHANGE RATES'),
+          ListenableBuilder(
+            listenable: CurrencyService(),
+            builder: (ctx, _) {
+              final curService = CurrencyService();
+              final info = curService.info;
+              final usdRate = curService.convertBetween(1.0, 'USD', info.code);
+              final rateText = curService.ratesFetching
+                  ? 'Updating live exchange rates...'
+                  : (usdRate != null
+                      ? '1 USD = ${usdRate.toStringAsFixed(2)} ${info.code} • ${curService.ratesLoaded ? 'Live cached' : 'Offline fallback'}'
+                      : 'Offline fallback rates active');
+
+              return FintechGroupedCard(
+                title: 'App Currency',
+                icon: Icons.currency_exchange_rounded,
                 children: [
-                  Expanded(
-                    child: AppTextField(
-                      controller: _companyCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Company / Org Name',
-                        prefixIcon: Icon(Icons.corporate_fare_rounded),
-                        hintText: 'e.g. Acme Corp',
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: IconBox(
+                      icon: Icons.monetization_on_outlined,
+                      color: theme.colorScheme.primary,
+                      size: 40,
+                    ),
+                    title: const Text(
+                      'Default Currency',
+                      style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                    ),
+                    subtitle: Text(
+                      '${info.name} (${info.code} • ${info.symbol})',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                       ),
                     ),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: _pickCurrency,
                   ),
-                  const SizedBox(width: 10),
-                  ElevatedButton(
-                    onPressed: _saveCompany,
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                    ),
-                    child: const Text('Save', style: TextStyle(fontWeight: FontWeight.w700)),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              const Divider(height: 1),
-              const SizedBox(height: 14),
-              Row(
-                children: [
-                  Container(
-                    width: 54,
-                    height: 54,
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
-                        width: 1,
+                  const Divider(height: 16),
+                  Row(
+                    children: [
+                      Icon(
+                        curService.ratesLoaded ? Icons.cloud_done_outlined : Icons.offline_bolt_outlined,
+                        size: 16,
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
                       ),
-                    ),
-                    clipBehavior: Clip.antiAlias,
-                    child: CompanyService().hasLogo
-                        ? Image.file(
-                            File(CompanyService().logoPath),
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => const Icon(Icons.broken_image_rounded),
-                          )
-                        : Icon(
-                            Icons.image_outlined,
-                            color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
-                            size: 26,
-                          ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Company Logo',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 14,
-                            color: theme.colorScheme.onSurface,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          CompanyService().hasLogo
-                              ? 'Appears on Home & Custody PDFs'
-                              : 'Upload PNG/JPG logo for custody slips',
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          rateText,
                           style: TextStyle(
                             fontSize: 12,
-                            color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+                            color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
                           ),
                         ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  if (CompanyService().hasLogo)
-                    IconButton(
-                      icon: const Icon(Icons.delete_outline_rounded, color: Colors.red),
-                      tooltip: 'Remove Logo',
-                      onPressed: _removeLogo,
-                    ),
-                  OutlinedButton.icon(
-                    onPressed: _pickLogo,
-                    icon: Icon(CompanyService().hasLogo ? Icons.edit_outlined : Icons.upload_rounded, size: 16),
-                    label: Text(CompanyService().hasLogo ? 'Change' : 'Upload'),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
+                      ),
+                      TextButton.icon(
+                        onPressed: curService.ratesFetching ? null : () => curService.refreshRates(),
+                        icon: curService.ratesFetching
+                            ? const SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.refresh_rounded, size: 16),
+                        label: const Text('Refresh'),
+                      ),
+                    ],
                   ),
                 ],
-              ),
-            ],
+              );
+            },
           ),
           const SizedBox(height: 18),
 
@@ -487,7 +680,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             children: [
               const DetailRow(
                 label: 'Software Version',
-                value: 'v1.1.0',
+                value: 'v1.1.1',
                 icon: Icons.verified_outlined,
               ),
               const DetailRow(

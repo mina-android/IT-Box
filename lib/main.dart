@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:quick_actions/quick_actions.dart';
 import 'services/theme_service.dart';
 import 'services/company_service.dart';
+import 'services/currency_service.dart';
 import 'services/notification_service.dart';
 import 'services/auto_backup_service.dart';
 import 'database/database_helper.dart';
@@ -62,16 +63,18 @@ void main() async {
   SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp, DeviceOrientation.portraitDown]);
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(statusBarColor: Colors.transparent));
 
-  // Pre-load services concurrently
+  // Pre-load services concurrently (CompanyService sets active org DB file before DatabaseHelper.init)
   await Future.wait([
     ThemeService().load(),
     CompanyService().load(),
+    CurrencyService().load(),
     NotificationService().init(),
-    DatabaseHelper().init(),
   ]);
+  await DatabaseHelper().init();
 
   _cleanupOldTempFiles();
   AutoBackupService().runIfDue();
+  CurrencyService().loadRates();
 
   const QuickActions quickActions = QuickActions();
   quickActions.initialize((shortcutType) {

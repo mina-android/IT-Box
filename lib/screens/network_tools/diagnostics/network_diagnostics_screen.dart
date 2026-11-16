@@ -1,7 +1,6 @@
 // lib/screens/network_tools/diagnostics/network_diagnostics_screen.dart
 import 'package:flutter/material.dart';
 import '../../../services/network_diagnostics_service.dart';
-import '../../../services/topology_pdf_service.dart';
 import '../../../widgets/common_widgets.dart';
 import '../../../theme/app_theme.dart';
 import '../../../utils/haptics.dart';
@@ -21,7 +20,6 @@ class NetworkDiagnosticsScreen extends StatefulWidget {
 
 class _NetworkDiagnosticsScreenState extends State<NetworkDiagnosticsScreen> {
   final _service = NetworkDiagnosticsService();
-  final _topologyService = TopologyPdfService();
 
   DiagnosticTab _activeTab = DiagnosticTab.dns;
 
@@ -93,17 +91,6 @@ class _NetworkDiagnosticsScreenState extends State<NetworkDiagnosticsScreen> {
     });
   }
 
-  Future<void> _exportTopology() async {
-    try {
-      final file = await _topologyService.exportTopologyPdf();
-      if (!mounted) return;
-      showSnack(context, 'Topology PDF map saved: ${file.path}');
-    } catch (e) {
-      if (!mounted) return;
-      showSnack(context, 'Failed to generate topology PDF: $e', error: true);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -111,15 +98,8 @@ class _NetworkDiagnosticsScreenState extends State<NetworkDiagnosticsScreen> {
     final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
-      appBar: FintechAppBar(
+      appBar: const FintechAppBar(
         title: 'Network Diagnostics Suite',
-        actions: [
-          FintechCircleButton(
-            icon: Icons.alt_route_rounded,
-            tooltip: 'Export Topology PDF Map',
-            onPressed: _exportTopology,
-          ),
-        ],
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
@@ -150,42 +130,41 @@ class _NetworkDiagnosticsScreenState extends State<NetworkDiagnosticsScreen> {
           ),
           const SizedBox(height: 20),
           if (_activeTab == DiagnosticTab.dns) ...[
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppColors.cardSurface(context),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('HOSTNAME / FQDN', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _dnsHostCtrl,
-                          decoration: InputDecoration(
-                            hintText: 'e.g. gateway.local, google.com',
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                          ),
+            const _InstructionCard(
+              icon: Icons.dns_rounded,
+              title: 'How to use DNS Lookup',
+              steps: [
+                'Enter a domain name (e.g. google.com) or local hostname (e.g. printer.local).',
+                'Tap Resolve to query the device DNS resolver for IPv4/IPv6 addresses.',
+                'Check the response latency (ms) to verify DNS resolution health.',
+              ],
+            ),
+            const SizedBox(height: 12),
+            FintechGroupedCard(
+              title: 'Hostname / FQDN',
+              icon: Icons.dns_outlined,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: AppTextField(
+                        controller: _dnsHostCtrl,
+                        decoration: const InputDecoration(
+                          hintText: 'e.g. gateway.local, google.com',
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      FilledButton.icon(
-                        onPressed: _dnsLoading ? null : _runDns,
-                        icon: _dnsLoading
-                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                            : const Icon(Icons.search_rounded),
-                        label: const Text('Resolve'),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+                    ),
+                    const SizedBox(width: 12),
+                    FilledButton.icon(
+                      onPressed: _dnsLoading ? null : _runDns,
+                      icon: _dnsLoading
+                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                          : const Icon(Icons.search_rounded),
+                      label: const Text('Resolve'),
+                    ),
+                  ],
+                ),
+              ],
             ),
             if (_dnsResult != null) ...[
               const SizedBox(height: 16),
@@ -227,59 +206,73 @@ class _NetworkDiagnosticsScreenState extends State<NetworkDiagnosticsScreen> {
               ),
             ],
           ] else if (_activeTab == DiagnosticTab.portCheck) ...[
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppColors.cardSurface(context),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('TARGET HOST & PORT', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        flex: 3,
-                        child: TextField(
-                          controller: _portHostCtrl,
-                          decoration: InputDecoration(
-                            labelText: 'Host / IP',
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                          ),
-                        ),
+            const _InstructionCard(
+              icon: Icons.lan_rounded,
+              title: 'How to use Port Probe',
+              steps: [
+                'Enter the target IP address or hostname and a TCP port number.',
+                'Tap a quick port chip below to test common enterprise services.',
+                'OPEN means a service is listening; CLOSED / FILTERED means blocked or unreachable.',
+              ],
+            ),
+            const SizedBox(height: 12),
+            FintechGroupedCard(
+              title: 'Target Host & Port',
+              icon: Icons.lan_outlined,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: AppTextField(
+                        controller: _portHostCtrl,
+                        decoration: const InputDecoration(labelText: 'Host / IP'),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        flex: 2,
-                        child: TextField(
-                          controller: _portCtrl,
-                          keyboardType: TextInputType.number,
-                          decoration: InputDecoration(
-                            labelText: 'Port',
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: _portLoading ? null : _runPortCheck,
-                      icon: _portLoading
-                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                          : const Icon(Icons.bolt_rounded),
-                      label: const Text('Probe Port'),
                     ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      flex: 2,
+                      child: AppTextField(
+                        controller: _portCtrl,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(labelText: 'Port'),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    for (final p in const [
+                      ('22', '22 SSH'),
+                      ('53', '53 DNS'),
+                      ('80', '80 HTTP'),
+                      ('443', '443 HTTPS'),
+                      ('445', '445 SMB'),
+                      ('3389', '3389 RDP'),
+                      ('8080', '8080 Alt'),
+                      ('9100', '9100 Print'),
+                    ])
+                      ActionChip(
+                        label: Text(p.$2, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+                        onPressed: () => setState(() => _portCtrl.text = p.$1),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: _portLoading ? null : _runPortCheck,
+                    icon: _portLoading
+                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        : const Icon(Icons.bolt_rounded),
+                    label: const Text('Probe Port'),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
             if (_portResult != null) ...[
               const SizedBox(height: 16),
@@ -325,39 +318,38 @@ class _NetworkDiagnosticsScreenState extends State<NetworkDiagnosticsScreen> {
               ),
             ],
           ] else ...[
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppColors.cardSurface(context),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('HTTP THROUGHPUT ENDPOINT', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: _speedUrlCtrl,
-                    decoration: InputDecoration(
-                      hintText: 'e.g. http://192.168.1.1/ or test asset',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                    ),
+            const _InstructionCard(
+              icon: Icons.speed_rounded,
+              title: 'How to use Throughput Estimator',
+              steps: [
+                'Enter an HTTP or HTTPS URL on your LAN (e.g. router gateway http://192.168.1.1/) or a test endpoint.',
+                'Tap Test Link Speed to measure transfer latency (ms) and estimated download throughput (Mbps).',
+                'For accurate Wi-Fi/LAN testing, point to a local file or router web interface.',
+              ],
+            ),
+            const SizedBox(height: 12),
+            FintechGroupedCard(
+              title: 'HTTP Throughput Endpoint',
+              icon: Icons.speed_outlined,
+              children: [
+                AppTextField(
+                  controller: _speedUrlCtrl,
+                  decoration: const InputDecoration(
+                    hintText: 'e.g. http://192.168.1.1/ or test asset',
                   ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: _speedLoading ? null : _runSpeed,
-                      icon: _speedLoading
-                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                          : const Icon(Icons.speed_rounded),
-                      label: const Text('Test Link Speed'),
-                    ),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: _speedLoading ? null : _runSpeed,
+                    icon: _speedLoading
+                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        : const Icon(Icons.speed_rounded),
+                    label: const Text('Test Link Speed'),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
             if (_speedResult != null) ...[
               const SizedBox(height: 16),
@@ -383,6 +375,63 @@ class _NetworkDiagnosticsScreenState extends State<NetworkDiagnosticsScreen> {
               ),
             ],
           ],
+        ],
+      ),
+    );
+  }
+}
+
+class _InstructionCard extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final List<String> steps;
+
+  const _InstructionCard({
+    required this.icon,
+    required this.title,
+    required this.steps,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: cs.primary.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: cs.primary.withValues(alpha: 0.22)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 18, color: cs.primary),
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                  color: cs.primary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          for (int i = 0; i < steps.length; i++)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Text(
+                '${i + 1}. ${steps[i]}',
+                style: TextStyle(
+                  fontSize: 12,
+                  height: 1.35,
+                  color: cs.onSurface.withValues(alpha: 0.78),
+                ),
+              ),
+            ),
         ],
       ),
     );

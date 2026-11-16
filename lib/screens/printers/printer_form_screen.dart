@@ -99,11 +99,8 @@ class _PrinterFormScreenState extends State<PrinterFormScreen> {
     final isNew = widget.printer == null;
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          isNew ? 'Add Printer' : 'Edit Printer',
-          style: const TextStyle(fontWeight: FontWeight.w800),
-        ),
+      appBar: FintechAppBar(
+        title: isNew ? 'Add Printer' : 'Edit Printer',
       ),
       body: GestureDetector(
         onTap: () => FocusScope.of(context).unfocus(),

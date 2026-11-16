@@ -9,6 +9,7 @@ import '../../services/excel_import_service.dart';
 import '../../services/pdf_report_service.dart';
 import '../../services/custody_pdf_service.dart';
 import '../../services/executive_health_pdf_service.dart';
+import '../../services/currency_service.dart';
 import '../../models/laptop.dart';
 import '../../widgets/common_widgets.dart';
 
@@ -215,7 +216,7 @@ class _DataHubScreenState extends State<DataHubScreen> {
   }
 
   // ── Table Definitions for Export & Templates ─────────────────
-  static const _catalogDefs = [
+  static final _catalogDefs = [
     ('Laptops', 'laptops', Icons.laptop_outlined,
       ['#', 'Laptop No.', 'Model', 'CPU', 'GPU', 'RAM', 'Storage', 'Condition', 'User']),
     ('Routers', 'network_devices', Icons.router_outlined,
@@ -231,15 +232,15 @@ class _DataHubScreenState extends State<DataHubScreen> {
     ('Employees', 'employees', Icons.people_outline,
       ['#', 'Name', 'Phone Number']),
     ('Bills', 'bills', Icons.receipt_outlined,
-      ['#', 'Person', 'Number', 'Category', 'Price (EGP)', 'Notes']),
+      ['#', 'Person', 'Number', 'Category', 'Price (${CurrencyService().currency})', 'Notes']),
     ('Email Accounts', 'email_accounts', Icons.email_outlined,
       ['#', 'Employee', 'Email', 'Password']),
     ('Tickets / Log', 'log_entries', Icons.history_outlined,
       ['#', 'Date', 'Employee', 'Problem', 'Solution']),
     ('Subscriptions', 'subscriptions', Icons.subscriptions_outlined,
-      ['#', 'Service Name', 'Billing Interval', 'Price (EGP)', 'Renewal Date', 'Notes']),
+      ['#', 'Service Name', 'Billing Interval', 'Price (${CurrencyService().currency})', 'Renewal Date', 'Notes']),
     ('Expenses', 'expenses', Icons.payments_outlined,
-      ['#', 'Date', 'Item', 'Price (EGP)', 'Details']),
+      ['#', 'Date', 'Item', 'Price (${CurrencyService().currency})', 'Details']),
     ('Others', 'other_devices', Icons.devices_outlined,
       ['#', 'Device Type', 'Device Name', 'Model', 'Notes']),
   ];
@@ -1002,8 +1003,8 @@ class _DataHubScreenState extends State<DataHubScreen> {
     final theme = Theme.of(context);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Data Hub & Backups'),
+      appBar: const FintechAppBar(
+        title: 'Data Hub & Backups',
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 60),

@@ -195,24 +195,18 @@ class _StaticIpFormScreenState extends State<StaticIpFormScreen> {
                       },
                     ),
                     const SizedBox(height: 14),
-                    InputDecorator(
-                      decoration: const InputDecoration(
-                        labelText: 'Device Type',
-                        prefixIcon: Icon(Icons.category_outlined, size: 20),
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          value: _selectedType,
-                          isExpanded: true,
-                          isDense: true,
-                          items: _deviceTypes.map((t) {
-                            return DropdownMenuItem(value: t, child: Text(t));
-                          }).toList(),
-                          onChanged: (v) {
-                            if (v != null) setState(() => _selectedType = v);
-                          },
-                        ),
-                      ),
+                    FintechDropdown<String>(
+                      labelText: 'Device Type',
+                      prefixIcon: const Icon(Icons.category_outlined, size: 20),
+                      value: _selectedType,
+                      items: _deviceTypes.map((t) {
+                        return DropdownMenuItem(value: t, child: Text(t));
+                      }).toList(),
+                      onChanged: (v) {
+                        if (v != null) {
+                          setState(() => _selectedType = v);
+                        }
+                      },
                     ),
                   ],
                 ),

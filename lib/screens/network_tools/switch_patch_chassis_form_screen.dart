@@ -103,49 +103,37 @@ class _SwitchPatchChassisFormScreenState extends State<SwitchPatchChassisFormScr
                       validator: (v) => v == null || v.trim().isEmpty ? 'Unit name is required' : null,
                     ),
                     const SizedBox(height: 14),
-                    InputDecorator(
-                      decoration: const InputDecoration(
-                        labelText: 'Chassis Type',
-                        prefixIcon: Icon(Icons.category_rounded, size: 20),
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          value: _selectedType,
-                          isExpanded: true,
-                          isDense: true,
-                          items: const [
-                            DropdownMenuItem(value: 'Switch', child: Text('Network Switch')),
-                            DropdownMenuItem(value: 'Patch Panel', child: Text('Patch Panel')),
-                          ],
-                          onChanged: (v) {
-                            if (v != null) setState(() => _selectedType = v);
-                          },
-                        ),
-                      ),
+                    FintechDropdown<String>(
+                      labelText: 'Chassis Type',
+                      prefixIcon: const Icon(Icons.category_rounded, size: 20),
+                      value: _selectedType,
+                      items: const [
+                        DropdownMenuItem(value: 'Switch', child: Text('Network Switch')),
+                        DropdownMenuItem(value: 'Patch Panel', child: Text('Patch Panel')),
+                      ],
+                      onChanged: (v) {
+                        if (v != null) {
+                          setState(() => _selectedType = v);
+                        }
+                      },
                     ),
                     const SizedBox(height: 14),
-                    InputDecorator(
-                      decoration: const InputDecoration(
-                        labelText: 'Total Available Ports',
-                        prefixIcon: Icon(Icons.grid_view_rounded, size: 20),
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<int>(
-                          value: _selectedPorts,
-                          isExpanded: true,
-                          isDense: true,
-                          items: const [
-                            DropdownMenuItem(value: 8, child: Text('8 Ports (Compact Desktop)')),
-                            DropdownMenuItem(value: 12, child: Text('12 Ports (Half Rack)')),
-                            DropdownMenuItem(value: 16, child: Text('16 Ports (Wall Mount / Small Rack)')),
-                            DropdownMenuItem(value: 24, child: Text('24 Ports (Standard 1U Enterprise)')),
-                            DropdownMenuItem(value: 48, child: Text('48 Ports (High-Density 2U Enterprise)')),
-                          ],
-                          onChanged: (v) {
-                            if (v != null) setState(() => _selectedPorts = v);
-                          },
-                        ),
-                      ),
+                    FintechDropdown<int>(
+                      labelText: 'Total Available Ports',
+                      prefixIcon: const Icon(Icons.grid_view_rounded, size: 20),
+                      value: _selectedPorts,
+                      items: const [
+                        DropdownMenuItem(value: 8, child: Text('8 Ports (Compact Desktop)')),
+                        DropdownMenuItem(value: 12, child: Text('12 Ports (Half Rack)')),
+                        DropdownMenuItem(value: 16, child: Text('16 Ports (Wall Mount / Small Rack)')),
+                        DropdownMenuItem(value: 24, child: Text('24 Ports (Standard 1U Enterprise)')),
+                        DropdownMenuItem(value: 48, child: Text('48 Ports (High-Density 2U Enterprise)')),
+                      ],
+                      onChanged: (v) {
+                        if (v != null) {
+                          setState(() => _selectedPorts = v);
+                        }
+                      },
                     ),
                   ],
                 ),

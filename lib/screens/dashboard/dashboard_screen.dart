@@ -8,11 +8,25 @@ import '../../models/log_entry.dart';
 import '../../widgets/common_widgets.dart';
 import '../../theme/app_theme.dart';
 import '../../services/company_service.dart';
+import '../../services/currency_service.dart';
+import '../../services/global_search_service.dart';
 import '../borrowed/add_borrow_screen.dart';
 import '../borrowed/borrowed_screen.dart';
 import '../subscriptions/subscriptions_screen.dart';
 import '../employees/employees_screen.dart';
 import '../expenses/expenses_screen.dart';
+import '../bills/bills_screen.dart';
+import '../laptops/laptops_screen.dart';
+import '../network_devices/network_devices_screen.dart';
+import '../mifis/mifis_screen.dart';
+import '../access_points/access_points_screen.dart';
+import '../printers/printers_screen.dart';
+import '../electronics/electronics_screen.dart';
+import '../others/other_devices_screen.dart';
+import '../wifi_networks/wifi_networks_screen.dart';
+import '../accounts_passwords/accounts_passwords_screen.dart';
+import '../network_tools/static_ip_list_screen.dart';
+import '../vendor_contacts/vendor_contacts_screen.dart';
 import '../logs/log_form_screen.dart';
 import '../employees/employee_form_screen.dart';
 import '../emails/email_form_screen.dart';
@@ -40,6 +54,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
   int _highPriorityTicketsCount = 0;
   StreamSubscription<Map<String, int>>? _countsSub;
 
+  final _searchCtrl = TextEditingController();
+  final _searchService = GlobalSearchService();
+  Timer? _searchDebounce;
+  List<SearchResultItem> _searchResults = [];
+  SearchCategory? _selectedCategory;
+  bool _searching = false;
+
   @override
   void initState() {
     super.initState();
@@ -49,14 +70,158 @@ class _DashboardScreenState extends State<DashboardScreen> {
       }
     });
     _db.addListener(_onDbChanged);
+    CurrencyService().addListener(_onServiceChanged);
+    CompanyService().addListener(_onServiceChanged);
+    _searchCtrl.addListener(_onSearchChanged);
     _loadData();
   }
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
+    _searchCtrl.dispose();
     _countsSub?.cancel();
     _db.removeListener(_onDbChanged);
+    CurrencyService().removeListener(_onServiceChanged);
+    CompanyService().removeListener(_onServiceChanged);
     super.dispose();
+  }
+
+  void _onServiceChanged() {
+    if (mounted) {
+      setState(() {});
+      if (_searchCtrl.text.trim().isNotEmpty) {
+        _runSearch(_searchCtrl.text);
+      }
+    }
+  }
+
+  void _onSearchChanged() {
+    final q = _searchCtrl.text.trim();
+    _searchDebounce?.cancel();
+    if (q.isEmpty) {
+      setState(() {
+        _searchResults = [];
+        _selectedCategory = null;
+        _searching = false;
+      });
+      return;
+    }
+    setState(() => _searching = true);
+    _searchDebounce = Timer(const Duration(milliseconds: 180), () => _runSearch(q));
+  }
+
+  Future<void> _runSearch(String query) async {
+    final res = await _searchService.search(query);
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _searchResults = res;
+      _searching = false;
+    });
+  }
+
+  void _navigateToSearchResult(SearchResultItem item) {
+    Widget? screen;
+    switch (item.category) {
+      case SearchCategory.laptop:
+        screen = const LaptopsScreen();
+        break;
+      case SearchCategory.networkDevice:
+        screen = const NetworkDevicesScreen();
+        break;
+      case SearchCategory.mifi:
+        screen = const MiFisScreen();
+        break;
+      case SearchCategory.accessPoint:
+        screen = const AccessPointsScreen();
+        break;
+      case SearchCategory.printer:
+        screen = const PrintersScreen();
+        break;
+      case SearchCategory.electronic:
+        screen = const ElectronicsScreen();
+        break;
+      case SearchCategory.otherDevice:
+        screen = const OtherDevicesScreen();
+        break;
+      case SearchCategory.employee:
+        screen = const EmployeesScreen();
+        break;
+      case SearchCategory.borrow:
+        widget.onSwitchTab?.call(2, subTab: 0);
+        return;
+      case SearchCategory.ticket:
+        widget.onSwitchTab?.call(2, subTab: 1);
+        return;
+      case SearchCategory.email:
+        widget.onSwitchTab?.call(3);
+        return;
+      case SearchCategory.wifiNetwork:
+        screen = const WifiNetworksScreen();
+        break;
+      case SearchCategory.accountPassword:
+        screen = const AccountsPasswordsScreen();
+        break;
+      case SearchCategory.staticIp:
+        screen = const StaticIpListScreen();
+        break;
+      case SearchCategory.vendorContact:
+        screen = const VendorContactsScreen();
+        break;
+      case SearchCategory.expense:
+        screen = const ExpensesScreen();
+        break;
+      case SearchCategory.bill:
+        screen = const BillsScreen();
+        break;
+      case SearchCategory.subscription:
+        screen = const SubscriptionsScreen();
+        break;
+    }
+    Navigator.push(context, MaterialPageRoute(builder: (_) => screen!));
+  }
+
+  IconData _iconForCategory(SearchCategory c) {
+    switch (c) {
+      case SearchCategory.laptop:
+        return Icons.laptop_mac_rounded;
+      case SearchCategory.networkDevice:
+        return Icons.router_rounded;
+      case SearchCategory.mifi:
+        return Icons.wifi_tethering_rounded;
+      case SearchCategory.accessPoint:
+        return Icons.cell_tower_rounded;
+      case SearchCategory.printer:
+        return Icons.print_rounded;
+      case SearchCategory.electronic:
+        return Icons.devices_other_rounded;
+      case SearchCategory.otherDevice:
+        return Icons.category_rounded;
+      case SearchCategory.employee:
+        return Icons.person_outline_rounded;
+      case SearchCategory.borrow:
+        return Icons.swap_horiz_rounded;
+      case SearchCategory.ticket:
+        return Icons.confirmation_number_outlined;
+      case SearchCategory.email:
+        return Icons.alternate_email_rounded;
+      case SearchCategory.wifiNetwork:
+        return Icons.wifi_rounded;
+      case SearchCategory.accountPassword:
+        return Icons.vpn_key_outlined;
+      case SearchCategory.staticIp:
+        return Icons.lan_rounded;
+      case SearchCategory.vendorContact:
+        return Icons.support_agent_rounded;
+      case SearchCategory.expense:
+        return Icons.payments_outlined;
+      case SearchCategory.bill:
+        return Icons.receipt_outlined;
+      case SearchCategory.subscription:
+        return Icons.subscriptions_outlined;
+    }
   }
 
   void _onDbChanged() {
@@ -120,7 +285,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final fmt = NumberFormat('#,##0.00', 'en_US');
+    final cs = theme.colorScheme;
+    final cur = CurrencyService();
+    final hasQuery = _searchCtrl.text.trim().isNotEmpty;
+    final filteredSearch = _selectedCategory == null
+        ? _searchResults
+        : _searchResults.where((r) => r.category == _selectedCategory).toList();
+    final activeCategories = _searchResults.map((r) => r.category).toSet().toList();
 
     return Scaffold(
       appBar: FintechAppBar(
@@ -138,22 +309,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   listenable: CompanyService(),
                   builder: (context, _) {
                     final comp = CompanyService();
-                    if (!comp.hasLogo) return const SizedBox.shrink();
+                    if (!comp.hasLogo && comp.name.isEmpty) {
+                      return const SizedBox.shrink();
+                    }
                     return Padding(
-                      padding: const EdgeInsets.only(bottom: 16),
+                      padding: const EdgeInsets.only(bottom: 14),
                       child: Row(
                         children: [
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(10),
-                            child: Image.file(
-                              File(comp.logoPath),
-                              width: 48,
-                              height: 48,
-                              fit: BoxFit.contain,
-                              errorBuilder: (_, __, ___) => const Icon(Icons.corporate_fare_rounded, size: 36),
+                          if (comp.hasLogo) ...[
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(10),
+                              child: Image.file(
+                                File(comp.logoPath),
+                                width: 48,
+                                height: 48,
+                                fit: BoxFit.contain,
+                                errorBuilder: (_, __, ___) => const Icon(Icons.corporate_fare_rounded, size: 36),
+                              ),
                             ),
-                          ),
-                          const SizedBox(width: 14),
+                            const SizedBox(width: 14),
+                          ],
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -182,6 +357,113 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     );
                   },
                 ),
+                // Universal Search Bar
+                SearchBar2(
+                  controller: _searchCtrl,
+                  hintText: 'Search inventory, staff, IPs, credentials, logs…',
+                  noPadding: true,
+                ),
+                const SizedBox(height: 16),
+                if (hasQuery) ...[
+                  if (_searching)
+                    const ShimmerListLoader()
+                  else if (_searchResults.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 40),
+                      child: Center(
+                        child: Column(
+                          children: [
+                            Icon(Icons.search_off_rounded, size: 48, color: cs.primary.withValues(alpha: 0.35)),
+                            const SizedBox(height: 10),
+                            Text(
+                              'No matching records for "${_searchCtrl.text.trim()}"',
+                              style: TextStyle(color: cs.onSurface.withValues(alpha: 0.55)),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  else ...[
+                    if (activeCategories.length > 1)
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Row(
+                          children: [
+                            FilterChip(
+                              label: Text('All (${_searchResults.length})'),
+                              selected: _selectedCategory == null,
+                              onSelected: (_) => setState(() => _selectedCategory = null),
+                            ),
+                            const SizedBox(width: 6),
+                            for (final cat in activeCategories) ...[
+                              FilterChip(
+                                label: Text(_searchResults.firstWhere((r) => r.category == cat).categoryLabel),
+                                selected: _selectedCategory == cat,
+                                onSelected: (sel) => setState(() => _selectedCategory = sel ? cat : null),
+                              ),
+                              const SizedBox(width: 6),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ...filteredSearch.map(
+                      (item) => Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        decoration: BoxDecoration(
+                          color: AppColors.cardSurface(context),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: theme.brightness == Brightness.dark
+                                ? AppColors.darkBorder
+                                : AppColors.lightBorder,
+                          ),
+                        ),
+                        child: ListTile(
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          leading: IconBox(
+                            icon: _iconForCategory(item.category),
+                            color: cs.primary,
+                            size: 40,
+                          ),
+                          title: Text(
+                            item.title,
+                            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          subtitle: Text(
+                            item.extraInfo.isNotEmpty
+                                ? '${item.subtitle} • ${item.extraInfo}'
+                                : item.subtitle,
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              color: cs.onSurface.withValues(alpha: 0.6),
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          trailing: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: cs.primary.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              item.categoryLabel,
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w700,
+                                color: cs.primary,
+                              ),
+                            ),
+                          ),
+                          onTap: () => _navigateToSearchResult(item),
+                        ),
+                      ),
+                    ),
+                  ],
+                ] else ...[
                 // Overdue alert banner if any
                 if (_overdueBorrows.isNotEmpty) ...[
                   Container(
@@ -289,7 +571,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       const SizedBox(width: 12),
                       FintechStatCard(
                         title: 'Month Expenses',
-                        value: 'EGP ${fmt.format(_thisMonthExpenses)}',
+                        value: cur.format(_thisMonthExpenses),
                         subtitle:
                             DateFormat('MMMM yyyy').format(DateTime.now()),
                         icon: Icons.payments_outlined,
@@ -319,7 +601,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       FintechStatCard(
                         title: 'Subscriptions',
                         value: '${_counts['subscriptions'] ?? 0}',
-                        subtitle: '≈ EGP ${fmt.format(_monthlySubsEquivalent)}/mo',
+                        subtitle: '≈ ${cur.format(_monthlySubsEquivalent)}/mo',
                         icon: Icons.subscriptions_outlined,
                         color: const Color(0xFFF43F5E),
                         onTap: () => Navigator.push(
@@ -455,6 +737,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                     ),
                   ),
+                ],
               ],
             ),
       floatingActionButton: Padding(

@@ -7,6 +7,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:share_plus/share_plus.dart';
 import '../database/database_helper.dart';
 import 'company_service.dart';
+import 'currency_service.dart';
 
 class ExecutiveHealthPdfService {
   static Future<void> generateAndShareExecutiveReport() async {
@@ -131,11 +132,11 @@ class ExecutiveHealthPdfService {
                         children: [
                           pw.Text('FINANCIAL RUNWAY & EXPENDITURES', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.blueGrey800)),
                           pw.SizedBox(height: 8),
-                          _statRow('Logged Hardware & Ops Expenses', '${fmt.format(totalExpenseCost)} EGP'),
-                          _statRow('Monthly SaaS Subscriptions', '${fmt.format(totalMonthlySubs)} EGP / mo'),
-                          _statRow('Recurring Telecom & Utility Bills', '${fmt.format(totalBills)} EGP'),
+                          _statRow('Logged Hardware & Ops Expenses', '${fmt.format(totalExpenseCost)} ${CurrencyService().currency}'),
+                          _statRow('Monthly SaaS Subscriptions', '${fmt.format(totalMonthlySubs)} ${CurrencyService().currency} / mo'),
+                          _statRow('Recurring Telecom & Utility Bills', '${fmt.format(totalBills)} ${CurrencyService().currency}'),
                           pw.Divider(color: PdfColors.grey300),
-                          _statRow('Total Est. Department Run-rate', '${fmt.format(totalExpenseCost + totalMonthlySubs + totalBills)} EGP', isBold: true),
+                          _statRow('Total Est. Department Run-rate', '${fmt.format(totalExpenseCost + totalMonthlySubs + totalBills)} ${CurrencyService().currency}', isBold: true),
                         ],
                       ),
                     ),

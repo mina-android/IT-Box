@@ -92,11 +92,8 @@ class _AccessPointFormScreenState extends State<AccessPointFormScreen> {
     final isNew = widget.ap == null;
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          isNew ? 'Add Access Point' : 'Edit Access Point',
-          style: const TextStyle(fontWeight: FontWeight.w800),
-        ),
+      appBar: FintechAppBar(
+        title: isNew ? 'Add Access Point' : 'Edit Access Point',
       ),
       body: GestureDetector(
         onTap: () => FocusScope.of(context).unfocus(),

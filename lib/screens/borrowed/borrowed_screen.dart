@@ -27,6 +27,8 @@ class _BorrowedScreenState extends State<BorrowedScreen>
 
   String? _filterEmployee;
   bool _filterOverdueOnly = false;
+  String _sortField = 'out_date';
+  bool _sortAsc = false;
   final TextEditingController _searchCtrl = TextEditingController();
   StreamSubscription<List<BorrowLog>>? _borrowSubscription;
 
@@ -96,17 +98,47 @@ class _BorrowedScreenState extends State<BorrowedScreen>
     }).toList();
     _active = filtered.where((l) => !l.isReturned).toList();
     _history = filtered.where((l) => l.isReturned).toList();
+
+    int compareLogs(BorrowLog a, BorrowLog b, {required bool isHistory}) {
+      int cmp;
+      switch (_sortField) {
+        case 'due_return_date':
+          final da = isHistory ? (a.backDate ?? a.outDate) : (a.dueDate ?? '9999-99-99');
+          final db = isHistory ? (b.backDate ?? b.outDate) : (b.dueDate ?? '9999-99-99');
+          cmp = da.compareTo(db);
+          break;
+        case 'device_name':
+          cmp = a.deviceName.toLowerCase().compareTo(b.deviceName.toLowerCase());
+          break;
+        case 'employee_name':
+          cmp = a.employeeName.toLowerCase().compareTo(b.employeeName.toLowerCase());
+          break;
+        case 'out_date':
+        default:
+          cmp = a.outDate.compareTo(b.outDate);
+          if (cmp == 0) {
+            cmp = (a.id ?? 0).compareTo(b.id ?? 0);
+          }
+          break;
+      }
+      return _sortAsc ? cmp : -cmp;
+    }
+
+    _active.sort((a, b) => compareLogs(a, b, isHistory: false));
+    _history.sort((a, b) => compareLogs(a, b, isHistory: true));
   }
 
   void _showFilterModal() {
     final employees = _all.map((l) => l.employeeName).toSet().toList()..sort();
     String? tempEmployee = _filterEmployee;
     bool tempOverdueOnly = _filterOverdueOnly;
+    String tempSortField = _sortField;
+    bool tempSortAsc = _sortAsc;
 
     showFintechBottomSheet(
       context: context,
       child: StatefulBuilder(
-        builder: (ctx, setMState) => Padding(
+        builder: (ctx, setMState) => SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -116,7 +148,7 @@ class _BorrowedScreenState extends State<BorrowedScreen>
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text(
-                    'Filter Borrow Logs',
+                    'Filter & Sort Borrows',
                     style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17),
                   ),
                   TextButton(
@@ -124,6 +156,8 @@ class _BorrowedScreenState extends State<BorrowedScreen>
                       setState(() {
                         _filterEmployee = null;
                         _filterOverdueOnly = false;
+                        _sortField = 'out_date';
+                        _sortAsc = false;
                         _applyFilter();
                       });
                       Navigator.pop(ctx);
@@ -176,6 +210,54 @@ class _BorrowedScreenState extends State<BorrowedScreen>
                     ),
                   ),
                 ),
+              const SizedBox(height: 16),
+              const SectionLabel('SORT ORDERING'),
+              FintechGroupedCard(
+                children: [
+                  for (final entry in const [
+                    ('out_date', 'Checkout Date', Icons.event_outlined),
+                    ('due_return_date', 'Due / Return Date', Icons.event_available_outlined),
+                    ('device_name', 'Device Name', Icons.devices_other_rounded),
+                    ('employee_name', 'Employee Name', Icons.person_outline_rounded),
+                  ])
+                    ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(
+                        entry.$3,
+                        size: 18,
+                        color: tempSortField == entry.$1
+                            ? Theme.of(ctx).colorScheme.primary
+                            : Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.5),
+                      ),
+                      title: Text(
+                        entry.$2,
+                        style: TextStyle(
+                          fontSize: 13.5,
+                          fontWeight: tempSortField == entry.$1 ? FontWeight.w700 : FontWeight.w500,
+                        ),
+                      ),
+                      trailing: tempSortField == entry.$1
+                          ? IconButton(
+                              icon: Icon(
+                                tempSortAsc ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
+                                size: 18,
+                                color: Theme.of(ctx).colorScheme.primary,
+                              ),
+                              tooltip: tempSortAsc ? 'Ascending' : 'Descending',
+                              onPressed: () => setMState(() => tempSortAsc = !tempSortAsc),
+                            )
+                          : null,
+                      onTap: () => setMState(() {
+                        if (tempSortField == entry.$1) {
+                          tempSortAsc = !tempSortAsc;
+                        } else {
+                          tempSortField = entry.$1;
+                        }
+                      }),
+                    ),
+                ],
+              ),
               const SizedBox(height: 20),
               SizedBox(
                 width: double.infinity,
@@ -185,6 +267,8 @@ class _BorrowedScreenState extends State<BorrowedScreen>
                     setState(() {
                       _filterEmployee = tempEmployee;
                       _filterOverdueOnly = tempOverdueOnly;
+                      _sortField = tempSortField;
+                      _sortAsc = tempSortAsc;
                       _applyFilter();
                     });
                     Navigator.pop(ctx);
@@ -194,7 +278,7 @@ class _BorrowedScreenState extends State<BorrowedScreen>
                       borderRadius: BorderRadius.circular(25),
                     ),
                   ),
-                  child: const Text('Apply Filter',
+                  child: const Text('Apply Filter & Sort',
                       style: TextStyle(fontWeight: FontWeight.w800)),
                 ),
               ),
@@ -273,19 +357,15 @@ class _BorrowedScreenState extends State<BorrowedScreen>
     String selectedCondition = 'Good / Verified';
     final conditions = ['Good / Verified', 'Fair / Operational', 'Needs Maintenance', 'Damaged'];
 
-    showModalBottomSheet(
+    showFintechBottomSheet(
       context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setS) => Padding(
+      child: StatefulBuilder(
+        builder: (ctx, setS) => SingleChildScrollView(
           padding: EdgeInsets.only(
-            bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
             left: 20,
             right: 20,
-            top: 20,
+            top: 8,
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -442,8 +522,11 @@ class _BorrowedScreenState extends State<BorrowedScreen>
               const SizedBox(width: 8),
               FintechActionButton(
                 icon: Icons.tune_rounded,
-                tooltip: 'Filter Borrow Logs',
-                isActive: _filterEmployee != null || _filterOverdueOnly,
+                tooltip: 'Filter & Sort Borrows',
+                isActive: _filterEmployee != null ||
+                    _filterOverdueOnly ||
+                    _sortField != 'out_date' ||
+                    _sortAsc,
                 activeColor: AppColors.borrowed,
                 onTap: _showFilterModal,
               ),

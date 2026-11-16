@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import '../../database/database_helper.dart';
 import '../../models/subscription.dart';
+import '../../services/currency_service.dart';
 import '../../widgets/common_widgets.dart';
 import '../../widgets/selection_bottom_bar.dart';
 import 'subscription_form_screen.dart';
@@ -160,8 +160,6 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
     );
   }
 
-  String _fmt(double v) => NumberFormat('#,##0.00').format(v);
-
   Color _typeColor(String type) => switch (type) {
         'Monthly' => const Color(0xFFF43F5E),
         'Yearly' => const Color(0xFF0EA5E9),
@@ -189,7 +187,7 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
         title: 'Subscriptions',
         subtitle: _filtered.isEmpty
             ? 'Software licenses & memberships'
-            : '${_filtered.length} active • EGP ${_fmt(_totalMonthlyEquivalent)}/mo',
+            : '${_filtered.length} active • ${CurrencyService().format(_totalMonthlyEquivalent)}/mo',
       ),
       body: Column(
         children: [
@@ -289,7 +287,7 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          '≈ EGP ${_fmt(_totalMonthlyEquivalent)} / month',
+                          '≈ ${CurrencyService().format(_totalMonthlyEquivalent)} / month',
                           style: const TextStyle(
                             color: _subColor,
                             fontWeight: FontWeight.w900,
@@ -379,7 +377,7 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
                                 ),
                               ),
                               title: s.service,
-                              subtitle: 'EGP ${_fmt(s.price)}',
+                              subtitle: CurrencyService().format(s.price),
                               extra: s.renewalDate.isNotEmpty
                                   ? 'Renews: ${s.renewalDate}'
                                   : null,
@@ -422,7 +420,6 @@ class _SubscriptionDetailSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final fmt = NumberFormat('#,##0.00', 'en_US');
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
@@ -460,7 +457,7 @@ class _SubscriptionDetailSheet extends StatelessWidget {
                       ),
                       const SizedBox(height: 3),
                       Text(
-                        'EGP ${fmt.format(sub.price)} / ${sub.type.toLowerCase()}',
+                        '${CurrencyService().format(sub.price)} / ${sub.type.toLowerCase()}',
                         style: const TextStyle(
                           color: _subColor,
                           fontWeight: FontWeight.w900,
@@ -522,7 +519,7 @@ class _SubscriptionDetailSheet extends StatelessWidget {
               ),
               DetailRow(
                 label: 'Monthly Equivalent',
-                value: '≈ EGP ${fmt.format(sub.monthlyEquivalent)} / mo',
+                value: '≈ ${CurrencyService().format(sub.monthlyEquivalent)} / mo',
                 icon: Icons.functions_rounded,
               ),
               if (sub.renewalDate.isNotEmpty)

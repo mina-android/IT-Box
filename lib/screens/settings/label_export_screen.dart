@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../database/database_helper.dart';
 import '../../services/label_service.dart';
 import '../../services/wifi_pdf_service.dart';
+import '../../theme/app_theme.dart';
 import '../../widgets/common_widgets.dart';
 
 class LabelExportScreen extends StatefulWidget {
@@ -210,47 +211,63 @@ class _LabelExportScreenState extends State<LabelExportScreen> {
     final titleCtrl = TextEditingController();
     final subCtrl = TextEditingController();
 
-    final added = await showDialog<bool>(
+    final added = await showFintechBottomSheet<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-        title: const Text('Add Label to Queue', style: TextStyle(fontWeight: FontWeight.w800)),
-        content: Column(
+      child: SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(
+          20,
+          8,
+          20,
+          MediaQuery.of(context).viewInsets.bottom + 28,
+        ),
+        child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            AppTextField(
-              controller: titleCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Label Text / Tag / Asset ID *',
-                hintText: 'e.g. LAP-042 or SERVER-RACK-1',
-                prefixIcon: Icon(Icons.label_outline_rounded),
-              ),
+            const Text(
+              'Add Label to Queue',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
             ),
-            const SizedBox(height: 12),
-            AppTextField(
-              controller: subCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Sub-line (Optional)',
-                hintText: 'e.g. Phone number or Department',
-                prefixIcon: Icon(Icons.short_text_rounded),
+            const SizedBox(height: 16),
+            FintechGroupedCard(
+              children: [
+                AppTextField(
+                  controller: titleCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Label Text / Tag / Asset ID *',
+                    hintText: 'e.g. LAP-042 or SERVER-RACK-1',
+                    prefixIcon: Icon(Icons.label_outline_rounded),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                AppTextField(
+                  controller: subCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Sub-line (Optional)',
+                    hintText: 'e.g. Phone number or Department',
+                    prefixIcon: Icon(Icons.short_text_rounded),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton.icon(
+              onPressed: () {
+                if (titleCtrl.text.trim().isNotEmpty) {
+                  Navigator.pop(context, true);
+                }
+              },
+              icon: const Icon(Icons.add_circle_outline_rounded),
+              label: const Text('Add to Queue', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                minimumSize: const Size.fromHeight(52),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               ),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              if (titleCtrl.text.trim().isNotEmpty) {
-                Navigator.pop(ctx, true);
-              }
-            },
-            child: const Text('Add to Queue'),
-          ),
-        ],
       ),
     );
 

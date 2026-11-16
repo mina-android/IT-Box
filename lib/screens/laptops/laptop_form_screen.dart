@@ -146,11 +146,8 @@ class _LaptopFormScreenState extends State<LaptopFormScreen> {
     final isNew = widget.laptop == null;
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          isNew ? 'Add Laptop' : 'Edit Laptop',
-          style: const TextStyle(fontWeight: FontWeight.w800),
-        ),
+      appBar: FintechAppBar(
+        title: isNew ? 'Add Laptop' : 'Edit Laptop',
       ),
       body: GestureDetector(
         onTap: () => FocusScope.of(context).unfocus(),

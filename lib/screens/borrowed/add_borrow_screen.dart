@@ -592,35 +592,9 @@ class _AddBorrowScreenState extends State<AddBorrowScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-
     return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.logToEdit != null ? 'Edit Borrow Entry' : 'New Borrow Entry'),
-      ),
-      bottomNavigationBar: SafeArea(
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-          decoration: BoxDecoration(
-            color: isDark ? AppColors.darkCard : Colors.white,
-            border: Border(top: BorderSide(color: isDark ? AppColors.darkBorder : AppColors.lightBorder)),
-          ),
-          child: SizedBox(
-            height: 52,
-            child: ElevatedButton.icon(
-              onPressed: _saving || (_deviceType == 'electronic' && _availableEl.isEmpty) || (_deviceType == 'mifi' && _availableMi.isEmpty) ? null : _save,
-              icon: _saving
-                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                  : const Icon(Icons.check_circle_outline, size: 20),
-              label: Text(widget.logToEdit != null ? 'Update Borrow' : 'Borrow Device', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.borrowed,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                elevation: 0,
-              ),
-            ),
-          ),
-        ),
+      appBar: FintechAppBar(
+        title: widget.logToEdit != null ? 'Edit Borrow Entry' : 'New Borrow Entry',
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
@@ -898,6 +872,28 @@ class _AddBorrowScreenState extends State<AddBorrowScreen> {
                       ),
                     ],
                   ],
+                ),
+                const SizedBox(height: 28),
+                ElevatedButton.icon(
+                  onPressed: _saving ||
+                          (_deviceType == 'electronic' && _availableEl.isEmpty) ||
+                          (_deviceType == 'mifi' && _availableMi.isEmpty)
+                      ? null
+                      : _save,
+                  icon: _saving
+                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Icon(Icons.check_circle_outline, size: 20),
+                  label: Text(
+                    widget.logToEdit != null ? 'Update Borrow' : 'Borrow Device',
+                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.borrowed,
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size.fromHeight(52),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    elevation: 0,
+                  ),
                 ),
               ],
             ),

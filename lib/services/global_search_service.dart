@@ -1,16 +1,26 @@
 // lib/services/global_search_service.dart
 import '../database/database_helper.dart';
+import 'currency_service.dart';
 
 enum SearchCategory {
   laptop,
   networkDevice,
   printer,
   mifi,
+  accessPoint,
   electronic,
+  otherDevice,
   employee,
+  borrow,
+  ticket,
   email,
+  wifiNetwork,
+  accountPassword,
   staticIp,
   vendorContact,
+  expense,
+  bill,
+  subscription,
 }
 
 class SearchResultItem {
@@ -36,9 +46,12 @@ class GlobalSearchService {
 
   Future<List<SearchResultItem>> search(String rawQuery) async {
     final query = rawQuery.trim().toLowerCase();
-    if (query.isEmpty) return const [];
+    if (query.isEmpty) {
+      return const [];
+    }
 
     final results = <SearchResultItem>[];
+    final cur = CurrencyService();
 
     // 1. Laptops
     final laptops = await _db.getLaptops();
@@ -49,7 +62,7 @@ class GlobalSearchService {
           l.notes.toLowerCase().contains(query) ||
           l.cpu.toLowerCase().contains(query)) {
         results.add(SearchResultItem(
-          id: l.id!,
+          id: l.id ?? 0,
           title: '${l.laptopNumber} • ${l.model}',
           subtitle: l.user.isNotEmpty ? 'Assigned: ${l.user}' : 'Unassigned (${l.condition})',
           extraInfo: [l.cpu, l.ram, l.storage].where((s) => s.isNotEmpty).join(' / '),
@@ -59,13 +72,14 @@ class GlobalSearchService {
       }
     }
 
-    // 2. Network Devices (Routers/Switches)
+    // 2. Network Devices (Routers)
     final netDevices = await _db.getNetworkDevices();
     for (final d in netDevices) {
       if (d.deviceNumber.toLowerCase().contains(query) ||
           d.model.toLowerCase().contains(query) ||
           d.deviceLocation.toLowerCase().contains(query) ||
           d.serviceProvider.toLowerCase().contains(query) ||
+          d.gateway.toLowerCase().contains(query) ||
           d.notes.toLowerCase().contains(query)) {
         results.add(SearchResultItem(
           id: d.id ?? 0,
@@ -73,12 +87,31 @@ class GlobalSearchService {
           subtitle: d.deviceLocation.isNotEmpty ? d.deviceLocation : d.serviceProvider,
           extraInfo: d.gateway.isNotEmpty ? 'Gateway: ${d.gateway}' : '',
           category: SearchCategory.networkDevice,
-          categoryLabel: 'Network Device',
+          categoryLabel: 'Router',
         ));
       }
     }
 
-    // 3. Printers
+    // 3. Access Points
+    final aps = await _db.getAccessPoints();
+    for (final ap in aps) {
+      if (ap.deviceNumber.toLowerCase().contains(query) ||
+          ap.model.toLowerCase().contains(query) ||
+          ap.location.toLowerCase().contains(query) ||
+          ap.portNumber.toLowerCase().contains(query) ||
+          ap.notes.toLowerCase().contains(query)) {
+        results.add(SearchResultItem(
+          id: ap.id ?? 0,
+          title: '${ap.deviceNumber} • ${ap.model}',
+          subtitle: ap.location.isNotEmpty ? ap.location : 'Location unassigned',
+          extraInfo: ap.portNumber.isNotEmpty ? 'Port: ${ap.portNumber}' : '',
+          category: SearchCategory.accessPoint,
+          categoryLabel: 'Access Point',
+        ));
+      }
+    }
+
+    // 4. Printers
     final printers = await _db.getPrinters();
     for (final p in printers) {
       if (p.printerNumber.toLowerCase().contains(query) ||
@@ -96,7 +129,7 @@ class GlobalSearchService {
       }
     }
 
-    // 4. MiFis
+    // 5. MiFis
     final mifis = await _db.getMiFis();
     for (final m in mifis) {
       if (m.deviceNumber.toLowerCase().contains(query) ||
@@ -106,7 +139,7 @@ class GlobalSearchService {
           m.serviceProvider.toLowerCase().contains(query) ||
           m.notes.toLowerCase().contains(query)) {
         results.add(SearchResultItem(
-          id: m.id!,
+          id: m.id ?? 0,
           title: 'MiFi #${m.deviceNumber} • ${m.model}',
           subtitle: 'Status: ${m.status} • Provider: ${m.serviceProvider}',
           extraInfo: m.phoneNumber.isNotEmpty ? 'Phone: ${m.phoneNumber}' : 'Wi-Fi: ${m.wifiName}',
@@ -116,7 +149,7 @@ class GlobalSearchService {
       }
     }
 
-    // 5. Electronics
+    // 6. Electronics
     final electronics = await _db.getElectronics();
     for (final e in electronics) {
       if (e.deviceNumber.toLowerCase().contains(query) ||
@@ -124,7 +157,7 @@ class GlobalSearchService {
           e.details.toLowerCase().contains(query) ||
           e.notes.toLowerCase().contains(query)) {
         results.add(SearchResultItem(
-          id: e.id!,
+          id: e.id ?? 0,
           title: '${e.deviceName} #${e.deviceNumber}',
           subtitle: 'Status: ${e.status}',
           extraInfo: e.details,
@@ -134,13 +167,31 @@ class GlobalSearchService {
       }
     }
 
-    // 6. Employees
+    // 7. Other Devices
+    final others = await _db.getOtherDevices();
+    for (final o in others) {
+      if (o.deviceName.toLowerCase().contains(query) ||
+          o.deviceType.toLowerCase().contains(query) ||
+          o.model.toLowerCase().contains(query) ||
+          o.notes.toLowerCase().contains(query)) {
+        results.add(SearchResultItem(
+          id: o.id ?? 0,
+          title: o.deviceName,
+          subtitle: 'Category: ${o.deviceType}',
+          extraInfo: o.model,
+          category: SearchCategory.otherDevice,
+          categoryLabel: 'Other Device',
+        ));
+      }
+    }
+
+    // 8. Employees
     final employees = await _db.getEmployees();
     for (final emp in employees) {
       if (emp.name.toLowerCase().contains(query) ||
           emp.phoneNumber.toLowerCase().contains(query)) {
         results.add(SearchResultItem(
-          id: emp.id!,
+          id: emp.id ?? 0,
           title: emp.name,
           subtitle: emp.phoneNumber.isNotEmpty ? emp.phoneNumber : 'No phone',
           extraInfo: '',
@@ -150,23 +201,92 @@ class GlobalSearchService {
       }
     }
 
-    // 7. Emails
+    // 9. Borrows
+    final borrows = await _db.getBorrowLogs();
+    for (final b in borrows) {
+      if (b.deviceName.toLowerCase().contains(query) ||
+          b.deviceNumber.toLowerCase().contains(query) ||
+          b.employeeName.toLowerCase().contains(query) ||
+          b.reason.toLowerCase().contains(query)) {
+        results.add(SearchResultItem(
+          id: b.id ?? 0,
+          title: '${b.deviceName} (#${b.deviceNumber})',
+          subtitle: 'Borrowed by ${b.employeeName}',
+          extraInfo: b.isReturned ? 'Returned ${b.backDate ?? ''}' : 'Out since ${b.outDate}',
+          category: SearchCategory.borrow,
+          categoryLabel: 'Borrow',
+        ));
+      }
+    }
+
+    // 10. Tickets / Logs
+    final tickets = await _db.getLogEntries();
+    for (final t in tickets) {
+      if (t.problem.toLowerCase().contains(query) ||
+          t.solution.toLowerCase().contains(query) ||
+          t.employeeName.toLowerCase().contains(query)) {
+        results.add(SearchResultItem(
+          id: t.id ?? 0,
+          title: t.problem,
+          subtitle: '${t.employeeName} • ${t.state} (${t.priority})',
+          extraInfo: t.date,
+          category: SearchCategory.ticket,
+          categoryLabel: 'Ticket',
+        ));
+      }
+    }
+
+    // 11. Emails
     final emails = await _db.getEmailAccounts();
     for (final em in emails) {
       if (em.email.toLowerCase().contains(query) ||
           em.employeeName.toLowerCase().contains(query)) {
         results.add(SearchResultItem(
-          id: em.id!,
+          id: em.id ?? 0,
           title: em.email,
           subtitle: em.employeeName.isNotEmpty ? 'Employee: ${em.employeeName}' : 'Unassigned',
           extraInfo: '',
           category: SearchCategory.email,
-          categoryLabel: 'Email Account',
+          categoryLabel: 'Email',
         ));
       }
     }
 
-    // 8. Static IPs
+    // 12. Wi-Fi Networks
+    final wifis = await _db.getWifiNetworks();
+    for (final w in wifis) {
+      if (w.networkName.toLowerCase().contains(query) ||
+          w.locationDevice.toLowerCase().contains(query) ||
+          w.phoneNumber.toLowerCase().contains(query) ||
+          w.notes.toLowerCase().contains(query)) {
+        results.add(SearchResultItem(
+          id: w.id ?? 0,
+          title: w.networkName,
+          subtitle: w.locationDevice.isNotEmpty ? w.locationDevice : 'Wi-Fi Network',
+          extraInfo: w.phoneNumber,
+          category: SearchCategory.wifiNetwork,
+          categoryLabel: 'Wi-Fi',
+        ));
+      }
+    }
+
+    // 13. Account Passwords
+    final creds = await _db.getAccountPasswords();
+    for (final c in creds) {
+      if (c.platform.toLowerCase().contains(query) ||
+          c.emailUsername.toLowerCase().contains(query)) {
+        results.add(SearchResultItem(
+          id: c.id ?? 0,
+          title: c.platform,
+          subtitle: c.emailUsername,
+          extraInfo: 'Credential Vault',
+          category: SearchCategory.accountPassword,
+          categoryLabel: 'Credential',
+        ));
+      }
+    }
+
+    // 14. Static IPs
     final staticIps = await _db.getStaticIps();
     for (final ip in staticIps) {
       final ipStr = ip['ip_address']?.toString() ?? '';
@@ -188,7 +308,7 @@ class GlobalSearchService {
       }
     }
 
-    // 9. Vendor Contacts
+    // 15. Vendor Contacts
     final vendors = await _db.getVendorContacts();
     for (final v in vendors) {
       if (v.name.toLowerCase().contains(query) ||
@@ -202,7 +322,59 @@ class GlobalSearchService {
           subtitle: [v.company, v.role].where((s) => s.isNotEmpty).join(' • '),
           extraInfo: v.accountNumber.isNotEmpty ? 'Acc/CID: ${v.accountNumber}' : v.phoneNumber,
           category: SearchCategory.vendorContact,
-          categoryLabel: 'Vendor Runbook',
+          categoryLabel: 'Vendor',
+        ));
+      }
+    }
+
+    // 16. Expenses
+    final expenses = await _db.getExpenses();
+    for (final ex in expenses) {
+      if (ex.item.toLowerCase().contains(query) ||
+          ex.details.toLowerCase().contains(query) ||
+          ex.date.toLowerCase().contains(query)) {
+        results.add(SearchResultItem(
+          id: ex.id ?? 0,
+          title: ex.item,
+          subtitle: '${cur.format(ex.price)} • ${ex.date}',
+          extraInfo: ex.details,
+          category: SearchCategory.expense,
+          categoryLabel: 'Expense',
+        ));
+      }
+    }
+
+    // 17. Bills
+    final bills = await _db.getBills();
+    for (final b in bills) {
+      if (b.category.toLowerCase().contains(query) ||
+          b.person.toLowerCase().contains(query) ||
+          b.number.toLowerCase().contains(query) ||
+          b.notes.toLowerCase().contains(query)) {
+        results.add(SearchResultItem(
+          id: b.id ?? 0,
+          title: '${b.category} • ${b.number}',
+          subtitle: '${cur.format(b.price)} ${b.person.isNotEmpty ? '• ${b.person}' : ''}',
+          extraInfo: b.notes,
+          category: SearchCategory.bill,
+          categoryLabel: 'Bill',
+        ));
+      }
+    }
+
+    // 18. Subscriptions
+    final subs = await _db.getSubscriptions();
+    for (final s in subs) {
+      if (s.service.toLowerCase().contains(query) ||
+          s.type.toLowerCase().contains(query) ||
+          s.notes.toLowerCase().contains(query)) {
+        results.add(SearchResultItem(
+          id: s.id ?? 0,
+          title: s.service,
+          subtitle: '${cur.format(s.price)} / ${s.type}',
+          extraInfo: s.renewalDate.isNotEmpty ? 'Renews: ${s.renewalDate}' : s.notes,
+          category: SearchCategory.subscription,
+          categoryLabel: 'Subscription',
         ));
       }
     }

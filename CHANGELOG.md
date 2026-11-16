@@ -7,6 +7,26 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) co
 
 ---
 
+## [1.1.1] - 2026-11-16
+
+### Added & Changed (UI/UX Unification, Multi-Organization Hot-Switching, Currency & Exchange Rates)
+- **Full-Screen Maintenance & Repair Form**: Replaced the `AlertDialog` in `DeviceMaintenanceScreen` with a full-screen `DeviceMaintenanceFormScreen` supporting Service Type (`FintechDropdown`), Planned/Completed scheduling toggle, Date picker, Cost, Work Details, Vendor/Technician, and optional Expense ledger sync. Enabled Maintenance & Repair History access across **Laptops**, **Routers** (`NetworkDevicesScreen`), and **Printers** (`PrintersScreen`).
+- **Unified "Others" Detail Popup**: Aligned `OtherDevicesScreen._showDetail` with all other inventory detail sheets (single header, `Edit Details` / `Delete` `OutlinedButton` row at top, `FintechGroupedCard` specifications).
+- **Borrows Sorting**: Added a `Sort Ordering` section inside `BorrowedScreen`'s filter bottom sheet supporting Checkout Date, Due/Return Date, Device Name, and Employee Name (Ascending/Descending) for both Active Borrows and Borrow History.
+- **Audit Trail Header Spacing**: Updated `FintechAppBar` to enforce `8px` spacing between action buttons and styled the Clear Audit Trail button with error tinting.
+- **Universal Search on Home**: Removed standalone `GlobalSearchScreen` from `MoreScreen` and embedded a live inline Universal Search bar (`SearchBar2`) on `DashboardScreen` searching across all 18 entity categories with filter chips and direct navigation.
+- **Network Diagnostics Improvements**: Removed the private-storage Topology PDF save button from `NetworkDiagnosticsScreen` and added clear step-by-step usage instruction cards (`_InstructionCard`) and quick enterprise port chips for DNS Lookup, Port Probe, and Throughput Estimator.
+- **Vendor Contacts Header Cleanup**: Removed the duplicate top-right `+` button from `VendorContactsScreen`, retaining the standard `FintechFab`.
+- **Multi-Organization Isolation (Replacing Workspaces)**: Removed `WorkspaceService` completely and upgraded `CompanyService` + `DatabaseHelper` (`_watchSwitchable` + `onDatabaseSwitched`) to support multiple isolated Organizations (`OrganizationProfile`, `OrganizationFormScreen`), each with its own SQLite database (`itbox.db` for primary, `itbox_org_<id>.db` for additional orgs), name, and logo, with instant hot-switching and secondary organization deletion in Settings without app restart or data loss.
+- **Multi-Currency & Exchange Rate Retrieval (Ported from Expensy)**: Added `CurrencyService` (62 `kCurrencies`, `showCurrencyPicker`) and `ExchangeRateService` (`open.er-api.com` + `fawazahmed0` CDN + offline fallback rates). Replaced all hardcoded `EGP` labels across Dashboard, Expenses, Bills, Subscriptions, Maintenance, Excel exports, and PDF reports, with optional atomic conversion of stored financial records on currency switch.
+- **App-Wide UI/UX & Rounded Dropdown Unification**:
+  - Added global `popupMenuTheme` and `dropdownMenuTheme` with `16px` rounded corners and updated `inputDecorationTheme` border radius to `16px` in `app_theme.dart`.
+  - Replaced all remaining raw `DropdownButton` / `DropdownButtonFormField` instances with `FintechDropdown<T>` (`vendor_contact_form_screen.dart`, `unit_converter_screen.dart`, `static_ip_form_screen.dart`, `switch_patch_chassis_form_screen.dart`, `switch_patch_matrix_screen.dart`).
+  - Added `16px` rounded corners to `PopupMenuButton`s in `accounts_passwords_screen.dart`, `wifi_networks_screen.dart`, and `switch_patch_matrix_screen.dart`.
+  - Unified all 16 remaining raw `AppBar` screens to `FintechAppBar`, refactored `VendorContactFormScreen` to `FintechGroupedCard` + `AppTextField`, moved Save buttons in `AddBorrowScreen`, `EmailFormScreen`, `EmployeeFormScreen`, and `LogFormScreen` to the bottom of the scrollable `ListView`, converted port/custom-label edit dialogs to `showFintechBottomSheet`, and standardized bottom sheets across `BorrowedScreen`, `Employee360Screen`, and `BarcodeScannerScreen`.
+
+---
+
 ## [1.1.0] - 2026-10-26
 
 ### Added & Hardened (Correctness Fixes C1-C11, Card Surface Standard & Feature Waves W1-W5)

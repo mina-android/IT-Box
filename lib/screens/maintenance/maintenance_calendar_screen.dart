@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../database/database_helper.dart';
+import '../../services/currency_service.dart';
 import '../../widgets/common_widgets.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/haptics.dart';
@@ -323,7 +324,7 @@ class _MaintenanceCalendarScreenState extends State<MaintenanceCalendarScreen> {
                                             ),
                                             if (cost > 0)
                                               Text(
-                                                '${cost.toStringAsFixed(0)} EGP',
+                                                CurrencyService().format(cost.toDouble(), decimalDigits: 0),
                                                 style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
                                               ),
                                           ],

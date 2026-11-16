@@ -1,9 +1,9 @@
 // lib/screens/maintenance/device_maintenance_screen.dart
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import '../../database/database_helper.dart';
-import '../../models/expense.dart';
+import '../../services/currency_service.dart';
 import '../../widgets/common_widgets.dart';
+import 'device_maintenance_form_screen.dart';
 
 class DeviceMaintenanceScreen extends StatefulWidget {
   final String deviceType;
@@ -45,138 +45,31 @@ class _DeviceMaintenanceScreenState extends State<DeviceMaintenanceScreen> {
     }
   }
 
-  void _showAddLogDialog() {
-    final typeCtrl = TextEditingController(text: 'Repair');
-    final costCtrl = TextEditingController(text: '0.0');
-    final detailsCtrl = TextEditingController();
-    final technicianCtrl = TextEditingController(text: 'Internal IT');
-    DateTime selectedDate = DateTime.now();
-    bool addToExpenses = true;
-
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDlgState) => AlertDialog(
-          title: const Text('Log Maintenance / Repair'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                InputDecorator(
-                  decoration: const InputDecoration(labelText: 'Service Type'),
-                  child: DropdownButton<String>(
-                    value: typeCtrl.text,
-                    isExpanded: true,
-                    underline: const SizedBox(),
-                    items: const [
-                      DropdownMenuItem(value: 'Repair', child: Text('Hardware Repair')),
-                      DropdownMenuItem(value: 'Upgrade', child: Text('Component Upgrade (RAM/SSD)')),
-                      DropdownMenuItem(value: 'Maintenance', child: Text('Cleaning / Repaste / Service')),
-                      DropdownMenuItem(value: 'Inspection', child: Text('Inspection / Testing')),
-                    ],
-                    onChanged: (v) {
-                      if (v != null) setDlgState(() => typeCtrl.text = v);
-                    },
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: costCtrl,
-                  decoration: const InputDecoration(labelText: 'Cost (EGP)', prefixIcon: Icon(Icons.attach_money_rounded)),
-                  keyboardType: TextInputType.number,
-                  enableSuggestions: false,
-                  autocorrect: false,
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: detailsCtrl,
-                  decoration: const InputDecoration(labelText: 'Work Details *', hintText: 'Replaced thermal paste & cooling fan'),
-                  enableSuggestions: false,
-                  autocorrect: false,
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: technicianCtrl,
-                  decoration: const InputDecoration(labelText: 'Performed By / Vendor', hintText: 'Internal IT / Dell Support'),
-                  enableSuggestions: false,
-                  autocorrect: false,
-                ),
-                const SizedBox(height: 12),
-                CheckboxListTile(
-                  title: const Text('Add cost to Department Expenses', style: TextStyle(fontSize: 12)),
-                  value: addToExpenses,
-                  contentPadding: EdgeInsets.zero,
-                  dense: true,
-                  onChanged: (v) => setDlgState(() => addToExpenses = v ?? true),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                if (detailsCtrl.text.trim().isEmpty) return;
-                final cost = double.tryParse(costCtrl.text.trim()) ?? 0.0;
-                final dateStr = DateFormat('yyyy-MM-dd').format(selectedDate);
-
-                await _db.insertMaintenanceLog({
-                  'device_type': widget.deviceType,
-                  'device_id': widget.deviceId,
-                  'date': dateStr,
-                  'service_type': typeCtrl.text,
-                  'cost': cost,
-                  'details': detailsCtrl.text.trim(),
-                  'performed_by': technicianCtrl.text.trim(),
-                });
-
-                if (addToExpenses && cost > 0) {
-                  await _db.insertExpense(Expense(
-                    date: dateStr,
-                    item: '${typeCtrl.text}: ${widget.deviceName} (#${widget.deviceNumber})',
-                    price: cost,
-                    details: detailsCtrl.text.trim(),
-                  ));
-                }
-
-                await _db.logAuditActivity(
-                  'MAINTENANCE',
-                  widget.deviceType,
-                  entityId: widget.deviceId,
-                  description: '${typeCtrl.text} on ${widget.deviceName} (#${widget.deviceNumber})',
-                );
-
-                if (ctx.mounted) Navigator.pop(ctx);
-                _load();
-              },
-              child: const Text('Save Record'),
-            ),
-          ],
+  Future<void> _openAddLogForm() async {
+    final saved = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => DeviceMaintenanceFormScreen(
+          deviceType: widget.deviceType,
+          deviceId: widget.deviceId,
+          deviceName: widget.deviceName,
+          deviceNumber: widget.deviceNumber,
         ),
       ),
     );
+    if (saved == true && mounted) {
+      await _load();
+    }
   }
 
   Future<void> _confirmDeleteLog(int id, String details) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete Maintenance Record'),
-        content: Text('Are you sure you want to delete this maintenance record?\n\n"$details"'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Theme.of(ctx).colorScheme.error),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'Delete Maintenance Record',
+      message: 'Are you sure you want to delete this maintenance record?\n\n"$details"',
+      confirmText: 'Delete',
     );
-    if (confirmed == true && mounted) {
+    if (confirmed && mounted) {
       await _db.deleteMaintenanceLog(id);
       await _load();
     }
@@ -194,7 +87,7 @@ class _DeviceMaintenanceScreenState extends State<DeviceMaintenanceScreen> {
         title: '${widget.deviceName} — Maintenance',
       ),
       floatingActionButton: FintechFab(
-        onPressed: _showAddLogDialog,
+        onPressed: _openAddLogForm,
         tooltip: 'Log Service',
         icon: Icons.build_rounded,
       ),
@@ -208,7 +101,7 @@ class _DeviceMaintenanceScreenState extends State<DeviceMaintenanceScreen> {
                 children: [
                   const Text('TOTAL MAINTENANCE EXPENSE', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white70)),
                   const SizedBox(height: 6),
-                  Text('${totalCost.toStringAsFixed(2)} EGP', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: Colors.white)),
+                  Text(CurrencyService().format(totalCost), style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: Colors.white)),
                   const SizedBox(height: 4),
                   Text('${_logs.length} Service interventions recorded for #${widget.deviceNumber}', style: const TextStyle(fontSize: 12, color: Colors.white60)),
                 ],
@@ -238,10 +131,11 @@ class _DeviceMaintenanceScreenState extends State<DeviceMaintenanceScreen> {
                         itemBuilder: (ctx, i) {
                           final log = _logs[i];
                           final type = log['service_type'] as String? ?? 'Service';
-                          final cost = log['cost'] as num? ?? 0.0;
+                          final cost = (log['cost'] as num? ?? 0.0).toDouble();
                           final details = log['details'] as String? ?? '';
                           final by = log['performed_by'] as String? ?? '';
                           final date = log['date'] as String? ?? '';
+                          final isPlanned = (log['is_planned'] as int? ?? 0) == 1;
 
                           return Card(
                             margin: const EdgeInsets.only(bottom: 8),
@@ -257,22 +151,45 @@ class _DeviceMaintenanceScreenState extends State<DeviceMaintenanceScreen> {
                                   Row(
                                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                     children: [
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                        decoration: BoxDecoration(
-                                          color: cs.primaryContainer.withValues(alpha: 0.7),
-                                          borderRadius: BorderRadius.circular(6),
-                                        ),
-                                        child: Text(
-                                          type,
-                                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: cs.primary),
-                                        ),
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                            decoration: BoxDecoration(
+                                              color: cs.primaryContainer.withValues(alpha: 0.7),
+                                              borderRadius: BorderRadius.circular(6),
+                                            ),
+                                            child: Text(
+                                              type,
+                                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: cs.primary),
+                                            ),
+                                          ),
+                                          if (isPlanned) ...[
+                                            const SizedBox(width: 6),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                                              decoration: BoxDecoration(
+                                                color: Colors.amber.withValues(alpha: 0.18),
+                                                borderRadius: BorderRadius.circular(6),
+                                              ),
+                                              child: Text(
+                                                'PLANNED',
+                                                style: TextStyle(
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.w800,
+                                                  color: Colors.amber.shade700,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ],
                                       ),
                                       Row(
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
                                           Text(
-                                            '${cost.toStringAsFixed(2)} EGP',
+                                            CurrencyService().format(cost),
                                             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                                           ),
                                           if (log['id'] != null) ...[

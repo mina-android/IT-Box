@@ -4,6 +4,7 @@ import '../../database/database_helper.dart';
 import '../../models/other_device.dart';
 import '../../widgets/common_widgets.dart';
 import '../../widgets/selection_bottom_bar.dart';
+import '../../theme/app_theme.dart';
 import 'other_device_form_screen.dart';
 
 class OtherDevicesScreen extends StatefulWidget {
@@ -125,129 +126,141 @@ class _OtherDevicesScreenState extends State<OtherDevicesScreen> with AutomaticK
 
     showFintechBottomSheet(
       context: context,
-      title: d.deviceName,
-      subtitle: d.deviceType,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              IconBox(
-                icon: _iconForType(d.deviceType),
-                color: cs.primary,
-                size: 48,
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      d.deviceName,
-                      style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17),
-                    ),
-                    const SizedBox(height: 3),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: cs.secondaryContainer.withValues(alpha: 0.7),
-                        borderRadius: BorderRadius.circular(6),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Hero(
+                  tag: 'other_icon_${d.id}',
+                  child: IconBox(
+                    icon: _iconForType(d.deviceType),
+                    color: cs.primary,
+                    size: 50,
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        d.deviceName,
+                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
                       ),
-                      child: Text(
-                        d.deviceType,
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: cs.onSecondaryContainer,
+                      if (d.model.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          d.model,
+                          style: credentialFont(
+                            fontSize: 12.5,
+                            color: cs.onSurface.withValues(alpha: 0.55),
+                          ),
                         ),
-                      ),
+                      ],
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: cs.primary.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: cs.primary.withValues(alpha: 0.3)),
+                  ),
+                  child: Text(
+                    d.deviceType,
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                      color: cs.primary,
                     ),
-                  ],
+                  ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 18),
-          const SectionLabel('DEVICE SPECIFICATIONS'),
-          FintechGroupedCard(
-            children: [
-              DetailRow(
-                label: 'Device Type',
-                value: d.deviceType,
-                icon: Icons.category_outlined,
-              ),
-              DetailRow(
-                label: 'Device Name',
-                value: d.deviceName,
-                icon: Icons.devices_other_rounded,
-                copyable: true,
-              ),
-              if (d.model.isNotEmpty)
-                DetailRow(
-                  label: 'Model',
-                  value: d.model,
-                  icon: Icons.precision_manufacturing_outlined,
-                  copyable: true,
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _openForm(d);
+                    },
+                    icon: const Icon(Icons.edit_outlined, size: 17),
+                    label: const Text('Edit Details'),
+                    style: OutlinedButton.styleFrom(
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      padding: const EdgeInsets.symmetric(vertical: 11),
+                    ),
+                  ),
                 ),
-              if (d.notes.isNotEmpty)
-                DetailRow(
-                  label: 'Notes / Specs',
-                  value: d.notes,
-                  icon: Icons.notes_rounded,
-                  copyable: true,
-                ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () async {
-                    Navigator.pop(context);
-                    final ok = await showConfirmDialog(
-                      context,
-                      title: 'Delete Hardware?',
-                      message: 'Are you sure you want to remove "${d.deviceName}" from inventory?',
-                      confirmText: 'Delete',
-                    );
-                    if (ok && d.id != null) {
-                      await _db.deleteOtherDevice(d.id!);
-                      if (mounted) {
-                        _load();
-                        showSnack(context, 'Device deleted');
+                const SizedBox(width: 10),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () async {
+                      Navigator.pop(context);
+                      final ok = await showConfirmDialog(
+                        context,
+                        title: 'Delete Hardware?',
+                        message: 'Are you sure you want to remove "${d.deviceName}" from inventory?',
+                        confirmText: 'Delete',
+                      );
+                      if (ok && d.id != null) {
+                        await _db.deleteOtherDevice(d.id!);
+                        if (mounted) {
+                          _load();
+                          showSnack(context, 'Device deleted');
+                        }
                       }
-                    }
-                  },
-                  icon: const Icon(Icons.delete_outline_rounded, color: Colors.red, size: 18),
-                  label: const Text('Delete', style: TextStyle(color: Colors.red)),
-                  style: OutlinedButton.styleFrom(
-                    side: BorderSide(color: Colors.red.withValues(alpha: 0.5)),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    },
+                    icon: Icon(Icons.delete_outline_rounded, size: 17, color: cs.error),
+                    label: Text('Delete', style: TextStyle(color: cs.error)),
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(color: cs.error.withValues(alpha: 0.5)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      padding: const EdgeInsets.symmetric(vertical: 11),
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    _openForm(d);
-                  },
-                  icon: const Icon(Icons.edit_outlined, size: 18),
-                  label: const Text('Edit Device'),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            const SectionLabel('DEVICE SPECIFICATIONS'),
+            FintechGroupedCard(
+              children: [
+                DetailRow(
+                  label: 'Device Type',
+                  value: d.deviceType,
+                  icon: Icons.category_outlined,
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-        ],
+                DetailRow(
+                  label: 'Device Name',
+                  value: d.deviceName,
+                  icon: Icons.devices_other_rounded,
+                  copyable: true,
+                ),
+                if (d.model.isNotEmpty)
+                  DetailRow(
+                    label: 'Model',
+                    value: d.model,
+                    icon: Icons.precision_manufacturing_outlined,
+                    copyable: true,
+                  ),
+                if (d.notes.isNotEmpty)
+                  DetailRow(
+                    label: 'Notes / Specs',
+                    value: d.notes,
+                    icon: Icons.notes_rounded,
+                    copyable: true,
+                  ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

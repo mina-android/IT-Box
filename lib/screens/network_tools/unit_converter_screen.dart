@@ -267,13 +267,12 @@ class _UnitConverterScreenState extends State<UnitConverterScreen> {
                   children: [
                     Expanded(
                       flex: 3,
-                      child: TextField(
+                      child: AppTextField(
                         controller: _inputCtrl,
                         keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
-                        decoration: InputDecoration(
+                        decoration: const InputDecoration(
                           hintText: '0.0',
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                         ),
                         style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                       ),
@@ -281,17 +280,16 @@ class _UnitConverterScreenState extends State<UnitConverterScreen> {
                     const SizedBox(width: 12),
                     Expanded(
                       flex: 2,
-                      child: DropdownButtonFormField<String>(
-                        initialValue: _fromUnit,
-                        decoration: InputDecoration(
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-                        ),
+                      child: FintechDropdown<String>(
+                        value: _fromUnit,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
                         items: _currentUnits
                             .map((u) => DropdownMenuItem(value: u, child: Text(u, style: const TextStyle(fontWeight: FontWeight.w700))))
                             .toList(),
                         onChanged: (val) {
-                          if (val != null) setState(() => _fromUnit = val);
+                          if (val != null) {
+                            setState(() => _fromUnit = val);
+                          }
                         },
                       ),
                     ),
@@ -323,17 +321,16 @@ class _UnitConverterScreenState extends State<UnitConverterScreen> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                DropdownButtonFormField<String>(
-                  initialValue: _toUnit,
-                  decoration: InputDecoration(
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                  ),
+                FintechDropdown<String>(
+                  value: _toUnit,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                   items: _currentUnits
                       .map((u) => DropdownMenuItem(value: u, child: Text(u, style: const TextStyle(fontWeight: FontWeight.w700))))
                       .toList(),
                   onChanged: (val) {
-                    if (val != null) setState(() => _toUnit = val);
+                    if (val != null) {
+                      setState(() => _toUnit = val);
+                    }
                   },
                 ),
               ],

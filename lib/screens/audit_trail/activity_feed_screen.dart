@@ -95,6 +95,7 @@ class _ActivityFeedScreenState extends State<ActivityFeedScreen> {
             FintechCircleButton(
               icon: Icons.delete_sweep_rounded,
               tooltip: 'Clear Audit Trail',
+              iconColor: cs.error,
               onPressed: _clearAuditTrail,
             ),
           ],

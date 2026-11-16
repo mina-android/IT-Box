@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../database/database_helper.dart';
 import '../../widgets/common_widgets.dart';
+import '../../theme/app_theme.dart';
 import 'switch_patch_chassis_form_screen.dart';
 
 class PatchPanelChassis {
@@ -205,98 +206,106 @@ class _SwitchPatchMatrixScreenState extends State<SwitchPatchMatrixScreen> {
     final vlanCtrl = TextEditingController(text: existing['vlan'] ?? '1');
     String status = existing['status'] ?? 'Active';
 
-    showDialog(
+    showFintechBottomSheet(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: Text('${_selectedChassis!.name} • Port $portNum'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextFormField(
-                  controller: deviceCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Connected Device / Host',
-                    hintText: 'e.g. AP-Floor2 / Server-01 / Workstation 14',
-                    prefixIcon: Icon(Icons.devices_rounded),
+      child: StatefulBuilder(
+        builder: (ctx, setSheetState) => SingleChildScrollView(
+          padding: EdgeInsets.fromLTRB(
+            20,
+            8,
+            20,
+            MediaQuery.of(ctx).viewInsets.bottom + 28,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${_selectedChassis!.name} • Port $portNum',
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 16),
+              FintechGroupedCard(
+                children: [
+                  AppTextField(
+                    controller: deviceCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Connected Device / Host',
+                      hintText: 'e.g. AP-Floor2 / Server-01 / Workstation 14',
+                      prefixIcon: Icon(Icons.devices_rounded),
+                    ),
                   ),
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: roomCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Destination Room / Patch Drop',
-                    hintText: 'e.g. Room 204 Drop A / Desk 12',
-                    prefixIcon: Icon(Icons.room_rounded),
+                  const SizedBox(height: 12),
+                  AppTextField(
+                    controller: roomCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Destination Room / Patch Drop',
+                      hintText: 'e.g. Room 204 Drop A / Desk 12',
+                      prefixIcon: Icon(Icons.room_rounded),
+                    ),
                   ),
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: vlanCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'VLAN Tag',
-                    hintText: 'e.g. 10 (Data) / 20 (Voice)',
-                    prefixIcon: Icon(Icons.tag_rounded),
+                  const SizedBox(height: 12),
+                  AppTextField(
+                    controller: vlanCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'VLAN Tag',
+                      hintText: 'e.g. 10 (Data) / 20 (Voice)',
+                      prefixIcon: Icon(Icons.tag_rounded),
+                    ),
                   ),
-                ),
-                const SizedBox(height: 12),
-                InputDecorator(
-                  decoration: const InputDecoration(
+                  const SizedBox(height: 12),
+                  FintechDropdown<String>(
                     labelText: 'Port Status',
-                    prefixIcon: Icon(Icons.power_settings_new_rounded),
-                  ),
-                  child: DropdownButton<String>(
+                    prefixIcon: const Icon(Icons.power_settings_new_rounded),
                     value: status,
-                    isExpanded: true,
-                    underline: const SizedBox(),
                     items: const [
-                      DropdownMenuItem(
-                          value: 'Active', child: Text('Active (Up / Connected)')),
-                      DropdownMenuItem(
-                          value: 'Down', child: Text('Down (Disconnected)')),
-                      DropdownMenuItem(
-                          value: 'Disabled', child: Text('Admin Disabled (Port Off)')),
+                      DropdownMenuItem(value: 'Active', child: Text('Active (Up / Connected)')),
+                      DropdownMenuItem(value: 'Down', child: Text('Down (Disconnected)')),
+                      DropdownMenuItem(value: 'Disabled', child: Text('Admin Disabled (Port Off)')),
                     ],
                     onChanged: (v) {
                       if (v != null) {
-                        setDialogState(() => status = v);
+                        setSheetState(() => status = v);
                       }
                     },
                   ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton.icon(
+                onPressed: () async {
+                  final map = {
+                    'switch_device_id': _selectedChassis!.id,
+                    'port_number': portNum,
+                    'connected_device': deviceCtrl.text.trim(),
+                    'destination_room': roomCtrl.text.trim(),
+                    'vlan': vlanCtrl.text.trim(),
+                    'status': status,
+                  };
+                  if (existing.isNotEmpty && existing['id'] != null) {
+                    await _db.updateSwitchPatchPort(map, existing['id'] as int);
+                  } else {
+                    await _db.insertSwitchPatchPort(map);
+                  }
+                  if (ctx.mounted) {
+                    Navigator.pop(ctx);
+                  }
+                  _ports = await _db.getSwitchPatchPorts(_selectedChassis!.id);
+                  if (mounted) {
+                    setState(() {});
+                  }
+                },
+                icon: const Icon(Icons.check_circle_outline_rounded),
+                label: const Text('Save Port', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size.fromHeight(52),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                final map = {
-                  'switch_device_id': _selectedChassis!.id,
-                  'port_number': portNum,
-                  'connected_device': deviceCtrl.text.trim(),
-                  'destination_room': roomCtrl.text.trim(),
-                  'vlan': vlanCtrl.text.trim(),
-                  'status': status,
-                };
-                if (existing.isNotEmpty && existing['id'] != null) {
-                  await _db.updateSwitchPatchPort(map, existing['id'] as int);
-                } else {
-                  await _db.insertSwitchPatchPort(map);
-                }
-                if (ctx.mounted) Navigator.pop(ctx);
-                _ports = await _db.getSwitchPatchPorts(_selectedChassis!.id);
-                setState(() {});
-              },
-              child: const Text('Save Port'),
-            ),
-          ],
         ),
       ),
     );
@@ -414,6 +423,7 @@ class _SwitchPatchMatrixScreenState extends State<SwitchPatchMatrixScreen> {
                             PopupMenuButton<String>(
                               icon: const Icon(Icons.more_vert_rounded, size: 18),
                               padding: EdgeInsets.zero,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                               onSelected: (val) {
                                 if (val == 'edit') {
                                   _showAddOrEditChassisDialog(c);

@@ -128,11 +128,8 @@ class _MiFiFormScreenState extends State<MiFiFormScreen> {
     final isNew = widget.mifi == null;
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          isNew ? 'Add MiFi' : 'Edit MiFi',
-          style: const TextStyle(fontWeight: FontWeight.w800),
-        ),
+      appBar: FintechAppBar(
+        title: isNew ? 'Add MiFi' : 'Edit MiFi',
       ),
       body: GestureDetector(
         onTap: () => FocusScope.of(context).unfocus(),

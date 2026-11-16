@@ -71,17 +71,13 @@ class _Employee360ScreenState extends State<Employee360Screen> {
     checklist['Revoke Building Keycards / Physical Badges'] = false;
     checklist['Sign Exit Clearance & Handover Form'] = false;
 
-    showModalBottomSheet(
+    showFintechBottomSheet(
       context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (ctx) => StatefulBuilder(
+      child: StatefulBuilder(
         builder: (ctx, setSheetState) {
           final allDone = checklist.values.every((v) => v);
-          return Padding(
-            padding: const EdgeInsets.all(20),
+          return SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -162,17 +158,13 @@ class _Employee360ScreenState extends State<Employee360Screen> {
       'Sign IT Equipment & Security Policy': false,
     };
 
-    showModalBottomSheet(
+    showFintechBottomSheet(
       context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (ctx) => StatefulBuilder(
+      child: StatefulBuilder(
         builder: (ctx, setSheetState) {
           final allDone = checklist.values.every((v) => v);
-          return Padding(
-            padding: const EdgeInsets.all(20),
+          return SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -247,16 +239,18 @@ class _Employee360ScreenState extends State<Employee360Screen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text('${widget.employee.name} — 360° Profile'),
+      appBar: FintechAppBar(
+        title: '${widget.employee.name} — 360° Profile',
         actions: [
-          IconButton(
-            icon: const Icon(Icons.person_add_alt_1_rounded, color: Colors.greenAccent),
+          FintechCircleButton(
+            icon: Icons.person_add_alt_1_rounded,
+            iconColor: Colors.greenAccent,
             tooltip: 'Onboard Employee',
             onPressed: _startOnboardingChecklist,
           ),
-          IconButton(
-            icon: const Icon(Icons.exit_to_app_rounded, color: Colors.redAccent),
+          FintechCircleButton(
+            icon: Icons.exit_to_app_rounded,
+            iconColor: Colors.redAccent,
             tooltip: 'Offboarding Exit Checklist',
             onPressed: _startOffboardingChecklist,
           ),

@@ -8,6 +8,7 @@ import '../models/expense.dart';
 import '../models/bill.dart';
 import '../models/subscription.dart';
 import 'company_service.dart';
+import 'currency_service.dart';
 
 class PdfReportService {
   static Future<void> generateAndShareMonthlyReport({
@@ -77,11 +78,11 @@ class PdfReportService {
             child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
               pw.Text('EXECUTIVE SUMMARY (TOTAL OUTFLOW)', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900)),
               pw.SizedBox(height: 8),
-              _summaryRow('Total Period Expenses:', 'EGP ${fmt.format(totalExpenses)}'),
-              _summaryRow('Total Recurring Bills:', 'EGP ${fmt.format(totalBills)}'),
-              _summaryRow('Monthly Subscriptions Eqv.:', 'EGP ${fmt.format(totalSubsMonthly)}'),
+              _summaryRow('Total Period Expenses:', '${CurrencyService().currency} ${fmt.format(totalExpenses)}'),
+              _summaryRow('Total Recurring Bills:', '${CurrencyService().currency} ${fmt.format(totalBills)}'),
+              _summaryRow('Monthly Subscriptions Eqv.:', '${CurrencyService().currency} ${fmt.format(totalSubsMonthly)}'),
               pw.Divider(color: PdfColors.grey400),
-              _summaryRow('Estimated Total Period Outflow:', 'EGP ${fmt.format(totalOutflow)}', bold: true),
+              _summaryRow('Estimated Total Period Outflow:', '${CurrencyService().currency} ${fmt.format(totalOutflow)}', bold: true),
             ]),
           ),
           pw.SizedBox(height: 20),
@@ -93,7 +94,7 @@ class PdfReportService {
             pw.Text('No expenses logged for this period.', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey600))
           else
             pw.TableHelper.fromTextArray(
-              headers: ['Date', 'Item / Description', 'Details', 'Price (EGP)'],
+              headers: ['Date', 'Item / Description', 'Details', 'Price (${CurrencyService().currency})'],
               data: expenses.map((e) => [
                 e.date,
                 e.item,
@@ -114,7 +115,7 @@ class PdfReportService {
             pw.SizedBox(height: 4),
             pw.Container(
               alignment: pw.Alignment.centerRight,
-              child: pw.Text('Expenses Total: EGP ${fmt.format(totalExpenses)}', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+              child: pw.Text('Expenses Total: ${CurrencyService().currency} ${fmt.format(totalExpenses)}', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
             ),
           ],
           pw.SizedBox(height: 20),
@@ -126,7 +127,7 @@ class PdfReportService {
             pw.Text('No bills cataloged.', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey600))
           else
             pw.TableHelper.fromTextArray(
-              headers: ['Category', 'Person / Account', 'Number', 'Price (EGP)'],
+              headers: ['Category', 'Person / Account', 'Number', 'Price (${CurrencyService().currency})'],
               data: bills.map((b) => [
                 b.category,
                 b.person,
@@ -147,7 +148,7 @@ class PdfReportService {
             pw.SizedBox(height: 4),
             pw.Container(
               alignment: pw.Alignment.centerRight,
-              child: pw.Text('Bills Total: EGP ${fmt.format(totalBills)}', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+              child: pw.Text('Bills Total: ${CurrencyService().currency} ${fmt.format(totalBills)}', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
             ),
           ],
           pw.SizedBox(height: 20),
@@ -159,7 +160,7 @@ class PdfReportService {
             pw.Text('No subscriptions recorded.', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey600))
           else
             pw.TableHelper.fromTextArray(
-              headers: ['Service Name', 'Interval', 'Price (EGP)', 'Monthly Equivalent'],
+              headers: ['Service Name', 'Interval', 'Price (${CurrencyService().currency})', 'Monthly Equivalent'],
               data: subscriptions.map((s) => [
                 s.service,
                 s.type,
@@ -180,7 +181,7 @@ class PdfReportService {
             pw.SizedBox(height: 4),
             pw.Container(
               alignment: pw.Alignment.centerRight,
-              child: pw.Text('Subscriptions Monthly Equivalent Total: EGP ${fmt.format(totalSubsMonthly)}', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+              child: pw.Text('Subscriptions Monthly Equivalent Total: ${CurrencyService().currency} ${fmt.format(totalSubsMonthly)}', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
             ),
           ],
         ],

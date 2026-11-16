@@ -4,6 +4,7 @@ import '../../models/printer.dart';
 import '../../widgets/common_widgets.dart';
 import '../../widgets/selection_bottom_bar.dart';
 import '../../theme/app_theme.dart';
+import '../maintenance/device_maintenance_screen.dart';
 import 'printer_form_screen.dart';
 
 class PrintersScreen extends StatefulWidget {
@@ -390,6 +391,32 @@ class _PrinterDetailSheet extends StatelessWidget {
                 icon: Icons.location_on_outlined,
               ),
             ],
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              icon: const Icon(Icons.build_circle_outlined, size: 18),
+              label: const Text('View Maintenance & Repair History', style: TextStyle(fontWeight: FontWeight.w700)),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 13),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              ),
+              onPressed: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => DeviceMaintenanceScreen(
+                      deviceType: 'printer',
+                      deviceId: printer.id!,
+                      deviceName: printer.model,
+                      deviceNumber: printer.printerNumber,
+                    ),
+                  ),
+                );
+              },
+            ),
           ),
         ],
       ),

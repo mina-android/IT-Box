@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import '../../database/database_helper.dart';
 import '../../models/bill.dart';
+import '../../services/currency_service.dart';
 import '../../widgets/common_widgets.dart';
 import '../../widgets/selection_bottom_bar.dart';
 import 'bill_form_screen.dart';
@@ -158,8 +158,6 @@ class _BillsScreenState extends State<BillsScreen> {
     _load();
   }
 
-  String _fmt(double v) => NumberFormat('#,##0.00').format(v);
-
   Color _catColor(String cat) => switch (cat) {
         'MiFis' => const Color(0xFF0EA5E9),
         '4G Internet' => const Color(0xFF10B981),
@@ -197,7 +195,7 @@ class _BillsScreenState extends State<BillsScreen> {
         title: 'Recurring Bills',
         subtitle: _filtered.isEmpty
             ? 'Fixed lines & cellular services'
-            : '${_filtered.length} active bills • EGP ${_fmt(totalSum)}',
+            : '${_filtered.length} active bills • ${CurrencyService().format(totalSum)}',
       ),
       body: Column(
         children: [
@@ -287,7 +285,7 @@ class _BillsScreenState extends State<BillsScreen> {
                     ),
                     const Spacer(),
                     Text(
-                      'Total: EGP ${_fmt(totalSum)}',
+                      'Total: ${CurrencyService().format(totalSum)}',
                       style: const TextStyle(
                         color: _billColor,
                         fontWeight: FontWeight.w800,
@@ -356,7 +354,7 @@ class _BillsScreenState extends State<BillsScreen> {
                                   ),
                                 ),
                               ),
-                              title: 'EGP ${_fmt(b.price)}',
+                              title: CurrencyService().format(b.price),
                               subtitle: b.number,
                               extra:
                                   b.person.isNotEmpty ? b.person : null,
@@ -399,7 +397,6 @@ class _BillDetailSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final fmt = NumberFormat('#,##0.00', 'en_US');
     final cc = switch (bill.category) {
       'MiFis' => const Color(0xFF0EA5E9),
       '4G Internet' => const Color(0xFF10B981),
@@ -452,7 +449,7 @@ class _BillDetailSheet extends StatelessWidget {
                       ),
                       const SizedBox(height: 3),
                       Text(
-                        'EGP ${fmt.format(bill.price)}',
+                        CurrencyService().format(bill.price),
                         style: TextStyle(
                           color: cc,
                           fontWeight: FontWeight.w900,

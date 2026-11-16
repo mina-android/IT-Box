@@ -59,6 +59,22 @@ class AppDatabase extends _$AppDatabase {
     _instance = AppDatabase(openDatabaseConnection(activeDatabaseFile));
   }
 
+  /// Permanently deletes an organization's SQLite database file and companion WAL/SHM files.
+  static Future<void> deleteDatabaseFile(String dbFileName) async {
+    if (dbFileName == 'itbox.db' || dbFileName.isEmpty) {
+      return;
+    }
+    try {
+      final dbFolder = await sqflite.getDatabasesPath();
+      for (final suffix in ['', '-wal', '-shm', '-journal']) {
+        final f = File(p.join(dbFolder, '$dbFileName$suffix'));
+        if (await f.exists()) {
+          await f.delete();
+        }
+      }
+    } catch (_) {}
+  }
+
   static const int currentVersion = 15;
 
   @override

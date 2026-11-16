@@ -201,6 +201,7 @@ class _AccountsPasswordsScreenState extends State<AccountsPasswordsScreen> {
                                       ),
                                       PopupMenuButton<String>(
                                         icon: const Icon(Icons.more_vert_rounded, size: 20),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                                         onSelected: (val) {
                                           if (val == 'edit') {
                                             _openForm(acc);

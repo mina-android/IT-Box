@@ -147,15 +147,8 @@ class _VendorContactsScreenState extends State<VendorContactsScreen> {
     final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
-      appBar: FintechAppBar(
+      appBar: const FintechAppBar(
         title: 'Vendor & Runbook Contacts',
-        actions: [
-          FintechCircleButton(
-            icon: Icons.add_rounded,
-            tooltip: 'Add Contact',
-            onTap: () => _openForm(),
-          ),
-        ],
       ),
       floatingActionButton: _isSelectionMode
           ? null

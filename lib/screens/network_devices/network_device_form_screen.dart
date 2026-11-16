@@ -124,11 +124,8 @@ class _NetworkDeviceFormScreenState extends State<NetworkDeviceFormScreen> {
     final isNew = widget.device == null;
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          isNew ? 'Add Network Device' : 'Edit Network Device',
-          style: const TextStyle(fontWeight: FontWeight.w800),
-        ),
+      appBar: FintechAppBar(
+        title: isNew ? 'Add Network Device' : 'Edit Network Device',
       ),
       body: GestureDetector(
         onTap: () => FocusScope.of(context).unfocus(),
