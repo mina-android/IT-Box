@@ -4,7 +4,7 @@
 
 # IT Box
 
-[![Platform](https://img.shields.io/badge/Platform-Android-grey.svg?style=flat-square)](https://android.com) [![Release](https://img.shields.io/badge/Release-v1.1.1-blue.svg?style=flat-square)](https://github.com/mina-android/IT-Box/releases) [![License](https://img.shields.io/badge/License-GPL--3.0-black.svg?style=flat-square)](LICENSE) [![Build](https://img.shields.io/badge/Build-Passing-brightgreen.svg?style=flat-square)](https://github.com/mina-android/IT-Box/actions)
+[![Platform](https://img.shields.io/badge/Platform-Android-grey.svg?style=flat)](https://android.com) [![Flutter](https://img.shields.io/badge/Flutter-3.47.6-02569B.svg?style=flat&logo=flutter&logoColor=white)](https://flutter.dev) [![Release](https://img.shields.io/badge/Release-v1.1.1-blue.svg?style=flat)](https://github.com/mina-android/IT-Box/releases) [![License](https://img.shields.io/badge/License-GPL--3.0-black.svg?style=flat)](LICENSE)
 
 <p align="center">
   A local-first offline inventory manager, subnet calculator, and network diagnostics toolkit designed for system administrators, network engineers, and IT departments.
