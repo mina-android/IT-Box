@@ -9,6 +9,9 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) co
 
 ## [1.2.0] - 2026-11-25
 
+### Changed
+- **README**: Removed the Frequently Asked Questions section and navigation link from `README.md` to match `README_TEMPLATE.md`.
+
 ### Added (Borrow Notes, Ticket Reminders, Multi-Table Excel & Deep Search Navigation)
 - **Version Bump (`pubspec.yaml`, `DatabaseHelper`, `BackupCryptoService`, `SettingsScreen`)**: Bumped application version to **1.2.0+7**.
 - **Optional Borrow Notes (Schema v17 — `BorrowLog`, `AddBorrowScreen`, `BorrowedScreen`, `CustodyPdfService`, `DataHubScreen`)**:

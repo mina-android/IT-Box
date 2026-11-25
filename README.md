@@ -16,7 +16,7 @@
 
 ## Navigation
 
-[Features](#features) &bull; [Screenshots](#screenshots) &bull; [Downloads](#downloads) &bull; [Self Building & Local Setup](#self-building--local-setup) &bull; [Frequently Asked Questions](#frequently-asked-questions) &bull; [Contribution](#contribution) &bull; [About the Developer](#about-the-developer) &bull; [Donate](#donate) &bull; [License](#license)
+[Features](#features) &bull; [Screenshots](#screenshots) &bull; [Downloads](#downloads) &bull; [Self Building & Local Setup](#self-building--local-setup) &bull; [Contribution](#contribution) &bull; [About the Developer](#about-the-developer) &bull; [Donate](#donate) &bull; [License](#license)
 
 ---
 
@@ -147,22 +147,6 @@ Compiled binaries will be generated inside `build/app/outputs/flutter-apk/`.
 # Connect a target Android device or emulator, then execute
 flutter run --release
 ```
-
----
-
-## Frequently Asked Questions
-
-#### Where does the application store its settings and database?
-Application databases (`itbox.db` and `itbox_org_<id>.db`), scanned Vault PDFs, expense receipts, and company logos are stored inside Android's private app sandbox directory (`getApplicationDocumentsDirectory()` and `databases/`). Preferences are stored in `SharedPreferences` and encrypted auto-backup keys are stored in the Android Keystore.
-
-#### Does this application collect telemetry or connect to external servers?
-No telemetry, usage metrics, or crash reporting SDKs are included. Network requests only occur when you manually refresh currency exchange rates (`open.er-api.com`) or run local/remote network diagnostic tools.
-
-#### Can I manage multiple companies or departments separately?
-Yes. Open **Settings > Organizations** to create additional organization profiles. Each organization uses an isolated SQLite database, logo, currency preference, and backup stream, and can be switched at runtime without restarting the app.
-
-#### How do I export, back up, or reset all data?
-Open **Data Hub** from Settings to export category tables to `.xlsx`, export full or selective encrypted `.itbox.enc` / `.json` backups (including Vault documents and expense receipts), or configure scheduled 02:00 AM SAF folder backups. Every restore automatically creates a Pre-Restore Undo snapshot so you can revert if needed.
 
 ---
 
