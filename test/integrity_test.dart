@@ -106,13 +106,15 @@ void main() {
       AppDatabase.testInstance = null;
     });
 
-    test('Schema migration v15 creates tables and indexes correctly', () async {
-      expect(db.schemaVersion, 15);
+    test('Schema migration v17 creates tables and indexes correctly', () async {
+      expect(db.schemaVersion, 17);
       final count = await helper.getCounts();
       expect(count['electronics'], 0);
       expect(count['employees'], 0);
       expect(count['active_borrows'], 0);
       expect(count['vendor_contacts'], 0);
+      expect(count['custody_documents'], 0);
+      expect(count['vault_documents'], 0);
     });
 
     test('Full Borrow lifecycle: borrow, conflict checks, return, and status healing', () async {

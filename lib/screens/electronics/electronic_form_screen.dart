@@ -41,13 +41,26 @@ class _ElectronicFormScreenState extends State<ElectronicFormScreen> {
     }
     setState(() => _saving = true);
     try {
+      final tag = _num.text.trim();
+      final existing = await _db.getElectronics();
+      if (existing.any((e) => e.id != widget.electronic?.id && e.deviceNumber.trim().toLowerCase() == tag.toLowerCase())) {
+        if (!mounted) {
+          return;
+        }
+        _shakeKey.currentState?.shake();
+        showSnack(context, 'Electronic "$tag" already exists.', error: true);
+        setState(() => _saving = false);
+        return;
+      }
+
       final e = Electronic(
         id: widget.electronic?.id,
-        deviceNumber: _num.text.trim(),
+        deviceNumber: tag,
         deviceName: _name.text.trim(),
         details: _details.text.trim(),
         status: widget.electronic?.status ?? 'Available',
         excludeFromBorrowing: _excludeBorrowing,
+        notes: widget.electronic?.notes ?? '',
       );
       if (widget.electronic == null) {
         await _db.insertElectronic(e);
@@ -182,7 +195,7 @@ class _ElectronicFormScreenState extends State<ElectronicFormScreen> {
                     style: FilledButton.styleFrom(
                       backgroundColor: AppColors.electronicColor,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(26),
+                        borderRadius: BorderRadius.circular(16),
                       ),
                     ),
                   ),

@@ -4,17 +4,17 @@ import 'package:intl/intl.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../../database/database_helper.dart';
 import '../../models/expense.dart';
-import '../../services/pdf_report_service.dart';
 import '../../services/currency_service.dart';
 import '../../widgets/common_widgets.dart';
 import '../../widgets/selection_bottom_bar.dart';
-import '../../theme/app_theme.dart';
+import '../documents_vault/document_viewer_screen.dart';
 import 'expense_form_screen.dart';
 
 const _expenseColor = Color(0xFF10B981);
 
 class ExpensesScreen extends StatefulWidget {
-  const ExpensesScreen({super.key});
+  final int? initialItemId;
+  const ExpensesScreen({super.key, this.initialItemId});
   @override
   State<ExpensesScreen> createState() => _ExpensesScreenState();
 }
@@ -24,7 +24,10 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
   List<Expense> _expenses = [];
   List<int> _availableYears = [];
   int? _selectedYear;
+  bool _initializedYear = false;
   bool _loading = true;
+  bool _showSearch = false;
+  bool _handledInitial = false;
   String _sortField = 'date'; // 'date' | 'price' | 'item'
   bool _sortAsc = false;
   final Set<int> _selectedIds = {};
@@ -96,27 +99,60 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     }
     _availableYears = await _db.getExpenseYears();
     final now = DateTime.now().year;
-    if (_selectedYear == null && _availableYears.isNotEmpty) {
-      _selectedYear =
-          _availableYears.contains(now) ? now : _availableYears.first;
-    } else if (_availableYears.isEmpty) {
-      _selectedYear = now;
+    if (!_initializedYear) {
+      _initializedYear = true;
+      if (_availableYears.isNotEmpty) {
+        _selectedYear =
+            _availableYears.contains(now) ? now : _availableYears.first;
+      } else {
+        _selectedYear = now;
+      }
     }
     _expenses = _selectedYear != null
         ? await _db.getExpensesByYear(_selectedYear!)
         : await _db.getExpenses();
+
+    if (!_handledInitial && widget.initialItemId != null) {
+      var match = _expenses.where((e) => e.id == widget.initialItemId).firstOrNull;
+      if (match == null) {
+        final all = await _db.getExpenses();
+        match = all.where((e) => e.id == widget.initialItemId).firstOrNull;
+        if (match != null) {
+          final parsedYear = DateTime.tryParse(match.date)?.year;
+          if (parsedYear != null) {
+            _selectedYear = parsedYear;
+            _expenses = await _db.getExpensesByYear(parsedYear);
+          } else {
+            _selectedYear = null;
+            _expenses = all;
+          }
+        }
+      }
+      if (match != null) {
+        _handledInitial = true;
+        final target = match;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            _showDetail(target);
+          }
+        });
+      }
+    }
+
     _compute();
     if (mounted) {
       setState(() => _loading = false);
     }
   }
 
-  Future<void> _loadYear(int year) async {
+  Future<void> _loadYear(int? year) async {
     setState(() {
       _selectedYear = year;
       _loading = true;
     });
-    _expenses = await _db.getExpensesByYear(year);
+    _expenses = year != null
+        ? await _db.getExpensesByYear(year)
+        : await _db.getExpenses();
     _compute();
     if (mounted) {
       setState(() => _loading = false);
@@ -126,7 +162,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
   void _compute() {
     final now = DateTime.now();
     final curMonth = '${now.year}-${now.month.toString().padLeft(2, '0')}';
-    final curYear = '${now.year}';
+    final selectedYearStr = '${_selectedYear ?? now.year}';
     _monthlyTotal = 0;
     _yearlyTotal = 0;
     _grouped = {};
@@ -137,7 +173,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
       if (e.date.startsWith(curMonth)) {
         _monthlyTotal += e.price;
       }
-      if (e.date.startsWith(curYear)) {
+      if (_selectedYear == null || e.date.startsWith(selectedYearStr)) {
         _yearlyTotal += e.price;
       }
       try {
@@ -178,13 +214,18 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     }
   }
 
-  void _showSortSheet() {
+  void _showFilterAndSortSheet() {
+    final allYears = {..._availableYears, DateTime.now().year}.toList()
+      ..sort((a, b) => b.compareTo(a));
+
     showFintechBottomSheet(
       context: context,
+      title: 'Filter & Sort Expenses',
+      subtitle: 'Organize spending & departmental budget',
       child: StatefulBuilder(
-        builder: (ctx, setS) => Padding(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
-          child: Column(
+        builder: (ctx, setS) {
+          final theme = Theme.of(ctx);
+          return Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -192,96 +233,112 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text(
-                    'Sort Expenses',
-                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17),
+                    'Time Period',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
                   ),
-                  TextButton.icon(
-                    onPressed: () {
-                      setState(() => _sortAsc = !_sortAsc);
-                      _compute();
+                  TextButton(
+                    onPressed: () async {
+                      setState(() {
+                        _sortField = 'date';
+                        _sortAsc = false;
+                      });
+                      await _loadYear(DateTime.now().year);
                       setS(() {});
                     },
-                    icon: Icon(
-                      _sortAsc
-                          ? Icons.arrow_upward_rounded
-                          : Icons.arrow_downward_rounded,
-                      size: 16,
-                    ),
-                    label: Text(_sortAsc ? 'Ascending' : 'Descending'),
+                    child: const Text('Reset', style: TextStyle(fontWeight: FontWeight.w700)),
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
-              FintechGroupedCard(
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
                 children: [
-                  _sortTile('date', 'Transaction Date', Icons.calendar_today_rounded, setS),
-                  const Divider(height: 1),
-                  _sortTile('price', 'Amount / Cost', Icons.payments_rounded, setS),
-                  const Divider(height: 1),
-                  _sortTile('item', 'Item Name', Icons.sort_by_alpha_rounded, setS),
+                  FintechFilterPill(
+                    label: 'All Years',
+                    color: _expenseColor,
+                    selected: _selectedYear == null,
+                    onTap: () async {
+                      await _loadYear(null);
+                      setS(() {});
+                    },
+                  ),
+                  ...allYears.map((y) => FintechFilterPill(
+                        label: '$y',
+                        color: _expenseColor,
+                        selected: _selectedYear == y,
+                        onTap: () async {
+                          await _loadYear(y);
+                          setS(() {});
+                        },
+                      )),
                 ],
               ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _sortTile(String field, String label, IconData icon, StateSetter setS) {
-    final theme = Theme.of(context);
-    final isSelected = _sortField == field;
-    return InkWell(
-      onTap: () {
-        setState(() {
-          _sortField = field;
-          _compute();
-        });
-        setS(() {});
-      },
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
-        child: Row(
-          children: [
-            Icon(
-              icon,
-              size: 20,
-              color: isSelected
-                  ? theme.colorScheme.primary
-                  : theme.colorScheme.onSurface.withValues(alpha: 0.5),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                label,
-                style: TextStyle(
-                  fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
-                  color: isSelected
-                      ? theme.colorScheme.primary
-                      : theme.colorScheme.onSurface,
+              const Divider(height: 28),
+              const Text(
+                'Sort Ordering',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+              ),
+              const SizedBox(height: 10),
+              for (final pair in const [
+                ('date', 'Transaction Date'),
+                ('price', 'Amount / Cost'),
+                ('item', 'Item Name'),
+              ])
+                Container(
+                  margin: const EdgeInsets.only(bottom: 6),
+                  decoration: BoxDecoration(
+                    color: _sortField == pair.$1
+                        ? _expenseColor.withValues(alpha: 0.08)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: _sortField == pair.$1
+                          ? _expenseColor
+                          : theme.colorScheme.outlineVariant.withValues(alpha: 0.2),
+                    ),
+                  ),
+                  child: ListTile(
+                    dense: true,
+                    title: Text(
+                      pair.$2,
+                      style: TextStyle(
+                        fontWeight: _sortField == pair.$1
+                            ? FontWeight.w700
+                            : FontWeight.w500,
+                      ),
+                    ),
+                    trailing: _sortField == pair.$1
+                        ? IconButton(
+                            icon: Icon(
+                              _sortAsc
+                                  ? Icons.arrow_upward_rounded
+                                  : Icons.arrow_downward_rounded,
+                              color: _expenseColor,
+                            ),
+                            tooltip: _sortAsc ? 'Ascending' : 'Descending',
+                            onPressed: () {
+                              setState(() {
+                                _sortAsc = !_sortAsc;
+                                _compute();
+                              });
+                              setS(() {});
+                            },
+                          )
+                        : null,
+                    onTap: () {
+                      setState(() {
+                        _sortField = pair.$1;
+                        _compute();
+                      });
+                      setS(() {});
+                    },
+                  ),
                 ),
-              ),
-            ),
-            if (isSelected)
-              Icon(
-                Icons.check_circle_rounded,
-                color: theme.colorScheme.primary,
-                size: 20,
-              ),
-          ],
-        ),
+            ],
+          );
+        },
       ),
-    );
-  }
-
-  Future<void> _exportPdfReport() async {
-    final bills = await _db.getBills();
-    final subs = await _db.getSubscriptions();
-    await PdfReportService.generateAndShareMonthlyReport(
-      periodLabel: '${_selectedYear ?? DateTime.now().year}',
-      expenses: _expenses,
-      bills: bills,
-      subscriptions: subs,
     );
   }
 
@@ -344,79 +401,48 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     }
   }
 
-  Widget _buildYearSelector(ThemeData theme, List<int> allYears) {
-    final isDark = theme.brightness == Brightness.dark;
-    return Container(
-      height: 48,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: BoxDecoration(
-        color: AppColors.cardSurface(context),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.08)
-              : Colors.black.withValues(alpha: 0.06),
-          width: 1,
-        ),
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<int>(
-          value: _selectedYear,
-          isDense: true,
-          elevation: 6,
-          borderRadius: BorderRadius.circular(16),
-          dropdownColor: AppColors.cardSurface(context),
-          icon: Icon(
-            Icons.keyboard_arrow_down_rounded,
-            size: 20,
-            color: theme.colorScheme.primary,
-          ),
-          style: TextStyle(
-            color: theme.colorScheme.primary,
-            fontWeight: FontWeight.w800,
-            fontSize: 13,
-          ),
-          items: allYears
-              .map((y) => DropdownMenuItem(
-                    value: y,
-                    child: Text(
-                      '$y',
-                      style: TextStyle(
-                        color: theme.colorScheme.onSurface,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ))
-              .toList(),
-          onChanged: (y) {
-            if (y != null) {
-              _loadYear(y);
-            }
-          },
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final allYears = {
-      ..._availableYears,
-      DateTime.now().year,
-    }.toList()
-      ..sort((a, b) => b.compareTo(a));
+    final hasActiveFilter =
+        _selectedYear != DateTime.now().year || _sortField != 'date' || _sortAsc;
 
     return Scaffold(
-      appBar: const FintechAppBar(
+      appBar: FintechAppBar(
         title: 'Expenses Ledger',
         subtitle: 'Spending & departmental budget',
+        actions: [
+          FintechCircleButton(
+            icon: _showSearch ? Icons.search_off_rounded : Icons.search_rounded,
+            tooltip: 'Search',
+            onPressed: () {
+              setState(() {
+                _showSearch = !_showSearch;
+                if (!_showSearch) {
+                  _searchCtrl.clear();
+                }
+              });
+            },
+          ),
+          FintechCircleButton(
+            icon: Icons.tune_rounded,
+            tooltip: 'Filter & Sort',
+            iconColor: hasActiveFilter ? theme.colorScheme.primary : null,
+            onPressed: _showFilterAndSortSheet,
+          ),
+        ],
       ),
       body: _loading
           ? const ShimmerListLoader()
           : CustomScrollView(
               slivers: [
+                  if (_showSearch)
+                    SliverToBoxAdapter(
+                      child: SearchBar2(
+                        controller: _searchCtrl,
+                        hint: 'Search item, details...',
+                      ),
+                    ),
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
@@ -439,7 +465,9 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                               const SizedBox(width: 12),
                               Expanded(
                                 child: _SummaryCard(
-                                  label: '$_selectedYear Total',
+                                  label: _selectedYear != null
+                                      ? '$_selectedYear Total'
+                                      : 'All-Time Total',
                                   amount: _yearlyTotal,
                                   icon: Icons.calendar_month_rounded,
                                   color: theme.colorScheme.primary,
@@ -458,46 +486,12 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                       ),
                     ),
                   ),
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: SearchBar2(
-                              controller: _searchCtrl,
-                              hint: 'Search item, details...',
-                              noPadding: true,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          FintechActionButton(
-                            icon: Icons.picture_as_pdf_outlined,
-                            tooltip: 'Export Financial PDF Report',
-                            onTap: _exportPdfReport,
-                          ),
-                          if (allYears.isNotEmpty) ...[
-                            const SizedBox(width: 8),
-                            _buildYearSelector(theme, allYears),
-                          ],
-                          const SizedBox(width: 8),
-                          FintechActionButton(
-                            icon: Icons.tune_rounded,
-                            tooltip: 'Sort Options',
-                            isActive: _sortField != 'date' || _sortAsc,
-                            onTap: _showSortSheet,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
                   if (_expenses.isEmpty)
-                    SliverFillRemaining(
+                    const SliverFillRemaining(
                       child: EmptyState(
                         icon: Icons.receipt_long_rounded,
                         title: 'No Expenses Logged',
                         subtitle: 'Tap + to record your first operational expense',
-                        onRefresh: _load,
                       ),
                     )
                   else if (_monthKeys.isEmpty)
@@ -506,7 +500,6 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                         icon: Icons.search_off_rounded,
                         title: 'No Matching Expenses',
                         subtitle: 'No records match "${_searchCtrl.text}"',
-                        onRefresh: _load,
                       ),
                     )
                   else
@@ -632,15 +625,26 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
               ),
       floatingActionButton: _isSelectionMode
           ? null
-          : FintechFab(
-              onPressed: () => _openForm(),
-              tooltip: 'Add Expense',
-              icon: Icons.add_rounded,
-              color: _expenseColor,
+          : SmoothExitFab(
+              child: FintechFab(
+                onPressed: () => _openForm(),
+                tooltip: 'Add Expense',
+                icon: Icons.add_rounded,
+                color: _expenseColor,
+              ),
             ),
       bottomNavigationBar: _isSelectionMode
           ? SelectionBottomBar(
               selectedCount: _selectedIds.length,
+              totalCount: _grouped.values.fold<int>(0, (sum, list) => sum + list.length),
+              onSelectAll: () {
+                setState(() {
+                  for (final list in _grouped.values) {
+                    _selectedIds.addAll(list.where((e) => e.id != null).map((e) => e.id!));
+                  }
+                });
+              },
+              onDeselectAll: () => setState(() => _selectedIds.clear()),
               onClose: () => setState(() => _selectedIds.clear()),
               onDelete: _bulkDelete,
             )
@@ -984,6 +988,29 @@ class _ExpenseDetailSheet extends StatelessWidget {
                 ),
             ],
           ),
+          if (expense.receiptPath.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.tonalIcon(
+                onPressed: () {
+                  Navigator.pop(context);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => DocumentViewerScreen(
+                        title: 'Receipt • ${expense.item}',
+                        filePath: expense.receiptPath,
+                        isPdf: expense.receiptPath.toLowerCase().endsWith('.pdf'),
+                      ),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.receipt_long_rounded, size: 18),
+                label: const Text('View Attached Receipt'),
+              ),
+            ),
+          ],
         ],
       ),
     );

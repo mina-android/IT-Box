@@ -1,11 +1,13 @@
 // lib/screens/network_tools/static_ip_list_screen.dart
 import 'package:flutter/material.dart';
 import '../../database/database_helper.dart';
+import '../../theme/app_theme.dart';
 import '../../widgets/common_widgets.dart';
 import 'static_ip_form_screen.dart';
 
 class StaticIpListScreen extends StatefulWidget {
-  const StaticIpListScreen({super.key});
+  final int? initialItemId;
+  const StaticIpListScreen({super.key, this.initialItemId});
 
   @override
   State<StaticIpListScreen> createState() => _StaticIpListScreenState();
@@ -16,6 +18,8 @@ class _StaticIpListScreenState extends State<StaticIpListScreen> {
   final TextEditingController _searchCtrl = TextEditingController();
   List<Map<String, dynamic>> _items = [];
   bool _loading = true;
+  bool _showSearch = false;
+  bool _handledInitial = false;
 
   @override
   void initState() {
@@ -42,6 +46,17 @@ class _StaticIpListScreenState extends State<StaticIpListScreen> {
         _items = data;
         _loading = false;
       });
+      if (!_handledInitial && widget.initialItemId != null) {
+        final match = data.where((it) => it['id'] == widget.initialItemId).firstOrNull;
+        if (match != null) {
+          _handledInitial = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              _openForm(match);
+            }
+          });
+        }
+      }
     }
   }
 
@@ -72,6 +87,20 @@ class _StaticIpListScreenState extends State<StaticIpListScreen> {
       appBar: FintechAppBar(
         title: 'Static IP Registry',
         subtitle: '${_items.length} registered IP assignments',
+        actions: [
+          FintechCircleButton(
+            icon: _showSearch ? Icons.search_off_rounded : Icons.search_rounded,
+            tooltip: 'Search',
+            onPressed: () {
+              setState(() {
+                _showSearch = !_showSearch;
+                if (!_showSearch) {
+                  _searchCtrl.clear();
+                }
+              });
+            },
+          ),
+        ],
       ),
       floatingActionButton: SmoothExitFab(
         child: FintechFab(
@@ -82,30 +111,33 @@ class _StaticIpListScreenState extends State<StaticIpListScreen> {
       ),
       body: Column(
         children: [
-          SearchBar2(
-            controller: _searchCtrl,
-            hint: 'Search IP or device...',
-          ),
+          if (_showSearch)
+            SearchBar2(
+              controller: _searchCtrl,
+              hint: 'Search IP or device...',
+            ),
           Expanded(
             child: _loading
                 ? const ShimmerListLoader()
                 : filtered.isEmpty
-                    ? Center(
-                        child: Text(
-                          _items.isEmpty ? 'No static IPs logged yet.' : 'No matching static IPs found.',
-                          style: TextStyle(color: cs.onSurface.withValues(alpha: 0.5)),
-                        ),
+                    ? EmptyState(
+                        icon: Icons.lan_outlined,
+                        title: _items.isEmpty ? 'No Static IPs Logged' : 'No Matching Static IPs',
+                        subtitle: _items.isEmpty
+                            ? 'Tap + to register a static IP assignment.'
+                            : 'Try searching for a different IP or device.',
                       )
                     : ListView.builder(
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                         itemCount: filtered.length,
                         itemBuilder: (ctx, i) {
                           final item = filtered[i];
-                          return Card(
+                          return Container(
                             margin: const EdgeInsets.only(bottom: 8),
-                            shape: RoundedRectangleBorder(
+                            decoration: BoxDecoration(
+                              color: AppColors.cardSurface(context),
                               borderRadius: BorderRadius.circular(14),
-                              side: BorderSide(color: cs.outline.withValues(alpha: 0.15)),
+                              border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.25)),
                             ),
                             child: ListTile(
                               leading: Container(
@@ -143,8 +175,20 @@ class _StaticIpListScreenState extends State<StaticIpListScreen> {
                               trailing: IconButton(
                                 icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent),
                                 onPressed: () async {
+                                  final ok = await showConfirmDialog(
+                                    context,
+                                    title: 'Delete Static IP',
+                                    message: 'Remove ${item['ip_address']} from IPAM registry?',
+                                    confirmText: 'Delete',
+                                    confirmColor: Colors.red,
+                                  );
+                                  if (!ok || !mounted) {
+                                    return;
+                                  }
                                   await _db.deleteStaticIp(item['id'] as int);
-                                  _load();
+                                  if (mounted) {
+                                    _load();
+                                  }
                                 },
                               ),
                               onTap: () => _openForm(item),

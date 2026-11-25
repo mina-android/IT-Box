@@ -2,6 +2,13 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../database/database_helper.dart';
+import '../../models/access_point.dart';
+import '../../models/electronic.dart';
+import '../../models/laptop.dart';
+import '../../models/mifi.dart';
+import '../../models/network_device.dart';
+import '../../models/printer.dart';
+import '../../models/wifi_network.dart';
 import '../../services/label_service.dart';
 import '../../services/wifi_pdf_service.dart';
 import '../../theme/app_theme.dart';
@@ -43,131 +50,150 @@ class _LabelExportScreenState extends State<LabelExportScreen> {
   }
 
   Future<void> _loadData() async {
-    final laptops     = await _db.getLaptops();
-    final nets        = await _db.getNetworkDevices();
-    final mifis       = await _db.getMiFis();
-    final aps         = await _db.getAccessPoints();
-    final printers    = await _db.getPrinters();
-    final electronics = await _db.getElectronics();
+    try {
+      final results = await Future.wait([
+        _db.getLaptops(),
+        _db.getNetworkDevices(),
+        _db.getMiFis(),
+        _db.getAccessPoints(),
+        _db.getPrinters(),
+        _db.getElectronics(),
+        _db.getWifiNetworks(),
+      ]);
+      final laptops     = results[0] as List<Laptop>;
+      final nets        = results[1] as List<NetworkDevice>;
+      final mifis       = results[2] as List<MiFi>;
+      final aps         = results[3] as List<AccessPoint>;
+      final printers    = results[4] as List<Printer>;
+      final electronics = results[5] as List<Electronic>;
+      final standalones = results[6] as List<WifiNetwork>;
 
-    // Load switch and patch panel chassis from SharedPreferences
-    final prefs = await SharedPreferences.getInstance();
-    final rawChassisJson = prefs.getString('custom_switch_patch_chassis_v1');
-    List<Map<String, dynamic>> chassisItems = [];
-    if (rawChassisJson != null && rawChassisJson.isNotEmpty) {
-      try {
-        final List decoded = jsonDecode(rawChassisJson);
-        chassisItems = decoded.map((e) => Map<String, dynamic>.from(e as Map)).toList();
-      } catch (_) {}
-    }
-    if (chassisItems.isEmpty) {
-      chassisItems = [
-        {'id': 1, 'name': 'Core Distribution Switch', 'type': 'Switch', 'totalPorts': 24, 'location': 'Server Room Rack 1'},
-        {'id': 2, 'name': 'Main Office Patch Panel', 'type': 'Patch Panel', 'totalPorts': 24, 'location': 'Floor 2 Comm Closet'},
-      ];
-    }
-
-    final standalones = await _db.getWifiNetworks();
-
-    final wifiList = <WifiNetworkInfo>[];
-    final seenSsids = <String>{};
-
-    void addWifi(String ssid, String pass, String location) {
-      final trimmed = ssid.trim();
-      if (trimmed.isNotEmpty && !seenSsids.contains(trimmed.toLowerCase())) {
-        seenSsids.add(trimmed.toLowerCase());
-        wifiList.add(WifiNetworkInfo(
-          ssid: trimmed,
-          password: pass,
-          locationOrTag: location,
-        ));
+      // Load switch and patch panel chassis from org-scoped SharedPreferences
+      final prefs = await SharedPreferences.getInstance();
+      final rawChassisJson = prefs.getString(DatabaseHelper.scopedSwitchChassisKey()) ??
+          prefs.getString('custom_switch_patch_chassis_v1');
+      List<Map<String, dynamic>> chassisItems = [];
+      if (rawChassisJson != null && rawChassisJson.isNotEmpty) {
+        try {
+          final List decoded = jsonDecode(rawChassisJson);
+          chassisItems = decoded.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+        } catch (_) {}
       }
-    }
+      if (chassisItems.isEmpty) {
+        chassisItems = [
+          {'id': 1, 'name': 'Core Distribution Switch', 'type': 'Switch', 'totalPorts': 24, 'location': 'Server Room Rack 1'},
+          {'id': 2, 'name': 'Main Office Patch Panel', 'type': 'Patch Panel', 'totalPorts': 24, 'location': 'Floor 2 Comm Closet'},
+        ];
+      }
 
-    for (final r in nets) {
-      if (r.wifiName.isNotEmpty) {
-        addWifi(
-          r.wifiName,
-          r.wifiPassword,
-          r.deviceLocation.isNotEmpty ? r.deviceLocation : r.model,
-        );
-      }
-    }
-    for (final m in mifis) {
-      if (m.wifiName.isNotEmpty) {
-        addWifi(
-          m.wifiName,
-          m.wifiPassword,
-          'MiFi #${m.deviceNumber}',
-        );
-      }
-    }
-    for (final s in standalones) {
-      if (s.networkName.isNotEmpty) {
-        addWifi(
-          s.networkName,
-          s.password,
-          s.locationDevice.isNotEmpty ? s.locationDevice : 'Standalone Network',
-        );
-      }
-    }
+      final wifiList = <WifiNetworkInfo>[];
+      final seenSsids = <String>{};
 
-    if (!mounted) return;
-    setState(() {
-      _labels = {
-        'laptops':       laptops.map((l) => l.laptopNumber).toList(),
-        'network':       nets.map((d) => d.phoneNumber.isNotEmpty
-            ? '${d.deviceNumber}\n${d.phoneNumber}' : d.deviceNumber).toList(),
-        'mifis':         mifis.map((m) => m.phoneNumber.isNotEmpty
-            ? '${m.deviceNumber}\n${m.phoneNumber}' : m.deviceNumber).toList(),
-        'access_points': aps.map((a) => a.portNumber.isNotEmpty
-            ? '${a.deviceNumber}\n${a.portNumber}' : a.deviceNumber).toList(),
-        'printers':      printers.map((p) => p.printerNumber).toList(),
-        'electronics':   electronics.map((e) => e.deviceNumber).toList(),
-        'switches':      chassisItems.map((c) => c['name'].toString()).toList(),
-      };
-      _qrItems = {
-        'laptops': laptops.map((l) => {
-          'code': l.laptopNumber,
-          'title': l.model,
-          'subtitle': l.user.isNotEmpty ? 'User: ${l.user}' : 'In Stock',
-        }).toList(),
-        'network': nets.map((d) => {
-          'code': d.deviceNumber,
-          'title': d.model,
-          'subtitle': d.deviceLocation,
-        }).toList(),
-        'mifis': mifis.map((m) => {
-          'code': m.deviceNumber,
-          'title': m.model,
-          'subtitle': dPhone(m.phoneNumber),
-        }).toList(),
-        'access_points': aps.map((a) => {
-          'code': a.deviceNumber,
-          'title': a.model,
-          'subtitle': a.location,
-        }).toList(),
-        'printers': printers.map((p) => {
-          'code': p.printerNumber,
-          'title': p.model,
-          'subtitle': p.location,
-        }).toList(),
-        'electronics': electronics.map((e) => {
-          'code': e.deviceNumber,
-          'title': e.deviceName,
-          'subtitle': e.details,
-        }).toList(),
-        'switches': chassisItems.map((c) => {
-          'code': '${c['type'].toString().toUpperCase()}-${c['id']}',
-          'title': c['name'].toString(),
-          'subtitle': '',
-        }).toList(),
-      };
-      _allWifiNets = wifiList;
-      _selectedWifiNets.clear();
-      _selectedWifiNets.addAll(wifiList);
-      _dataLoaded = true;
-    });
+      void addWifi(String ssid, String pass, String location) {
+        final trimmed = ssid.trim();
+        if (trimmed.isNotEmpty && !seenSsids.contains(trimmed.toLowerCase())) {
+          seenSsids.add(trimmed.toLowerCase());
+          wifiList.add(WifiNetworkInfo(
+            ssid: trimmed,
+            password: pass,
+            locationOrTag: location,
+          ));
+        }
+      }
+
+      for (final r in nets) {
+        if (r.wifiName.isNotEmpty) {
+          addWifi(
+            r.wifiName,
+            r.wifiPassword,
+            r.deviceLocation.isNotEmpty ? r.deviceLocation : r.model,
+          );
+        }
+      }
+      for (final m in mifis) {
+        if (m.wifiName.isNotEmpty) {
+          addWifi(
+            m.wifiName,
+            m.wifiPassword,
+            'MiFi #${m.deviceNumber}',
+          );
+        }
+      }
+      for (final s in standalones) {
+        if (s.networkName.isNotEmpty) {
+          addWifi(
+            s.networkName,
+            s.password,
+            s.locationDevice.isNotEmpty ? s.locationDevice : 'Standalone Network',
+          );
+        }
+      }
+
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _labels = {
+          'laptops':       laptops.map<String>((l) => l.laptopNumber).toList(),
+          'network':       nets.map<String>((d) => d.phoneNumber.isNotEmpty
+              ? '${d.deviceNumber}\n${d.phoneNumber}' : d.deviceNumber).toList(),
+          'mifis':         mifis.map<String>((m) => m.phoneNumber.isNotEmpty
+              ? '${m.deviceNumber}\n${m.phoneNumber}' : m.deviceNumber).toList(),
+          'access_points': aps.map<String>((a) => a.portNumber.isNotEmpty
+              ? '${a.deviceNumber}\n${a.portNumber}' : a.deviceNumber).toList(),
+          'printers':      printers.map<String>((p) => p.printerNumber).toList(),
+          'electronics':   electronics.map<String>((e) => e.deviceNumber).toList(),
+          'switches':      chassisItems.map<String>((c) => c['name'].toString()).toList(),
+        };
+        _qrItems = {
+          'laptops': laptops.map<Map<String, String>>((l) => {
+            'code': l.laptopNumber,
+            'title': l.model,
+            'subtitle': l.user.isNotEmpty ? 'User: ${l.user}' : 'In Stock',
+          }).toList(),
+          'network': nets.map<Map<String, String>>((d) => {
+            'code': d.deviceNumber,
+            'title': d.model,
+            'subtitle': d.deviceLocation,
+          }).toList(),
+          'mifis': mifis.map<Map<String, String>>((m) => {
+            'code': m.deviceNumber,
+            'title': m.model,
+            'subtitle': dPhone(m.phoneNumber),
+          }).toList(),
+          'access_points': aps.map<Map<String, String>>((a) => {
+            'code': a.deviceNumber,
+            'title': a.model,
+            'subtitle': a.location,
+          }).toList(),
+          'printers': printers.map<Map<String, String>>((p) => {
+            'code': p.printerNumber,
+            'title': p.model,
+            'subtitle': p.location,
+          }).toList(),
+          'electronics': electronics.map<Map<String, String>>((e) => {
+            'code': e.deviceNumber,
+            'title': e.deviceName,
+            'subtitle': e.details,
+          }).toList(),
+          'switches': chassisItems.map<Map<String, String>>((c) => {
+            'code': '${c['type'].toString().toUpperCase()}-${c['id']}',
+            'title': c['name'].toString(),
+            'subtitle': '',
+          }).toList(),
+        };
+        _allWifiNets = wifiList;
+        _selectedWifiNets.clear();
+        _selectedWifiNets.addAll(wifiList);
+        _dataLoaded = true;
+      });
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      setState(() => _dataLoaded = true);
+      showSnack(context, 'Failed to load asset labels: $e', error: true);
+    }
   }
 
   static String dPhone(String p) => p.isNotEmpty ? 'Phone: $p' : '';
@@ -429,7 +455,7 @@ class _LabelExportScreenState extends State<LabelExportScreen> {
                             padding: const EdgeInsets.symmetric(vertical: 9),
                             decoration: BoxDecoration(
                               color: _activeTab == 0
-                                  ? theme.colorScheme.surface
+                                  ? AppColors.cardSurface(context)
                                   : Colors.transparent,
                               borderRadius: BorderRadius.circular(11),
                               boxShadow: _activeTab == 0
@@ -466,7 +492,7 @@ class _LabelExportScreenState extends State<LabelExportScreen> {
                             padding: const EdgeInsets.symmetric(vertical: 9),
                             decoration: BoxDecoration(
                               color: _activeTab == 1
-                                  ? theme.colorScheme.surface
+                                  ? AppColors.cardSurface(context)
                                   : Colors.transparent,
                               borderRadius: BorderRadius.circular(11),
                               boxShadow: _activeTab == 1
@@ -503,7 +529,7 @@ class _LabelExportScreenState extends State<LabelExportScreen> {
                             padding: const EdgeInsets.symmetric(vertical: 9),
                             decoration: BoxDecoration(
                               color: _activeTab == 2
-                                  ? theme.colorScheme.surface
+                                  ? AppColors.cardSurface(context)
                                   : Colors.transparent,
                               borderRadius: BorderRadius.circular(11),
                               boxShadow: _activeTab == 2
@@ -580,21 +606,21 @@ class _LabelExportScreenState extends State<LabelExportScreen> {
                     ...List.generate(_allWifiNets.length, (i) {
                       final net = _allWifiNets[i];
                       final isSel = _selectedWifiNets.contains(net);
-                      return Card(
+                      return Container(
                         margin: const EdgeInsets.only(bottom: 8),
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          side: BorderSide(
+                        decoration: BoxDecoration(
+                          color: AppColors.cardSurface(context),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
                             color: isSel
                                 ? theme.colorScheme.primary.withValues(alpha: 0.5)
                                 : theme.colorScheme.outlineVariant.withValues(alpha: 0.4),
                           ),
                         ),
                         child: CheckboxListTile(
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                           title: Text(net.ssid, style: const TextStyle(fontWeight: FontWeight.bold)),
-                          subtitle: Text('${net.locationOrTag} • Password: ${net.password.isNotEmpty ? net.password : "None"}'),
+                          subtitle: Text('${net.locationOrTag} • Password: ${net.password.isNotEmpty ? "••••••••" : "None"}'),
                           secondary: Icon(Icons.wifi_rounded, color: theme.colorScheme.primary),
                           value: isSel,
                           onChanged: (v) {
@@ -622,22 +648,14 @@ class _LabelExportScreenState extends State<LabelExportScreen> {
                                   )
                                 : const Icon(Icons.print_rounded, size: 18),
                             label: const Text('Standard (3/Page)'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.teal[700],
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                            ),
                           ),
                         ),
                         const SizedBox(width: 10),
                         Expanded(
-                          child: ElevatedButton.icon(
+                          child: OutlinedButton.icon(
                             onPressed: _loading || _selectedWifiNets.isEmpty ? null : _exportPortableWifiCards,
                             icon: const Icon(Icons.badge_outlined, size: 18),
                             label: const Text('Portable (7×4cm)'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF0284C7),
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                            ),
                           ),
                         ),
                       ],
@@ -661,7 +679,7 @@ class _LabelExportScreenState extends State<LabelExportScreen> {
                               padding: const EdgeInsets.symmetric(vertical: 8),
                               decoration: BoxDecoration(
                                 color: _exportFormat == 'labels'
-                                    ? theme.colorScheme.surface
+                                    ? AppColors.cardSurface(context)
                                     : Colors.transparent,
                                 borderRadius: BorderRadius.circular(11),
                                 boxShadow: _exportFormat == 'labels'
@@ -706,7 +724,7 @@ class _LabelExportScreenState extends State<LabelExportScreen> {
                               padding: const EdgeInsets.symmetric(vertical: 8),
                               decoration: BoxDecoration(
                                 color: _exportFormat == 'qr'
-                                    ? theme.colorScheme.surface
+                                    ? AppColors.cardSurface(context)
                                     : Colors.transparent,
                                 borderRadius: BorderRadius.circular(11),
                                 boxShadow: _exportFormat == 'qr'
@@ -758,22 +776,19 @@ class _LabelExportScreenState extends State<LabelExportScreen> {
                         final key = cat['key'] as String;
                         final isSelected = _selectedCategories.contains(key);
                         final cnt = (_labels[key] ?? []).length;
-                        return FilterChip(
-                          label: Text('${cat['label']} ($cnt)'),
-                          avatar: Icon(cat['icon'] as IconData, size: 16),
+                        return FintechFilterPill(
+                          label: '${cat['label']} ($cnt)',
+                          icon: cat['icon'] as IconData,
                           selected: isSelected,
-                          onSelected: (selected) {
+                          onTap: () {
                             setState(() {
-                              if (selected) {
-                                _selectedCategories.add(key);
-                              } else {
+                              if (isSelected) {
                                 _selectedCategories.remove(key);
+                              } else {
+                                _selectedCategories.add(key);
                               }
                             });
                           },
-                          selectedColor:
-                              theme.colorScheme.primary.withValues(alpha: 0.2),
-                          checkmarkColor: theme.colorScheme.primary,
                         );
                       }).toList(),
                     ),
@@ -789,7 +804,6 @@ class _LabelExportScreenState extends State<LabelExportScreen> {
                           label: const Text('Add Label'),
                           style: ElevatedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                           ),
                         ),
                       ],
@@ -985,8 +999,7 @@ class _LabelExportScreenState extends State<LabelExportScreen> {
                               ? 'Export Printable QR Codes PDF (${_currentQrItems.length} stickers)'
                               : 'Export PDF (${labels.length} labels)')),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.amber[700],
-                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        minimumSize: const Size.fromHeight(52),
                       ),
                     ),
                   const SizedBox(height: 12),
@@ -1026,7 +1039,7 @@ class _LabelExportScreenState extends State<LabelExportScreen> {
                 ],
               ],
             )
-          : const Center(child: CircularProgressIndicator()),
+          : const ShimmerListLoader(),
     );
   }
 }

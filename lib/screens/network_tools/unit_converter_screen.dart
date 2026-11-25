@@ -1,6 +1,7 @@
 // lib/screens/network_tools/unit_converter_screen.dart
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../widgets/common_widgets.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/haptics.dart';
@@ -345,18 +346,19 @@ class _UnitConverterScreenState extends State<UnitConverterScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text(
+                    Text(
                       'CONVERTED EQUIVALENT',
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
                         letterSpacing: 0.6,
-                        color: Colors.white70,
+                        color: cs.primary,
                       ),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.copy_rounded, size: 18, color: Colors.white),
+                      icon: Icon(Icons.copy_rounded, size: 18, color: cs.onSurface),
                       onPressed: () {
+                        Clipboard.setData(ClipboardData(text: resultText));
                         AppHaptics.tap(context, HapticStrength.light);
                         showSnack(context, '$resultText $_toUnit copied to clipboard');
                       },
@@ -367,17 +369,17 @@ class _UnitConverterScreenState extends State<UnitConverterScreen> {
                 const SizedBox(height: 6),
                 Text(
                   '$resultText $_toUnit',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 26,
                     fontWeight: FontWeight.w900,
-                    color: Colors.white,
+                    color: cs.onSurface,
                     letterSpacing: -0.5,
                   ),
                 ),
                 const SizedBox(height: 6),
                 Text(
                   '${_inputCtrl.text} $_fromUnit = $resultText $_toUnit',
-                  style: const TextStyle(fontSize: 13, color: Colors.white70),
+                  style: TextStyle(fontSize: 13, color: cs.onSurface.withValues(alpha: 0.7)),
                 ),
               ],
             ),

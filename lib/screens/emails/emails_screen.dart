@@ -11,7 +11,13 @@ import 'email_form_screen.dart';
 const _emailColor = Color(0xFF0EA5E9);
 
 class EmailsScreen extends StatefulWidget {
-  const EmailsScreen({super.key});
+  final int? initialItemId;
+  final int? focusRequestToken;
+  const EmailsScreen({
+    super.key,
+    this.initialItemId,
+    this.focusRequestToken,
+  });
 
   @override
   State<EmailsScreen> createState() => _EmailsScreenState();
@@ -24,6 +30,9 @@ class _EmailsScreenState extends State<EmailsScreen> {
   List<EmailAccount> _all = [];
   List<EmailAccount> _filtered = [];
   bool _loading = true;
+  bool _showSearch = false;
+  bool _handledInitial = false;
+  int? _lastHandledToken;
   final Set<int> _selectedIds = {};
   bool get _isSelectionMode => _selectedIds.isNotEmpty;
 
@@ -62,6 +71,34 @@ class _EmailsScreenState extends State<EmailsScreen> {
     _filter();
     if (mounted) {
       setState(() => _loading = false);
+      _tryOpenInitialItem();
+    }
+  }
+
+  @override
+  void didUpdateWidget(EmailsScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialItemId != null &&
+        widget.focusRequestToken != _lastHandledToken) {
+      _handledInitial = false;
+      _tryOpenInitialItem();
+    }
+  }
+
+  void _tryOpenInitialItem() {
+    final targetId = widget.initialItemId;
+    if (targetId == null || _loading || _handledInitial) {
+      return;
+    }
+    final match = _all.where((e) => e.id == targetId).firstOrNull;
+    if (match != null) {
+      _handledInitial = true;
+      _lastHandledToken = widget.focusRequestToken;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _showDetail(match);
+        }
+      });
     }
   }
 
@@ -192,11 +229,8 @@ class _EmailsScreenState extends State<EmailsScreen> {
                       IconButton(
                         visualDensity: VisualDensity.compact,
                         icon: const Icon(Icons.copy_rounded, size: 18, color: _emailColor),
-                        tooltip: 'Copy Password',
-                        onPressed: () {
-                          Clipboard.setData(ClipboardData(text: acc.password));
-                          showSnack(ctx, 'Password copied');
-                        },
+                        tooltip: 'Copy Password (60s auto-clear)',
+                        onPressed: () => copySensitiveToClipboard(ctx, acc.password, 'Password'),
                       ),
                     ],
                   ),
@@ -259,25 +293,24 @@ class _EmailsScreenState extends State<EmailsScreen> {
         title: 'Corporate Emails',
         subtitle: '${_all.length} registered mail accounts',
         actions: [
-          if (_isSelectionMode)
-            FintechCircleButton(
-              icon: Icons.select_all_rounded,
-              tooltip: 'Select All',
-              onPressed: () {
-                setState(() {
-                  if (_selectedIds.length == _filtered.length) {
-                    _selectedIds.clear();
-                  } else {
-                    _selectedIds.addAll(_filtered.map((e) => e.id!));
-                  }
-                });
-              },
-            ),
+          FintechCircleButton(
+            icon: _showSearch ? Icons.search_off_rounded : Icons.search_rounded,
+            tooltip: 'Search',
+            onPressed: () {
+              setState(() {
+                _showSearch = !_showSearch;
+                if (!_showSearch) {
+                  _search.clear();
+                }
+              });
+            },
+          ),
         ],
       ),
       body: Column(
         children: [
-          SearchBar2(controller: _search, hintText: 'Search email address or employee…'),
+          if (_showSearch)
+            SearchBar2(controller: _search, hintText: 'Search email address or employee…'),
           Expanded(
             child: _loading
                 ? const ShimmerListLoader()
@@ -288,7 +321,6 @@ class _EmailsScreenState extends State<EmailsScreen> {
                         subtitle: _search.text.isEmpty
                             ? 'Store corporate email accounts and security credentials safely offline.'
                             : 'Try searching with different terms.',
-                        onRefresh: _load,
                       )
                     : ListView.builder(
                         padding: const EdgeInsets.fromLTRB(16, 8, 16, 90),
@@ -303,7 +335,7 @@ class _EmailsScreenState extends State<EmailsScreen> {
                                 decoration: BoxDecoration(
                                   color: isSelected
                                       ? _emailColor.withValues(alpha: 0.08)
-                                      : (isDark ? AppColors.darkCard : Colors.white),
+                                      : AppColors.cardSurface(context),
                                   borderRadius: BorderRadius.circular(18),
                                   border: Border.all(
                                     color: isSelected
@@ -397,11 +429,8 @@ class _EmailsScreenState extends State<EmailsScreen> {
                                           ),
                                           IconButton(
                                             icon: const Icon(Icons.key_rounded, size: 18, color: _emailColor),
-                                            tooltip: 'Copy Password',
-                                            onPressed: () {
-                                              Clipboard.setData(ClipboardData(text: acc.password));
-                                              showSnack(context, 'Password copied');
-                                            },
+                                            tooltip: 'Copy Password (60s auto-clear)',
+                                            onPressed: () => copySensitiveToClipboard(context, acc.password, 'Password'),
                                           ),
                                         ],
                                       ],
@@ -430,6 +459,13 @@ class _EmailsScreenState extends State<EmailsScreen> {
       bottomNavigationBar: _isSelectionMode
           ? SelectionBottomBar(
               selectedCount: _selectedIds.length,
+              totalCount: _filtered.length,
+              onSelectAll: () {
+                setState(() {
+                  _selectedIds.addAll(_filtered.where((e) => e.id != null).map((e) => e.id!));
+                });
+              },
+              onDeselectAll: () => setState(() => _selectedIds.clear()),
               onClose: () => setState(() => _selectedIds.clear()),
               onDelete: _bulkDelete,
             )

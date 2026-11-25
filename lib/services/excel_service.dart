@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'currency_service.dart';
+import 'pdf_base_helper.dart';
 
 class ExcelService {
   static final _dateFmt  = DateFormat('dd MMM yyyy');
@@ -54,6 +55,9 @@ class ExcelService {
     final excel = Excel.createExcel();
     final sheet = excel[sheetName];
     excel.setDefaultSheet(sheetName);
+    if (sheetName != 'Sheet1' && excel.sheets.containsKey('Sheet1')) {
+      excel.delete('Sheet1');
+    }
 
     _writeSheet(sheet, headers, rows);
 
@@ -73,42 +77,70 @@ class ExcelService {
       'rows': rows,
     });
     
-    if (bytes.isEmpty) throw Exception('Excel encoding failed');
+    if (bytes.isEmpty) {
+      throw Exception('Excel encoding failed');
+    }
 
     final dir = await getTemporaryDirectory();
     final ts  = DateTime.now().toString().replaceAll(RegExp(r'[: .]'), '-').substring(0, 19);
-    final file = File('${dir.path}/${fileLabel}_$ts.xlsx');
+    final safeLabel = PdfBaseHelper.sanitizeFilename(fileLabel);
+    final file = File('${dir.path}/${safeLabel}_$ts.xlsx');
     await file.writeAsBytes(bytes);
     await SharePlus.instance.share(
       ShareParams(files: [XFile(file.path)], subject: fileLabel),
     );
   }
 
-  // ── Export expenses date range ───────────────────────────────────
-  static Future<void> exportExpenses({
-    required List<Map<String, dynamic>> expenses,
-    required String label,
-  }) async {
+  /// Exports multiple tables into separate `.xlsx` files and shares them together.
+  static Future<void> exportMultipleTables(
+    List<({String sheetName, List<String> headers, List<List<dynamic>> rows, String fileLabel})> tables,
+  ) async {
+    if (tables.isEmpty) {
+      return;
+    }
+    final dir = await getTemporaryDirectory();
+    final ts = DateTime.now().toString().replaceAll(RegExp(r'[: .]'), '-').substring(0, 19);
+    final files = <XFile>[];
+
+    for (final t in tables) {
+      final bytes = await compute(_encodeExcelIsolate, {
+        'sheetName': t.sheetName,
+        'headers': t.headers,
+        'rows': t.rows,
+      });
+      if (bytes.isEmpty) {
+        throw Exception('Excel encoding failed for ${t.fileLabel}');
+      }
+      final safeLabel = PdfBaseHelper.sanitizeFilename(t.fileLabel);
+      final file = File('${dir.path}/${safeLabel}_$ts.xlsx');
+      await file.writeAsBytes(bytes);
+      files.add(XFile(file.path));
+    }
+
+    await SharePlus.instance.share(
+      ShareParams(
+        files: files,
+        subject: files.length == 1
+            ? tables.first.fileLabel
+            : 'IT Box Excel Export (${files.length} tables)',
+      ),
+    );
+  }
+
+  static Future<List<int>> _encodeExpensesIsolate(Map<String, dynamic> data) async {
+    final headers = (data['headers'] as List).cast<String>();
+    final rows = (data['rows'] as List).map((e) => (e as List).cast<dynamic>()).toList();
+    final total = (data['total'] as num).toDouble();
+
     final excel = Excel.createExcel();
     final sheet = excel['Expenses'];
     excel.setDefaultSheet('Expenses');
-
-    final headers = ['Date', 'Item', 'Price (${CurrencyService().currency})', 'Details'];
-    final rows = expenses.map((e) {
-      String dateStr = e['date'] as String? ?? '';
-      try { dateStr = _dateFmt.format(DateTime.parse(dateStr)); } catch (_) {}
-      return <dynamic>[
-        dateStr,
-        e['item'] as String? ?? '',
-        (e['price'] as num?)?.toDouble() ?? 0.0,
-        e['details'] as String? ?? '',
-      ];
-    }).toList();
+    if (excel.sheets.containsKey('Sheet1')) {
+      excel.delete('Sheet1');
+    }
 
     _writeSheet(sheet, headers, rows);
 
-    // Summary row
-    final total = expenses.fold<double>(0, (s, e) => s + ((e['price'] as num?)?.toDouble() ?? 0));
     final sumRow = sheet.maxRows;
     final tc = sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: sumRow));
     tc.value = TextCellValue('TOTAL');
@@ -117,12 +149,42 @@ class ExcelService {
     vc.value = DoubleCellValue(total);
     vc.cellStyle = CellStyle(bold: true);
 
-    final bytes = excel.encode();
-    if (bytes == null) throw Exception('Excel encoding failed');
+    return excel.encode() ?? <int>[];
+  }
 
-    final dir  = await getTemporaryDirectory();
-    final ts   = DateTime.now().toString().replaceAll(RegExp(r'[: .]'), '-').substring(0, 19);
-    final file = File('${dir.path}/Expenses_${label}_$ts.xlsx');
+  // ── Export expenses date range ───────────────────────────────────
+  static Future<void> exportExpenses({
+    required List<Map<String, dynamic>> expenses,
+    required String label,
+  }) async {
+    final headers = ['Date', 'Item', 'Price (${CurrencyService().currency})', 'Details'];
+    final rows = expenses.map((e) {
+      String dateStr = e['date'] as String? ?? '';
+      try {
+        dateStr = _dateFmt.format(DateTime.parse(dateStr));
+      } catch (_) {}
+      return <dynamic>[
+        dateStr,
+        e['item'] as String? ?? '',
+        (e['price'] as num?)?.toDouble() ?? 0.0,
+        e['details'] as String? ?? '',
+      ];
+    }).toList();
+
+    final total = expenses.fold<double>(0, (s, e) => s + ((e['price'] as num?)?.toDouble() ?? 0));
+    final bytes = await compute(_encodeExpensesIsolate, {
+      'headers': headers,
+      'rows': rows,
+      'total': total,
+    });
+    if (bytes.isEmpty) {
+      throw Exception('Excel encoding failed');
+    }
+
+    final dir = await getTemporaryDirectory();
+    final ts = DateTime.now().toString().replaceAll(RegExp(r'[: .]'), '-').substring(0, 19);
+    final safeLabel = PdfBaseHelper.sanitizeFilename(label);
+    final file = File('${dir.path}/Expenses_${safeLabel}_$ts.xlsx');
     await file.writeAsBytes(bytes);
     await SharePlus.instance.share(
       ShareParams(files: [XFile(file.path)], subject: 'Expenses – $label'),

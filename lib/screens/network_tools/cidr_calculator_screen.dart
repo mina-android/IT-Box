@@ -1,6 +1,7 @@
 // lib/screens/network_tools/cidr_calculator_screen.dart
 import 'dart:math';
 import 'package:flutter/material.dart';
+import '../../theme/app_theme.dart';
 import '../../widgets/common_widgets.dart';
 
 class CidrCalculatorScreen extends StatefulWidget {
@@ -22,13 +23,26 @@ class _CidrCalculatorScreenState extends State<CidrCalculatorScreen> {
     _calculate();
   }
 
+  @override
+  void dispose() {
+    _ipController.dispose();
+    super.dispose();
+  }
+
   void _calculate() {
     final ipStr = _ipController.text.trim();
     final parts = ipStr.split('.');
-    if (parts.length != 4) return;
+    if (parts.length != 4) {
+      setState(() => _result = null);
+      return;
+    }
 
-    final octets = parts.map((p) => int.tryParse(p) ?? 0).toList();
-    if (octets.any((o) => o < 0 || o > 255)) return;
+    final parsed = parts.map((p) => int.tryParse(p)).toList();
+    if (parsed.any((o) => o == null || o < 0 || o > 255)) {
+      setState(() => _result = null);
+      return;
+    }
+    final octets = parsed.cast<int>();
 
     final ipInt = (octets[0] << 24) | (octets[1] << 16) | (octets[2] << 8) | octets[3];
     final maskInt = _prefix == 0 ? 0 : (~0 << (32 - _prefix)) & 0xFFFFFFFF;
@@ -117,11 +131,31 @@ class _CidrCalculatorScreenState extends State<CidrCalculatorScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('USABLE HOST CAPACITY', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white70)),
+                    Text(
+                      'USABLE HOST CAPACITY',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
                     const SizedBox(height: 6),
-                    Text('${_result!['usableHosts']} Hosts', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: Colors.white)),
+                    Text(
+                      '${_result!['usableHosts']} Hosts',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800,
+                        color: Theme.of(context).colorScheme.onSurface,
+                      ),
+                    ),
                     const SizedBox(height: 4),
-                    Text('Range: ${_result!['firstUsable']} – ${_result!['lastUsable']}', style: const TextStyle(fontSize: 12, color: Colors.white60)),
+                    Text(
+                      'Range: ${_result!['firstUsable']} – ${_result!['lastUsable']}',
+                      style: credentialFont(
+                        fontSize: 12,
+                        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -153,7 +187,7 @@ class _CidrCalculatorScreenState extends State<CidrCalculatorScreen> {
           Text(label, style: const TextStyle(fontSize: 13)),
           Text(
             value,
-            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+            style: credentialFont(fontSize: 13, fontWeight: FontWeight.bold),
           ),
         ],
       ),

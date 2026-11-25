@@ -3,6 +3,9 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/painting.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:async';
@@ -25,10 +28,15 @@ import '../models/wifi_network.dart';
 import '../models/account_password.dart';
 import '../models/other_device.dart';
 import '../models/vendor_contact.dart';
+import '../models/custody_document.dart';
+import '../models/vault_document.dart';
 import '../services/company_service.dart';
+import '../services/currency_service.dart';
 import '../services/theme_service.dart';
+import '../services/ticket_reminder_service.dart';
 import '../services/notification_service.dart';
 import '../services/backup_crypto_service.dart';
+import '../services/document_storage_service.dart';
 
 class TableNotifier extends ChangeNotifier {
   void notify() => notifyListeners();
@@ -45,6 +53,9 @@ class BackupManifestSummary {
   final bool hasThemePrefs;
   final bool isEncrypted;
   final bool isValid;
+  final int embeddedVaultFilesCount;
+  final int embeddedReceiptFilesCount;
+  final String? decryptedJson;
   final String? validationError;
 
   const BackupManifestSummary({
@@ -57,6 +68,9 @@ class BackupManifestSummary {
     required this.hasThemePrefs,
     required this.isEncrypted,
     required this.isValid,
+    this.embeddedVaultFilesCount = 0,
+    this.embeddedReceiptFilesCount = 0,
+    this.decryptedJson,
     this.validationError,
   });
 }
@@ -380,6 +394,7 @@ class DatabaseHelper extends ChangeNotifier {
         employeeId: e.employeeId,
         employeeName: e.employeeName,
         reason: e.reason,
+        notes: e.notes,
         outDate: e.outDate,
         backDate: e.backDate,
         dueDate: e.dueDate,
@@ -396,6 +411,7 @@ class DatabaseHelper extends ChangeNotifier {
         employeeId: Value(l.employeeId),
         employeeName: Value(l.employeeName),
         reason: Value(l.reason),
+        notes: Value(l.notes),
         outDate: Value(l.outDate),
         backDate: Value(l.backDate),
         dueDate: Value(l.dueDate),
@@ -409,6 +425,7 @@ class DatabaseHelper extends ChangeNotifier {
         item: e.item,
         price: e.price,
         details: e.details,
+        receiptPath: e.receiptPath,
       );
 
   ExpensesCompanion _expenseToCompanion(Expense ex) => ExpensesCompanion(
@@ -417,6 +434,7 @@ class DatabaseHelper extends ChangeNotifier {
         item: Value(ex.item),
         price: Value(ex.price),
         details: Value(ex.details),
+        receiptPath: Value(ex.receiptPath),
       );
 
   Bill _billFromEntry(BillEntry e) => Bill(
@@ -447,7 +465,7 @@ class DatabaseHelper extends ChangeNotifier {
 
   EmailAccountsCompanion _emailAccountToCompanion(EmailAccount ea) => EmailAccountsCompanion(
         id: ea.id != null ? Value(ea.id!) : const Value.absent(),
-        employeeId: ea.employeeId != null ? Value(ea.employeeId) : const Value.absent(),
+        employeeId: Value(ea.employeeId),
         employeeName: Value(ea.employeeName),
         email: Value(ea.email),
         password: Value(ea.password),
@@ -476,7 +494,7 @@ class DatabaseHelper extends ChangeNotifier {
     return LogEntriesCompanion(
         id: le.id != null ? Value(le.id!) : const Value.absent(),
         date: Value(le.date),
-        employeeId: le.employeeId != null ? Value(le.employeeId) : const Value.absent(),
+        employeeId: Value(le.employeeId),
         employeeName: Value(le.employeeName),
         problem: Value(le.problem),
         solution: Value(le.solution),
@@ -589,6 +607,7 @@ class DatabaseHelper extends ChangeNotifier {
         email: e.email,
         portalUrl: e.portalUrl,
         accountNumber: e.accountNumber,
+        slaTier: e.slaTier,
         notes: e.notes,
         createdAt: e.createdAt,
       );
@@ -603,8 +622,78 @@ class DatabaseHelper extends ChangeNotifier {
         email: Value(v.email),
         portalUrl: Value(v.portalUrl),
         accountNumber: Value(v.accountNumber),
+        slaTier: Value(v.slaTier),
         notes: Value(v.notes),
         createdAt: Value(v.createdAt ?? DateTime.now().toIso8601String()),
+      );
+
+  CustodyDocument _custodyDocumentFromEntry(CustodyDocumentEntry e) => CustodyDocument(
+        id: e.id,
+        documentNumber: e.documentNumber,
+        title: e.title,
+        sourceType: e.sourceType,
+        sourceId: e.sourceId,
+        employeeName: e.employeeName,
+        employeePhone: e.employeePhone,
+        employeeEmail: e.employeeEmail,
+        handoverDate: e.handoverDate,
+        dueDate: e.dueDate,
+        itemsJson: e.itemsJson,
+        agreementText: e.agreementText,
+        adminNotes: e.adminNotes,
+        signatureBase64: e.signatureBase64,
+        pdfPath: e.pdfPath,
+        createdAt: e.createdAt,
+      );
+
+  CustodyDocumentsCompanion _custodyDocumentToCompanion(CustodyDocument d) =>
+      CustodyDocumentsCompanion(
+        id: d.id != null ? Value(d.id!) : const Value.absent(),
+        documentNumber: Value(d.documentNumber),
+        title: Value(d.title),
+        sourceType: Value(d.sourceType),
+        sourceId: Value(d.sourceId),
+        employeeName: Value(d.employeeName),
+        employeePhone: Value(d.employeePhone),
+        employeeEmail: Value(d.employeeEmail),
+        handoverDate: Value(d.handoverDate),
+        dueDate: Value(d.dueDate),
+        itemsJson: Value(d.itemsJson),
+        agreementText: Value(d.agreementText),
+        adminNotes: Value(d.adminNotes),
+        signatureBase64: Value(d.signatureBase64),
+        pdfPath: Value(d.pdfPath),
+        createdAt: Value(d.createdAt ?? DateTime.now().toIso8601String()),
+      );
+
+  VaultDocument _vaultDocumentFromEntry(VaultDocumentEntry e) => VaultDocument(
+        id: e.id,
+        title: e.title,
+        category: e.category,
+        filePath: e.filePath,
+        fileType: e.fileType,
+        fileSizeBytes: e.fileSizeBytes,
+        pageCount: e.pageCount,
+        linkedEmployeeName: e.linkedEmployeeName,
+        linkedAssetType: e.linkedAssetType,
+        linkedAssetLabel: e.linkedAssetLabel,
+        notes: e.notes,
+        createdAt: e.createdAt,
+      );
+
+  VaultDocumentsCompanion _vaultDocumentToCompanion(VaultDocument d) => VaultDocumentsCompanion(
+        id: d.id != null ? Value(d.id!) : const Value.absent(),
+        title: Value(d.title),
+        category: Value(d.category),
+        filePath: Value(d.filePath),
+        fileType: Value(d.fileType),
+        fileSizeBytes: Value(d.fileSizeBytes),
+        pageCount: Value(d.pageCount),
+        linkedEmployeeName: Value(d.linkedEmployeeName),
+        linkedAssetType: Value(d.linkedAssetType),
+        linkedAssetLabel: Value(d.linkedAssetLabel),
+        notes: Value(d.notes),
+        createdAt: Value(d.createdAt ?? DateTime.now().toIso8601String()),
       );
 
   Map<String, dynamic> _maintenanceEntryToMap(MaintenanceEntry e) => {
@@ -713,7 +802,15 @@ class DatabaseHelper extends ChangeNotifier {
     return rows;
   }
 
+  Future<void> _deleteMaintenanceForDevice(String deviceType, int deviceId) async {
+    await (drift.delete(drift.deviceMaintenanceLogs)
+          ..where((tbl) => tbl.deviceType.equals(deviceType) & tbl.deviceId.equals(deviceId)))
+        .go();
+    notifyTableChanged('device_maintenance_logs');
+  }
+
   Future<int> deleteLaptop(int id) async {
+    await _deleteMaintenanceForDevice('laptop', id);
     final rows = await (drift.delete(drift.laptops)..where((tbl) => tbl.id.equals(id))).go();
     notifyTableChanged('laptops');
     return rows;
@@ -749,6 +846,8 @@ class DatabaseHelper extends ChangeNotifier {
   }
 
   Future<int> deleteNetworkDevice(int id) async {
+    await _deleteMaintenanceForDevice('network_device', id);
+    await deleteSwitchPatchPortsForSwitch(id);
     final rows = await (drift.delete(drift.networkDevices)..where((tbl) => tbl.id.equals(id))).go();
     notifyTableChanged('network_devices');
     return rows;
@@ -783,6 +882,7 @@ class DatabaseHelper extends ChangeNotifier {
   }
 
   Future<int> deletePrinter(int id) async {
+    await _deleteMaintenanceForDevice('printer', id);
     final rows = await (drift.delete(drift.printers)..where((tbl) => tbl.id.equals(id))).go();
     notifyTableChanged('printers');
     return rows;
@@ -846,46 +946,27 @@ class DatabaseHelper extends ChangeNotifier {
   }
 
   Future<Map<String, int>> getEmployeeDependentCounts(int employeeId) async {
-    final borrowCountExp = drift.borrowLogs.id.count();
-    final emailCountExp = drift.emailAccounts.id.count();
-    final logCountExp = drift.logEntries.id.count();
-
-    // Check active borrows
-    final borrowsRow = await (drift.selectOnly(drift.borrowLogs)
-          ..addColumns([borrowCountExp])
-          ..where(drift.borrowLogs.employeeId.equals(employeeId) &
-              drift.borrowLogs.isReturned.equals(0)))
-        .getSingle();
-
-    // Check email accounts assigned
-    final emailsRow = await (drift.selectOnly(drift.emailAccounts)
-          ..addColumns([emailCountExp])
-          ..where(drift.emailAccounts.employeeId.equals(employeeId)))
-        .getSingle();
-
-    // Check tickets logged
-    final logsRow = await (drift.selectOnly(drift.logEntries)
-          ..addColumns([logCountExp])
-          ..where(drift.logEntries.employeeId.equals(employeeId)))
-        .getSingle();
-
-    // Check assigned laptops
-    final emp = await (drift.select(drift.employees)..where((tbl) => tbl.id.equals(employeeId))).getSingleOrNull();
-    int laptopsCount = 0;
-    if (emp != null && emp.name.isNotEmpty) {
-      final laptopCountExp = drift.laptops.id.count();
-      final lRow = await (drift.selectOnly(drift.laptops)
-            ..addColumns([laptopCountExp])
-            ..where(drift.laptops.user.lower().equals(emp.name.toLowerCase())))
-          .getSingle();
-      laptopsCount = lRow.read(laptopCountExp) ?? 0;
-    }
+    final res = await drift.customSelect(
+      '''
+      SELECT
+        (SELECT COUNT(*) FROM borrow_logs WHERE employee_id = ? AND is_returned = 0) AS active_borrows,
+        (SELECT COUNT(*) FROM email_accounts WHERE employee_id = ?) AS emails,
+        (SELECT COUNT(*) FROM log_entries WHERE employee_id = ?) AS tickets,
+        (SELECT COUNT(*) FROM laptops WHERE LOWER(user) = LOWER(COALESCE((SELECT name FROM employees WHERE id = ?), ''))) AS laptops
+      ''',
+      variables: [
+        Variable.withInt(employeeId),
+        Variable.withInt(employeeId),
+        Variable.withInt(employeeId),
+        Variable.withInt(employeeId),
+      ],
+    ).getSingle();
 
     return {
-      'active_borrows': borrowsRow.read(borrowCountExp) ?? 0,
-      'emails': emailsRow.read(emailCountExp) ?? 0,
-      'tickets': logsRow.read(logCountExp) ?? 0,
-      'laptops': laptopsCount,
+      'active_borrows': res.data['active_borrows'] as int? ?? 0,
+      'emails': res.data['emails'] as int? ?? 0,
+      'tickets': res.data['tickets'] as int? ?? 0,
+      'laptops': res.data['laptops'] as int? ?? 0,
     };
   }
 
@@ -894,6 +975,7 @@ class DatabaseHelper extends ChangeNotifier {
       throw StateError(
           'Cannot delete electronic device while it is actively borrowed. Please mark it returned first.');
     }
+    await _deleteMaintenanceForDevice('electronic', id);
     final rows = await (drift.delete(drift.electronics)..where((tbl) => tbl.id.equals(id))).go();
     notifyTableChanged('electronics');
     return rows;
@@ -1030,6 +1112,7 @@ class DatabaseHelper extends ChangeNotifier {
       throw StateError(
           'Cannot delete MiFi device while it is actively borrowed. Please mark it returned first.');
     }
+    await _deleteMaintenanceForDevice('mifi', id);
     final rows = await (drift.delete(drift.mifis)..where((tbl) => tbl.id.equals(id))).go();
     notifyTableChanged('mifis');
     return rows;
@@ -1296,6 +1379,10 @@ class DatabaseHelper extends ChangeNotifier {
   }
 
   Future<int> deleteExpense(int id) async {
+    final existing = await (drift.select(drift.expenses)..where((tbl) => tbl.id.equals(id))).getSingleOrNull();
+    if (existing != null && existing.receiptPath.isNotEmpty) {
+      await DocumentStorageService.deleteFileIfExists(existing.receiptPath);
+    }
     final rows = await (drift.delete(drift.expenses)..where((tbl) => tbl.id.equals(id))).go();
     notifyTableChanged('expenses');
     return rows;
@@ -1671,6 +1758,168 @@ class DatabaseHelper extends ChangeNotifier {
     return rows;
   }
 
+  Stream<List<VendorContact>> watchVendorContacts() {
+    return _watchSwitchable(() {
+      final query = drift.select(drift.vendorContacts)
+        ..orderBy([(tbl) => OrderingTerm.asc(tbl.name)]);
+      return query.watch().map((rows) => rows.map(_vendorContactFromEntry).toList());
+    });
+  }
+
+  Stream<List<WifiNetwork>> watchWifiNetworks() {
+    return _watchSwitchable(() {
+      final query = drift.select(drift.wifiNetworks)
+        ..orderBy([(tbl) => OrderingTerm.asc(tbl.networkName)]);
+      return query.watch().map((rows) => rows.map(_wifiNetworkFromEntry).toList());
+    });
+  }
+
+  Stream<List<AccountPassword>> watchAccountPasswords() {
+    return _watchSwitchable(() {
+      final query = drift.select(drift.accountPasswords)
+        ..orderBy([(tbl) => OrderingTerm.asc(tbl.platform)]);
+      return query.watch().map((rows) => rows.map(_accountPasswordFromEntry).toList());
+    });
+  }
+
+  Stream<List<Map<String, dynamic>>> watchStaticIps() {
+    return _watchSwitchable(() {
+      final query = drift.select(drift.staticIps)
+        ..orderBy([(tbl) => OrderingTerm.asc(tbl.ipAddress)]);
+      return query.watch().map((rows) => rows.map(_staticIpEntryToMap).toList());
+    });
+  }
+
+  // ── Custody Documents ──────────────────────────────────────────────────────
+  Future<int> insertCustodyDocument(CustodyDocument d) async {
+    final id = await drift.into(drift.custodyDocuments).insert(_custodyDocumentToCompanion(d));
+    notifyTableChanged('custody_documents');
+    await logAuditActivity(
+      'CREATE',
+      'CustodyDocument',
+      entityId: id,
+      description: 'Created custody document ${d.documentNumber} for ${d.employeeName}',
+    );
+    return id;
+  }
+
+  Future<List<CustodyDocument>> getCustodyDocuments() async {
+    final query = drift.select(drift.custodyDocuments)
+      ..orderBy([(tbl) => OrderingTerm.desc(tbl.id)]);
+    final rows = await query.get();
+    return rows.map(_custodyDocumentFromEntry).toList();
+  }
+
+  Stream<List<CustodyDocument>> watchCustodyDocuments() {
+    return _watchSwitchable(() {
+      final query = drift.select(drift.custodyDocuments)
+        ..orderBy([(tbl) => OrderingTerm.desc(tbl.id)]);
+      return query.watch().map((rows) => rows.map(_custodyDocumentFromEntry).toList());
+    });
+  }
+
+  Future<int> updateCustodyDocument(CustodyDocument d) async {
+    final rows = await (drift.update(drift.custodyDocuments)..where((tbl) => tbl.id.equals(d.id!)))
+        .write(_custodyDocumentToCompanion(d));
+    notifyTableChanged('custody_documents');
+    await logAuditActivity(
+      'UPDATE',
+      'CustodyDocument',
+      entityId: d.id,
+      description: 'Updated custody document ${d.documentNumber}',
+    );
+    return rows;
+  }
+
+  Future<int> deleteCustodyDocument(int id) async {
+    final existing = await (drift.select(drift.custodyDocuments)..where((tbl) => tbl.id.equals(id))).getSingleOrNull();
+    if (existing != null && existing.pdfPath.isNotEmpty) {
+      await DocumentStorageService.deleteFileIfExists(existing.pdfPath);
+    }
+    final rows = await (drift.delete(drift.custodyDocuments)..where((tbl) => tbl.id.equals(id))).go();
+    notifyTableChanged('custody_documents');
+    if (existing != null) {
+      await logAuditActivity(
+        'DELETE',
+        'CustodyDocument',
+        entityId: id,
+        description: 'Deleted custody document ${existing.documentNumber}',
+      );
+    }
+    return rows;
+  }
+
+  Future<void> deleteCustodyDocumentsByIds(List<int> ids) async {
+    for (final id in ids) {
+      await deleteCustodyDocument(id);
+    }
+  }
+
+  // ── Documents Vault ────────────────────────────────────────────────────────
+  Future<int> insertVaultDocument(VaultDocument d) async {
+    final id = await drift.into(drift.vaultDocuments).insert(_vaultDocumentToCompanion(d));
+    notifyTableChanged('vault_documents');
+    await logAuditActivity(
+      'CREATE',
+      'VaultDocument',
+      entityId: id,
+      description: 'Added vault document "${d.title}" (${d.category})',
+    );
+    return id;
+  }
+
+  Future<List<VaultDocument>> getVaultDocuments() async {
+    final query = drift.select(drift.vaultDocuments)
+      ..orderBy([(tbl) => OrderingTerm.desc(tbl.id)]);
+    final rows = await query.get();
+    return rows.map(_vaultDocumentFromEntry).toList();
+  }
+
+  Stream<List<VaultDocument>> watchVaultDocuments() {
+    return _watchSwitchable(() {
+      final query = drift.select(drift.vaultDocuments)
+        ..orderBy([(tbl) => OrderingTerm.desc(tbl.id)]);
+      return query.watch().map((rows) => rows.map(_vaultDocumentFromEntry).toList());
+    });
+  }
+
+  Future<int> updateVaultDocument(VaultDocument d) async {
+    final rows = await (drift.update(drift.vaultDocuments)..where((tbl) => tbl.id.equals(d.id!)))
+        .write(_vaultDocumentToCompanion(d));
+    notifyTableChanged('vault_documents');
+    await logAuditActivity(
+      'UPDATE',
+      'VaultDocument',
+      entityId: d.id,
+      description: 'Updated vault document "${d.title}"',
+    );
+    return rows;
+  }
+
+  Future<int> deleteVaultDocument(int id) async {
+    final existing = await (drift.select(drift.vaultDocuments)..where((tbl) => tbl.id.equals(id))).getSingleOrNull();
+    if (existing != null && existing.filePath.isNotEmpty) {
+      await DocumentStorageService.deleteFileIfExists(existing.filePath);
+    }
+    final rows = await (drift.delete(drift.vaultDocuments)..where((tbl) => tbl.id.equals(id))).go();
+    notifyTableChanged('vault_documents');
+    if (existing != null) {
+      await logAuditActivity(
+        'DELETE',
+        'VaultDocument',
+        entityId: id,
+        description: 'Deleted vault document "${existing.title}"',
+      );
+    }
+    return rows;
+  }
+
+  Future<void> deleteVaultDocumentsByIds(List<int> ids) async {
+    for (final id in ids) {
+      await deleteVaultDocument(id);
+    }
+  }
+
   // ── Maintenance Logs ───────────────────────────────────────────────────────
   Future<int> insertMaintenanceLog(Map<String, dynamic> log) async {
     final id = await drift.into(drift.deviceMaintenanceLogs).insert(_maintenanceLogToCompanion(log));
@@ -1795,8 +2044,8 @@ class DatabaseHelper extends ChangeNotifier {
     return count;
   }
 
-  // ── Backup / Restore (Schema v15: 21 Lockstep Tables) ──────────────────────
-  static const List<String> _allBackupTables = [
+  // ── Backup / Restore (Schema v17: 23 Lockstep Tables) ──────────────────────
+  static const List<String> allBackupTables = [
     'laptops',
     'network_devices',
     'printers',
@@ -1818,69 +2067,155 @@ class DatabaseHelper extends ChangeNotifier {
     'device_maintenance_logs',
     'vendor_contacts',
     'audit_activities',
+    'custody_documents',
+    'vault_documents',
   ];
 
   static const Map<String, List<String>> restoreDependencyGroups = {
     'borrow_logs': ['employees', 'mifis', 'electronics'],
     'device_maintenance_logs': ['laptops', 'network_devices', 'printers', 'electronics', 'mifis'],
+    'email_accounts': ['employees'],
+    'log_entries': ['employees'],
+    'switch_patch_ports': ['network_devices'],
   };
 
-  /// Exports an offline backup JSON payload containing all 21 tables,
-  /// embedded company logo image, complete theme preferences, table manifest,
-  /// and SHA-256 integrity checksum. Optionally encrypts the output with AES-256-GCM.
-  Future<String> exportJson({String? passphrase}) async {
-    final prefs = await SharedPreferences.getInstance();
-    final chassisJson = prefs.getString('custom_switch_patch_chassis_v1') ?? '';
+  static String scopedSwitchChassisKey([String? orgId]) {
+    final id = orgId ?? CompanyService().activeOrganizationId;
+    if (id.isEmpty || id == 'default') {
+      return 'custom_switch_patch_chassis_v1';
+    }
+    return 'custom_switch_patch_chassis_v1_$id';
+  }
 
-    // Encode company logo file to base64 if present
+  /// Exports an offline backup JSON payload containing all (or [selectedTables]) tables,
+  /// embedded company logo, org preferences, optional Base64 Vault & Receipt binaries,
+  /// table manifest, and SHA-256 integrity checksum. Optionally encrypts with AES-256-GCM.
+  Future<String> exportJson({
+    String? passphrase,
+    bool includeVaultBinaries = true,
+    Set<String>? selectedTables,
+    bool includePrefs = true,
+    String? organizationId,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final orgId = (organizationId != null && organizationId.isNotEmpty)
+        ? organizationId
+        : CompanyService().activeOrganizationId;
+    final isDefaultOrg = orgId.isEmpty || orgId == 'default';
+    final chassisJson = prefs.getString(scopedSwitchChassisKey(orgId)) ??
+        (isDefaultOrg ? prefs.getString('custom_switch_patch_chassis_v1') : null) ??
+        '';
+    final currencyCode = prefs.getString(
+          isDefaultOrg ? 'app_currency_code' : 'app_currency_code_$orgId',
+        ) ??
+        (isDefaultOrg ? prefs.getString('app_currency_code') : null) ??
+        'EGP';
+
     String logoBase64 = '';
     String logoExt = 'png';
-    if (CompanyService().hasLogo) {
+    if (includePrefs && CompanyService().hasLogo) {
       final logoFile = File(CompanyService().logoPath);
       if (logoFile.existsSync()) {
         try {
           final bytes = await logoFile.readAsBytes();
           logoBase64 = base64Encode(bytes);
-          logoExt = logoFile.path.split('.').last;
+          logoExt = p.extension(logoFile.path).replaceFirst('.', '');
+          if (logoExt.isEmpty) {
+            logoExt = 'png';
+          }
         } catch (_) {}
       }
     }
 
+    final targetTables = selectedTables != null
+        ? allBackupTables.where((t) => selectedTables.contains(t)).toList()
+        : allBackupTables;
+
     final tableManifest = <String, int>{};
     final tableData = <String, dynamic>{};
 
-    for (final t in _allBackupTables) {
-      final rows = await query(t);
+    final queriedResults = await Future.wait(targetTables.map((t) => query(t)));
+    for (int i = 0; i < targetTables.length; i++) {
+      final t = targetTables[i];
+      final rows = queriedResults[i];
       tableData[t] = rows;
       tableManifest[t] = rows.length;
     }
 
+    final vaultFiles = <String, String>{};
+    final receiptFiles = <String, String>{};
+    if (includeVaultBinaries) {
+      final vaultRows = tableData['vault_documents'] as List<Map<String, dynamic>>?;
+      if (vaultRows != null) {
+        for (final row in vaultRows) {
+          final pathStr = row['file_path']?.toString() ?? '';
+          if (pathStr.isNotEmpty) {
+            final f = File(pathStr);
+            if (await f.exists()) {
+              try {
+                final bytes = await f.readAsBytes();
+                vaultFiles[p.basename(pathStr)] = base64Encode(bytes);
+              } catch (_) {}
+            }
+          }
+        }
+      }
+      final expenseRows = tableData['expenses'] as List<Map<String, dynamic>>?;
+      if (expenseRows != null) {
+        for (final row in expenseRows) {
+          final pathStr = row['receipt_path']?.toString() ?? '';
+          if (pathStr.isNotEmpty) {
+            final f = File(pathStr);
+            if (await f.exists()) {
+              try {
+                final bytes = await f.readAsBytes();
+                receiptFiles[p.basename(pathStr)] = base64Encode(bytes);
+              } catch (_) {}
+            }
+          }
+        }
+      }
+    }
+
+    String appVer = '1.2.0+7';
+    try {
+      final info = await PackageInfo.fromPlatform();
+      if (info.version.isNotEmpty) {
+        appVer = '${info.version}+${info.buildNumber}';
+      }
+    } catch (_) {}
+
     final payload = <String, dynamic>{
       'version': AppDatabase.currentVersion,
-      'app_version': '1.1.0+5',
+      'app_version': appVer,
       'exported_at': DateTime.now().toIso8601String(),
       'platform': Platform.operatingSystem,
       'company_name': CompanyService().name,
+      if (selectedTables != null) 'selective': true,
       'manifest': tableManifest,
-      'prefs': {
-        'custom_switch_patch_chassis_v1': chassisJson,
-        'company_logo_base64': logoBase64,
-        'company_logo_ext': logoExt,
-        'themeMode': ThemeService().themeMode,
-        'themeSeed': ThemeService().themeSeed,
-        'appFont': ThemeService().appFont,
-        'amoledSurfaces': ThemeService().amoledSurfaces,
-        'dynamicColorEnabled': ThemeService().dynamicColorEnabled,
-      },
+      if (includePrefs)
+        'prefs': {
+          'custom_switch_patch_chassis_v1': chassisJson,
+          'currency_code': currencyCode,
+          'company_logo_base64': logoBase64,
+          'company_logo_ext': logoExt,
+          'themeMode': ThemeService().themeMode,
+          'themeSeed': ThemeService().themeSeed,
+          'appFont': ThemeService().appFont,
+          'amoledSurfaces': ThemeService().amoledSurfaces,
+          'dynamicColorEnabled': ThemeService().dynamicColorEnabled,
+          'ticket_reminders_enabled': TicketReminderService().enabled,
+          'ticket_reminders_days': TicketReminderService().days,
+          'ticket_reminders_times': TicketReminderService().times,
+        },
+      if (vaultFiles.isNotEmpty) 'vault_files': vaultFiles,
+      if (receiptFiles.isNotEmpty) 'receipt_files': receiptFiles,
       ...tableData,
     };
 
-    // Calculate integrity checksum over canonical json content
     final rawJson = jsonEncode(payload);
     final sha256 = BackupCryptoService().computeSha256(rawJson);
-    payload['sha256'] = sha256;
-
-    final finalPlaintext = jsonEncode(payload);
+    final finalPlaintext = '${rawJson.substring(0, rawJson.length - 1)},"sha256":${jsonEncode(sha256)}}';
 
     if (passphrase != null && passphrase.trim().isNotEmpty) {
       return await BackupCryptoService().encryptBackup(finalPlaintext, passphrase.trim());
@@ -1962,7 +2297,6 @@ class DatabaseHelper extends ChangeNotifier {
         );
       }
 
-      // Verify SHA-256 digest if present
       if (decoded.containsKey('sha256')) {
         final expectedHash = decoded['sha256'] as String;
         final payloadWithoutHash = Map<String, dynamic>.from(decoded)..remove('sha256');
@@ -1984,7 +2318,7 @@ class DatabaseHelper extends ChangeNotifier {
       }
 
       final tableCounts = <String, int>{};
-      for (final t in _allBackupTables) {
+      for (final t in allBackupTables) {
         if (decoded.containsKey(t) && decoded[t] is List) {
           tableCounts[t] = (decoded[t] as List).length;
         }
@@ -1993,6 +2327,10 @@ class DatabaseHelper extends ChangeNotifier {
       final prefs = (decoded['prefs'] is Map) ? decoded['prefs'] as Map : {};
       final hasLogo = (prefs['company_logo_base64'] as String?)?.isNotEmpty ?? false;
       final hasThemePrefs = prefs.containsKey('themeMode');
+      final vaultMap = decoded['vault_files'];
+      final embeddedVaultFilesCount = vaultMap is Map ? vaultMap.length : 0;
+      final receiptMap = decoded['receipt_files'];
+      final embeddedReceiptFilesCount = receiptMap is Map ? receiptMap.length : 0;
 
       return BackupManifestSummary(
         schemaVersion: version,
@@ -2004,6 +2342,9 @@ class DatabaseHelper extends ChangeNotifier {
         hasThemePrefs: hasThemePrefs,
         isEncrypted: isEnc,
         isValid: true,
+        embeddedVaultFilesCount: embeddedVaultFilesCount,
+        embeddedReceiptFilesCount: embeddedReceiptFilesCount,
+        decryptedJson: jsonStr,
       );
     } catch (e) {
       return BackupManifestSummary(
@@ -2021,9 +2362,33 @@ class DatabaseHelper extends ChangeNotifier {
     }
   }
 
-  /// Restores all or selectively chosen tables from a backup string with atomic transaction rollback.
+  /// Creates an internal pre-restore snapshot file so a destructive restore can be undone.
+  Future<String?> createPreRestoreSnapshot() async {
+    try {
+      final json = await exportJson(includeVaultBinaries: true);
+      final dir = await getTemporaryDirectory();
+      final orgId = CompanyService().activeOrganizationId.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
+      final file = File(p.join(dir.path, 'itbox_prerestore_${orgId}_${DateTime.now().millisecondsSinceEpoch}.json'));
+      await file.writeAsString(json);
+      return file.path;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Restores from a previously saved pre-restore snapshot path.
+  Future<void> restoreFromSnapshotPath(String snapshotPath) async {
+    final file = File(snapshotPath);
+    if (!await file.exists()) {
+      throw StateError('Pre-restore snapshot is no longer available.');
+    }
+    final raw = await file.readAsString();
+    await importJson(raw);
+  }
+
+  /// Restores all tables from a backup string with atomic transaction rollback.
   Future<void> importJson(String jsonStr, {String? passphrase}) async {
-    await importJsonSelective(jsonStr, _allBackupTables.toSet(), passphrase: passphrase);
+    await importJsonSelective(jsonStr, allBackupTables.toSet(), passphrase: passphrase, restorePrefs: true);
   }
 
   /// Restores only [selectedTables] from a verified backup string.
@@ -2031,25 +2396,60 @@ class DatabaseHelper extends ChangeNotifier {
     String jsonStr,
     Set<String> selectedTables, {
     String? passphrase,
+    bool restorePrefs = true,
   }) async {
     final summary = await inspectBackupJson(jsonStr, passphrase: passphrase);
     if (!summary.isValid) {
       throw StateError(summary.validationError ?? 'Invalid backup file.');
     }
 
-    String plaintext = jsonStr;
-    if (summary.isEncrypted) {
-      plaintext = await BackupCryptoService().decryptBackup(jsonStr, passphrase!);
+    final plaintext = summary.decryptedJson ?? jsonStr;
+    final data = jsonDecode(plaintext) as Map<String, dynamic>;
+
+    // Restore embedded vault binary files first so we can map restored file paths
+    final restoredVaultPaths = <String, String>{};
+    if (selectedTables.contains('vault_documents') && data['vault_files'] is Map) {
+      final vaultFilesMap = data['vault_files'] as Map;
+      for (final entry in vaultFilesMap.entries) {
+        final fileName = entry.key.toString();
+        final b64 = entry.value?.toString() ?? '';
+        if (fileName.isNotEmpty && b64.isNotEmpty) {
+          try {
+            final bytes = base64Decode(b64);
+            final savedPath = await DocumentStorageService.saveVaultBytes(bytes, fileName);
+            restoredVaultPaths[fileName] = savedPath;
+          } catch (_) {}
+        }
+      }
     }
 
-    final data = jsonDecode(plaintext) as Map<String, dynamic>;
+    // Restore embedded expense receipt files
+    final restoredReceiptPaths = <String, String>{};
+    if (selectedTables.contains('expenses') && data['receipt_files'] is Map) {
+      final receiptFilesMap = data['receipt_files'] as Map;
+      for (final entry in receiptFilesMap.entries) {
+        final fileName = entry.key.toString();
+        final b64 = entry.value?.toString() ?? '';
+        if (fileName.isNotEmpty && b64.isNotEmpty) {
+          try {
+            final bytes = base64Decode(b64);
+            final savedPath = await DocumentStorageService.saveReceiptBytes(bytes, fileName);
+            restoredReceiptPaths[fileName] = savedPath;
+          } catch (_) {}
+        }
+      }
+    }
 
     await batchScope(() async {
       await drift.transaction(() async {
         for (final t in selectedTables) {
-          if (!data.containsKey(t) && !data.containsKey(t.toLowerCase())) continue;
+          if (!data.containsKey(t) && !data.containsKey(t.toLowerCase())) {
+            continue;
+          }
           final dynamic rawList = data[t] ?? data[t.toLowerCase()];
-          if (rawList is! List) continue;
+          if (rawList is! List) {
+            continue;
+          }
 
           await deleteTable(t);
 
@@ -2057,7 +2457,9 @@ class DatabaseHelper extends ChangeNotifier {
           final allowedCols = pragma.map((r) => r.data['name'] as String).toSet();
 
           for (final row in rawList) {
-            if (row is! Map) continue;
+            if (row is! Map) {
+              continue;
+            }
             final filteredRow = <String, dynamic>{};
             row.forEach((key, value) {
               final kStr = key.toString();
@@ -2065,6 +2467,30 @@ class DatabaseHelper extends ChangeNotifier {
                 filteredRow[kStr] = value;
               }
             });
+
+            if (t == 'vault_documents' && filteredRow['file_path'] is String) {
+              final pathStr = filteredRow['file_path'] as String;
+              final origBase = p.basename(pathStr);
+              if (restoredVaultPaths.containsKey(origBase)) {
+                filteredRow['file_path'] = restoredVaultPaths[origBase];
+              } else if (pathStr.isNotEmpty && !File(pathStr).existsSync()) {
+                filteredRow['file_path'] = '';
+              }
+            } else if (t == 'expenses' && filteredRow['receipt_path'] is String) {
+              final pathStr = filteredRow['receipt_path'] as String;
+              final origBase = p.basename(pathStr);
+              if (restoredReceiptPaths.containsKey(origBase)) {
+                filteredRow['receipt_path'] = restoredReceiptPaths[origBase];
+              } else if (pathStr.isNotEmpty && !File(pathStr).existsSync()) {
+                filteredRow['receipt_path'] = '';
+              }
+            } else if (t == 'custody_documents' && filteredRow['pdf_path'] is String) {
+              final pdfStr = filteredRow['pdf_path'] as String;
+              if (pdfStr.isNotEmpty && !File(pdfStr).existsSync()) {
+                filteredRow['pdf_path'] = '';
+              }
+            }
+
             if (filteredRow.isNotEmpty) {
               await insertMap(t, filteredRow);
             }
@@ -2073,53 +2499,133 @@ class DatabaseHelper extends ChangeNotifier {
       });
     });
 
-    // Restore branding if present
-    if (data.containsKey('company_name') && data['company_name'] != null) {
-      final name = data['company_name'].toString();
-      if (name.isNotEmpty) {
-        await CompanyService().completeOnboarding(name);
-      }
-    }
+    // Invalidate Drift reactive streams and switchable watchers immediately after restore
+    drift.markTablesUpdated(drift.allTables);
+    _dbSwitchController.add(null);
 
-    // Restore preferences, logo, and theme tokens if present
-    if (data.containsKey('prefs') && data['prefs'] is Map) {
+    if ((restorePrefs || selectedTables.contains('switch_patch_ports')) &&
+        data.containsKey('prefs') &&
+        data['prefs'] is Map) {
       final prefsMap = data['prefs'] as Map;
       final prefs = await SharedPreferences.getInstance();
-
+      final orgId = CompanyService().activeOrganizationId;
       if (prefsMap.containsKey('custom_switch_patch_chassis_v1') &&
           prefsMap['custom_switch_patch_chassis_v1'] != null) {
         await prefs.setString(
-          'custom_switch_patch_chassis_v1',
+          scopedSwitchChassisKey(orgId),
           prefsMap['custom_switch_patch_chassis_v1'].toString(),
         );
       }
+    }
 
-      // Restore base64 logo to local storage
-      final logoBase64 = prefsMap['company_logo_base64']?.toString();
-      if (logoBase64 != null && logoBase64.isNotEmpty) {
-        try {
-          final ext = prefsMap['company_logo_ext']?.toString() ?? 'png';
-          final docsDir = await getApplicationDocumentsDirectory();
-          final destFile = File('${docsDir.path}/company_logo.$ext');
-          await destFile.writeAsBytes(base64Decode(logoBase64));
-          await CompanyService().setCompanyLogo(destFile.path);
-        } catch (_) {}
+    if (restorePrefs) {
+      if (data.containsKey('company_name') && data['company_name'] != null) {
+        final name = data['company_name'].toString();
+        if (name.isNotEmpty) {
+          await CompanyService().completeOnboarding(name);
+        }
       }
 
-      // Restore theme settings
-      final theme = ThemeService();
-      if (prefsMap.containsKey('themeMode')) await theme.updateSetting('themeMode', prefsMap['themeMode']);
-      if (prefsMap.containsKey('themeSeed')) await theme.updateSetting('themeSeed', prefsMap['themeSeed']);
-      if (prefsMap.containsKey('appFont')) await theme.updateSetting('appFont', prefsMap['appFont']);
-      if (prefsMap.containsKey('amoledSurfaces')) await theme.updateSetting('amoledSurfaces', prefsMap['amoledSurfaces'] == true);
-      if (prefsMap.containsKey('dynamicColorEnabled')) await theme.updateSetting('dynamicColorEnabled', prefsMap['dynamicColorEnabled'] == true);
+      if (data.containsKey('prefs') && data['prefs'] is Map) {
+        final prefsMap = data['prefs'] as Map;
+        final prefs = await SharedPreferences.getInstance();
+        final orgId = CompanyService().activeOrganizationId;
+        final isDefaultOrg = orgId.isEmpty || orgId == 'default';
+
+        if (prefsMap.containsKey('currency_code') && prefsMap['currency_code'] != null) {
+          final code = prefsMap['currency_code'].toString();
+          if (code.isNotEmpty) {
+            await prefs.setString(
+              isDefaultOrg ? 'app_currency_code' : 'app_currency_code_$orgId',
+              code,
+            );
+            await CurrencyService().reloadForActiveOrganization();
+          }
+        }
+
+        final logoBase64 = prefsMap['company_logo_base64']?.toString() ?? '';
+        if (logoBase64.isNotEmpty) {
+          try {
+            final ext = (prefsMap['company_logo_ext']?.toString() ?? 'png').replaceAll(RegExp(r'[^a-zA-Z0-9]'), '');
+            final safeExt = ext.isEmpty ? 'png' : ext;
+            final docsDir = await getApplicationDocumentsDirectory();
+            final safeOrg = orgId.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
+            final oldLogoPath = CompanyService().logoPath;
+            final destFile = File(
+              p.join(docsDir.path, 'company_logo_${safeOrg}_${DateTime.now().millisecondsSinceEpoch}.$safeExt'),
+            );
+            await destFile.writeAsBytes(base64Decode(logoBase64));
+            await CompanyService().setCompanyLogo(destFile.path);
+            if (oldLogoPath.isNotEmpty && oldLogoPath != destFile.path) {
+              final oldFile = File(oldLogoPath);
+              if (await oldFile.exists()) {
+                try {
+                  await oldFile.delete();
+                } catch (_) {}
+              }
+            }
+            PaintingBinding.instance.imageCache.clear();
+          } catch (_) {}
+        } else if (prefsMap.containsKey('company_logo_base64')) {
+          final oldLogoPath = CompanyService().logoPath;
+          await CompanyService().removeCompanyLogo();
+          if (oldLogoPath.isNotEmpty) {
+            final oldFile = File(oldLogoPath);
+            if (await oldFile.exists()) {
+              try {
+                await oldFile.delete();
+              } catch (_) {}
+            }
+          }
+          PaintingBinding.instance.imageCache.clear();
+        }
+
+        final theme = ThemeService();
+        if (prefsMap.containsKey('themeMode')) {
+          await theme.updateSetting('themeMode', prefsMap['themeMode']);
+        }
+        if (prefsMap.containsKey('themeSeed')) {
+          await theme.updateSetting('themeSeed', prefsMap['themeSeed']);
+        }
+        if (prefsMap.containsKey('appFont')) {
+          await theme.updateSetting('appFont', prefsMap['appFont']);
+        }
+        if (prefsMap.containsKey('amoledSurfaces')) {
+          await theme.updateSetting('amoledSurfaces', prefsMap['amoledSurfaces'] == true);
+        }
+        if (prefsMap.containsKey('dynamicColorEnabled')) {
+          await theme.updateSetting('dynamicColorEnabled', prefsMap['dynamicColorEnabled'] == true);
+        }
+
+        if (prefsMap.containsKey('ticket_reminders_enabled') ||
+            prefsMap.containsKey('ticket_reminders_days') ||
+            prefsMap.containsKey('ticket_reminders_times')) {
+          if (prefsMap.containsKey('ticket_reminders_enabled')) {
+            await prefs.setBool(
+              'ticket_reminders_enabled',
+              prefsMap['ticket_reminders_enabled'] == true,
+            );
+          }
+          if (prefsMap['ticket_reminders_days'] is List) {
+            final days = (prefsMap['ticket_reminders_days'] as List)
+                .map((e) => e.toString())
+                .toList();
+            await prefs.setStringList('ticket_reminders_days', days);
+          }
+          if (prefsMap['ticket_reminders_times'] is List) {
+            final times = (prefsMap['ticket_reminders_times'] as List)
+                .map((e) => e.toString())
+                .toList();
+            await prefs.setStringList('ticket_reminders_times', times);
+          }
+          await TicketReminderService().load();
+        }
+      }
     }
 
     await syncDeviceStatuses();
     final activeLogs = await getBorrowLogs();
     await NotificationService().reconcileReminders(activeLogs);
-
-    // Foreign key integrity check
     await drift.customSelect('PRAGMA foreign_key_check').get();
   }
 
@@ -2136,15 +2642,21 @@ class DatabaseHelper extends ChangeNotifier {
         (SELECT COUNT(*) FROM bills) AS bills,
         (SELECT COUNT(*) FROM email_accounts) AS email_accounts,
         (SELECT COUNT(*) FROM borrow_logs WHERE is_returned=0) AS active_borrows,
-        (SELECT COUNT(*) FROM borrow_logs WHERE is_returned=0 AND due_date IS NOT NULL AND due_date != '' AND due_date < date('now')) AS overdue_borrows,
+        (SELECT COUNT(*) FROM borrow_logs WHERE is_returned=0 AND due_date IS NOT NULL AND due_date != '' AND due_date < date('now', 'localtime')) AS overdue_borrows,
         (SELECT COUNT(*) FROM log_entries) AS log_entries,
-        (SELECT COUNT(*) FROM log_entries WHERE state='Open') AS open_log_entries,
+        (SELECT COUNT(*) FROM log_entries WHERE LOWER(state)='open') AS open_log_entries,
         (SELECT COUNT(*) FROM subscriptions) AS subscriptions,
         (SELECT COUNT(*) FROM access_points) AS access_points,
         (SELECT COUNT(*) FROM wifi_networks) AS wifi_networks,
         (SELECT COUNT(*) FROM account_passwords) AS account_passwords,
         (SELECT COUNT(*) FROM other_devices) AS other_devices,
-        (SELECT COUNT(*) FROM vendor_contacts) AS vendor_contacts
+        (SELECT COUNT(*) FROM vendor_contacts) AS vendor_contacts,
+        (SELECT COUNT(*) FROM static_ips) AS static_ips,
+        (SELECT COUNT(*) FROM switch_patch_ports) AS switch_patch_ports,
+        (SELECT COUNT(*) FROM device_maintenance_logs) AS device_maintenance_logs,
+        (SELECT COUNT(*) FROM audit_activities) AS audit_activities,
+        (SELECT COUNT(*) FROM custody_documents) AS custody_documents,
+        (SELECT COUNT(*) FROM vault_documents) AS vault_documents
     ''').getSingle();
 
     return res.data.map((key, value) => MapEntry(key, value as int? ?? 0));
@@ -2164,15 +2676,21 @@ class DatabaseHelper extends ChangeNotifier {
           (SELECT COUNT(*) FROM bills) AS bills,
           (SELECT COUNT(*) FROM email_accounts) AS email_accounts,
           (SELECT COUNT(*) FROM borrow_logs WHERE is_returned=0) AS active_borrows,
-          (SELECT COUNT(*) FROM borrow_logs WHERE is_returned=0 AND due_date IS NOT NULL AND due_date != '' AND due_date < date('now')) AS overdue_borrows,
+          (SELECT COUNT(*) FROM borrow_logs WHERE is_returned=0 AND due_date IS NOT NULL AND due_date != '' AND due_date < date('now', 'localtime')) AS overdue_borrows,
           (SELECT COUNT(*) FROM log_entries) AS log_entries,
-          (SELECT COUNT(*) FROM log_entries WHERE state='Open') AS open_log_entries,
+          (SELECT COUNT(*) FROM log_entries WHERE LOWER(state)='open') AS open_log_entries,
           (SELECT COUNT(*) FROM subscriptions) AS subscriptions,
           (SELECT COUNT(*) FROM access_points) AS access_points,
           (SELECT COUNT(*) FROM wifi_networks) AS wifi_networks,
           (SELECT COUNT(*) FROM account_passwords) AS account_passwords,
           (SELECT COUNT(*) FROM other_devices) AS other_devices,
-          (SELECT COUNT(*) FROM vendor_contacts) AS vendor_contacts
+          (SELECT COUNT(*) FROM vendor_contacts) AS vendor_contacts,
+          (SELECT COUNT(*) FROM static_ips) AS static_ips,
+          (SELECT COUNT(*) FROM switch_patch_ports) AS switch_patch_ports,
+          (SELECT COUNT(*) FROM device_maintenance_logs) AS device_maintenance_logs,
+          (SELECT COUNT(*) FROM audit_activities) AS audit_activities,
+          (SELECT COUNT(*) FROM custody_documents) AS custody_documents,
+          (SELECT COUNT(*) FROM vault_documents) AS vault_documents
       ''', readsFrom: {
         drift.laptops,
         drift.networkDevices,
@@ -2191,6 +2709,12 @@ class DatabaseHelper extends ChangeNotifier {
         drift.accountPasswords,
         drift.otherDevices,
         drift.vendorContacts,
+        drift.staticIps,
+        drift.switchPatchPorts,
+        drift.deviceMaintenanceLogs,
+        drift.auditActivities,
+        drift.custodyDocuments,
+        drift.vaultDocuments,
       }).watchSingle().map((row) => row.data.map((key, value) => MapEntry(key, value as int? ?? 0)));
     });
   }

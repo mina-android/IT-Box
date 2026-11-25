@@ -55,6 +55,7 @@ class _MaintenanceCalendarScreenState extends State<MaintenanceCalendarScreen> {
     AppHaptics.tap(context, HapticStrength.light);
     setState(() {
       _selectedMonth = DateTime(_selectedMonth.year, _selectedMonth.month - 1, 1);
+      _selectedDay = _selectedMonth;
     });
   }
 
@@ -62,6 +63,7 @@ class _MaintenanceCalendarScreenState extends State<MaintenanceCalendarScreen> {
     AppHaptics.tap(context, HapticStrength.light);
     setState(() {
       _selectedMonth = DateTime(_selectedMonth.year, _selectedMonth.month + 1, 1);
+      _selectedDay = _selectedMonth;
     });
   }
 
@@ -114,6 +116,7 @@ class _MaintenanceCalendarScreenState extends State<MaintenanceCalendarScreen> {
     return Scaffold(
       appBar: const FintechAppBar(
         title: 'Maintenance Schedule & Calendar',
+        subtitle: 'Planned & completed service timeline',
       ),
       body: _loading
           ? const ShimmerListLoader()
@@ -125,16 +128,18 @@ class _MaintenanceCalendarScreenState extends State<MaintenanceCalendarScreen> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      IconButton.filledTonal(
-                        icon: const Icon(Icons.chevron_left_rounded),
+                      FintechCircleButton(
+                        icon: Icons.chevron_left_rounded,
+                        tooltip: 'Previous Month',
                         onPressed: _prevMonth,
                       ),
                       Text(
                         monthName,
                         style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
                       ),
-                      IconButton.filledTonal(
-                        icon: const Icon(Icons.chevron_right_rounded),
+                      FintechCircleButton(
+                        icon: Icons.chevron_right_rounded,
+                        tooltip: 'Next Month',
                         onPressed: _nextMonth,
                       ),
                     ],
@@ -269,11 +274,10 @@ class _MaintenanceCalendarScreenState extends State<MaintenanceCalendarScreen> {
 
                 Expanded(
                   child: dayLogs.isEmpty
-                      ? Center(
-                          child: Text(
-                            'No maintenance or service scheduled on this date.',
-                            style: TextStyle(color: cs.onSurface.withValues(alpha: 0.5)),
-                          ),
+                      ? const EmptyState(
+                          icon: Icons.event_available_rounded,
+                          title: 'No Scheduled Service',
+                          subtitle: 'No maintenance or service scheduled on this date.',
                         )
                       : ListView.builder(
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),

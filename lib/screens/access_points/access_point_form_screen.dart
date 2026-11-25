@@ -37,12 +37,25 @@ class _AccessPointFormScreenState extends State<AccessPointFormScreen> {
     }
     setState(() => _saving = true);
     try {
+      final tag = _num.text.trim();
+      final existing = await _db.getAccessPoints();
+      if (existing.any((e) => e.id != widget.ap?.id && e.deviceNumber.trim().toLowerCase() == tag.toLowerCase())) {
+        if (!mounted) {
+          return;
+        }
+        _shakeKey.currentState?.shake();
+        showSnack(context, 'Access Point "$tag" already exists.', error: true);
+        setState(() => _saving = false);
+        return;
+      }
+
       final obj = AccessPoint(
         id: widget.ap?.id,
-        deviceNumber: _num.text.trim(),
+        deviceNumber: tag,
         model: _model.text.trim(),
         portNumber: _port.text.trim(),
         location: _loc.text.trim(),
+        notes: widget.ap?.notes ?? '',
       );
       if (widget.ap == null) {
         await _db.insertAccessPoint(obj);
@@ -165,7 +178,7 @@ class _AccessPointFormScreenState extends State<AccessPointFormScreen> {
                     style: FilledButton.styleFrom(
                       backgroundColor: const Color(0xFF0891B2),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(26),
+                        borderRadius: BorderRadius.circular(16),
                       ),
                     ),
                   ),

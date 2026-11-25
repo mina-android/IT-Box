@@ -21,6 +21,8 @@ enum SearchCategory {
   expense,
   bill,
   subscription,
+  custodyDocument,
+  vaultDocument,
 }
 
 class SearchResultItem {
@@ -290,18 +292,20 @@ class GlobalSearchService {
     final staticIps = await _db.getStaticIps();
     for (final ip in staticIps) {
       final ipStr = ip['ip_address']?.toString() ?? '';
-      final deviceName = ip['device_name']?.toString() ?? '';
-      final assignedTo = ip['assigned_to']?.toString() ?? '';
+      final deviceName = ip['assigned_device']?.toString() ?? '';
+      final deviceType = ip['device_type']?.toString() ?? '';
       final mac = ip['mac_address']?.toString() ?? '';
+      final notes = ip['notes']?.toString() ?? '';
       if (ipStr.toLowerCase().contains(query) ||
           deviceName.toLowerCase().contains(query) ||
-          assignedTo.toLowerCase().contains(query) ||
-          mac.toLowerCase().contains(query)) {
+          deviceType.toLowerCase().contains(query) ||
+          mac.toLowerCase().contains(query) ||
+          notes.toLowerCase().contains(query)) {
         results.add(SearchResultItem(
           id: ip['id'] as int? ?? 0,
-          title: '$ipStr • $deviceName',
-          subtitle: assignedTo.isNotEmpty ? 'Assigned: $assignedTo' : 'No user assigned',
-          extraInfo: mac.isNotEmpty ? 'MAC: $mac' : '',
+          title: '$ipStr${deviceName.isNotEmpty ? ' • $deviceName' : ''}',
+          subtitle: deviceType.isNotEmpty ? 'Type: $deviceType' : 'Static IP',
+          extraInfo: mac.isNotEmpty ? 'MAC: $mac' : notes,
           category: SearchCategory.staticIp,
           categoryLabel: 'Static IP',
         ));
@@ -375,6 +379,43 @@ class GlobalSearchService {
           extraInfo: s.renewalDate.isNotEmpty ? 'Renews: ${s.renewalDate}' : s.notes,
           category: SearchCategory.subscription,
           categoryLabel: 'Subscription',
+        ));
+      }
+    }
+
+    // 19. Custody Documents & 20. Vault Documents
+    final docResults = await Future.wait([
+      _db.getCustodyDocuments(),
+      _db.getVaultDocuments(),
+    ]);
+    for (final c in docResults[0] as List<dynamic>) {
+      if (c.documentNumber.toLowerCase().contains(query) ||
+          c.employeeName.toLowerCase().contains(query) ||
+          c.title.toLowerCase().contains(query) ||
+          c.itemsJson.toLowerCase().contains(query)) {
+        results.add(SearchResultItem(
+          id: c.id ?? 0,
+          title: '${c.documentNumber} • ${c.employeeName}',
+          subtitle: '${c.title} (${c.handoverDate})',
+          extraInfo: c.sourceType.toUpperCase(),
+          category: SearchCategory.custodyDocument,
+          categoryLabel: 'Custody Doc',
+        ));
+      }
+    }
+    for (final v in docResults[1] as List<dynamic>) {
+      if (v.title.toLowerCase().contains(query) ||
+          v.category.toLowerCase().contains(query) ||
+          v.linkedEmployeeName.toLowerCase().contains(query) ||
+          v.linkedAssetLabel.toLowerCase().contains(query) ||
+          v.notes.toLowerCase().contains(query)) {
+        results.add(SearchResultItem(
+          id: v.id ?? 0,
+          title: v.title,
+          subtitle: '${v.category} • ${v.formattedSize}',
+          extraInfo: v.linkedEmployeeName.isNotEmpty ? v.linkedEmployeeName : v.linkedAssetLabel,
+          category: SearchCategory.vaultDocument,
+          categoryLabel: 'Vault Doc',
         ));
       }
     }

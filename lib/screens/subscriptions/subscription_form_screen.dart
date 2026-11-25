@@ -248,7 +248,7 @@ class _SubscriptionFormScreenState extends State<SubscriptionFormScreen> {
                     style: FilledButton.styleFrom(
                       backgroundColor: _subColor,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(26),
+                        borderRadius: BorderRadius.circular(16),
                       ),
                     ),
                   ),

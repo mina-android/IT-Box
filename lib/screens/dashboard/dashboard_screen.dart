@@ -13,6 +13,7 @@ import '../../services/global_search_service.dart';
 import '../borrowed/add_borrow_screen.dart';
 import '../borrowed/borrowed_screen.dart';
 import '../subscriptions/subscriptions_screen.dart';
+import '../employees/employee_360_screen.dart';
 import '../employees/employees_screen.dart';
 import '../expenses/expenses_screen.dart';
 import '../bills/bills_screen.dart';
@@ -27,13 +28,16 @@ import '../wifi_networks/wifi_networks_screen.dart';
 import '../accounts_passwords/accounts_passwords_screen.dart';
 import '../network_tools/static_ip_list_screen.dart';
 import '../vendor_contacts/vendor_contacts_screen.dart';
+import '../custody_documents/custody_documents_screen.dart';
+import '../custody_documents/custody_document_form_screen.dart';
+import '../documents_vault/documents_vault_screen.dart';
 import '../logs/log_form_screen.dart';
 import '../employees/employee_form_screen.dart';
 import '../emails/email_form_screen.dart';
 import '../expenses/expense_form_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
-  final void Function(int tabIndex, {int subTab})? onSwitchTab;
+  final void Function(int tabIndex, {int subTab, int? focusItemId})? onSwitchTab;
   const DashboardScreen({super.key, this.onSwitchTab});
 
   @override
@@ -122,63 +126,79 @@ class _DashboardScreenState extends State<DashboardScreen> {
     });
   }
 
-  void _navigateToSearchResult(SearchResultItem item) {
+  Future<void> _navigateToSearchResult(SearchResultItem item) async {
     Widget? screen;
     switch (item.category) {
       case SearchCategory.laptop:
-        screen = const LaptopsScreen();
+        screen = LaptopsScreen(initialItemId: item.id);
         break;
       case SearchCategory.networkDevice:
-        screen = const NetworkDevicesScreen();
+        screen = NetworkDevicesScreen(initialItemId: item.id);
         break;
       case SearchCategory.mifi:
-        screen = const MiFisScreen();
+        screen = MiFisScreen(initialItemId: item.id);
         break;
       case SearchCategory.accessPoint:
-        screen = const AccessPointsScreen();
+        screen = AccessPointsScreen(initialItemId: item.id);
         break;
       case SearchCategory.printer:
-        screen = const PrintersScreen();
+        screen = PrintersScreen(initialItemId: item.id);
         break;
       case SearchCategory.electronic:
-        screen = const ElectronicsScreen();
+        screen = ElectronicsScreen(initialItemId: item.id);
         break;
       case SearchCategory.otherDevice:
-        screen = const OtherDevicesScreen();
+        screen = OtherDevicesScreen(initialItemId: item.id);
         break;
       case SearchCategory.employee:
-        screen = const EmployeesScreen();
+        final emps = await _db.getEmployees();
+        final emp = emps.where((e) => e.id == item.id).firstOrNull;
+        if (!mounted) {
+          return;
+        }
+        screen = emp != null
+            ? Employee360Screen(employee: emp)
+            : EmployeesScreen(initialItemId: item.id);
         break;
       case SearchCategory.borrow:
-        widget.onSwitchTab?.call(2, subTab: 0);
+        widget.onSwitchTab?.call(2, subTab: 0, focusItemId: item.id);
         return;
       case SearchCategory.ticket:
-        widget.onSwitchTab?.call(2, subTab: 1);
+        widget.onSwitchTab?.call(2, subTab: 1, focusItemId: item.id);
         return;
       case SearchCategory.email:
-        widget.onSwitchTab?.call(3);
+        widget.onSwitchTab?.call(3, focusItemId: item.id);
         return;
       case SearchCategory.wifiNetwork:
-        screen = const WifiNetworksScreen();
+        screen = WifiNetworksScreen(initialItemId: item.id);
         break;
       case SearchCategory.accountPassword:
-        screen = const AccountsPasswordsScreen();
+        screen = AccountsPasswordsScreen(initialItemId: item.id);
         break;
       case SearchCategory.staticIp:
-        screen = const StaticIpListScreen();
+        screen = StaticIpListScreen(initialItemId: item.id);
         break;
       case SearchCategory.vendorContact:
-        screen = const VendorContactsScreen();
+        screen = VendorContactsScreen(initialItemId: item.id);
         break;
       case SearchCategory.expense:
-        screen = const ExpensesScreen();
+        screen = ExpensesScreen(initialItemId: item.id);
         break;
       case SearchCategory.bill:
-        screen = const BillsScreen();
+        screen = BillsScreen(initialItemId: item.id);
         break;
       case SearchCategory.subscription:
-        screen = const SubscriptionsScreen();
+        screen = SubscriptionsScreen(initialItemId: item.id);
         break;
+      case SearchCategory.custodyDocument:
+        screen = CustodyDocumentsScreen(initialItemId: item.id);
+        break;
+      case SearchCategory.vaultDocument:
+        screen = DocumentsVaultScreen(initialItemId: item.id);
+        break;
+    }
+    if (!mounted) {
+      return;
     }
     Navigator.push(context, MaterialPageRoute(builder: (_) => screen!));
   }
@@ -221,6 +241,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         return Icons.receipt_outlined;
       case SearchCategory.subscription:
         return Icons.subscriptions_outlined;
+      case SearchCategory.custodyDocument:
+        return Icons.assignment_turned_in_rounded;
+      case SearchCategory.vaultDocument:
+        return Icons.document_scanner_rounded;
     }
   }
 
@@ -368,44 +392,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   if (_searching)
                     const ShimmerListLoader()
                   else if (_searchResults.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 40),
-                      child: Center(
-                        child: Column(
-                          children: [
-                            Icon(Icons.search_off_rounded, size: 48, color: cs.primary.withValues(alpha: 0.35)),
-                            const SizedBox(height: 10),
-                            Text(
-                              'No matching records for "${_searchCtrl.text.trim()}"',
-                              style: TextStyle(color: cs.onSurface.withValues(alpha: 0.55)),
-                            ),
-                          ],
-                        ),
-                      ),
+                    EmptyState(
+                      icon: Icons.search_off_rounded,
+                      title: 'No Matching Records',
+                      subtitle: 'No records match "${_searchCtrl.text.trim()}"',
                     )
                   else ...[
                     if (activeCategories.length > 1)
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
+                      FintechFilterBar(
                         padding: const EdgeInsets.only(bottom: 12),
-                        child: Row(
-                          children: [
-                            FilterChip(
-                              label: Text('All (${_searchResults.length})'),
-                              selected: _selectedCategory == null,
-                              onSelected: (_) => setState(() => _selectedCategory = null),
+                        children: [
+                          FintechFilterPill(
+                            label: 'All (${_searchResults.length})',
+                            selected: _selectedCategory == null,
+                            onTap: () => setState(() => _selectedCategory = null),
+                          ),
+                          for (final cat in activeCategories)
+                            FintechFilterPill(
+                              label: _searchResults.firstWhere((r) => r.category == cat).categoryLabel,
+                              selected: _selectedCategory == cat,
+                              onTap: () => setState(() =>
+                                  _selectedCategory = _selectedCategory == cat ? null : cat),
                             ),
-                            const SizedBox(width: 6),
-                            for (final cat in activeCategories) ...[
-                              FilterChip(
-                                label: Text(_searchResults.firstWhere((r) => r.category == cat).categoryLabel),
-                                selected: _selectedCategory == cat,
-                                onSelected: (sel) => setState(() => _selectedCategory = sel ? cat : null),
-                              ),
-                              const SizedBox(width: 6),
-                            ],
-                          ],
-                        ),
+                        ],
                       ),
                     ...filteredSearch.map(
                       (item) => Container(
@@ -763,7 +772,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             icon: Icons.swap_horiz_rounded,
             color: AppColors.borrowed,
             title: 'New Borrow',
-            subtitle: 'Issue laptop, electronic or MiFi device',
+            subtitle: 'Issue portable electronic or MiFi device',
             onTap: () async {
               Navigator.pop(context);
               final ok = await Navigator.push<bool>(
@@ -773,6 +782,36 @@ class _DashboardScreenState extends State<DashboardScreen> {
               if (ok == true && mounted) {
                 _loadData();
               }
+            },
+          ),
+          const SizedBox(height: 8),
+          _CreateActionTile(
+            icon: Icons.document_scanner_rounded,
+            color: const Color(0xFF0EA5E9),
+            title: 'Scan Document',
+            subtitle: 'Scan or import PDF/image into Vault',
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const DocumentsVaultScreen(autoStartScan: true),
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 8),
+          _CreateActionTile(
+            icon: Icons.assignment_turned_in_rounded,
+            color: const Color(0xFF6366F1),
+            title: 'New Custody Slip',
+            subtitle: 'Create custom or inventory custody document',
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const CustodyDocumentFormScreen()),
+              );
             },
           ),
           const SizedBox(height: 8),

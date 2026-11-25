@@ -1,12 +1,15 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../database/database_helper.dart';
 import '../../services/theme_service.dart';
 import '../../services/company_service.dart';
 import '../../services/currency_service.dart';
+import '../../services/ticket_reminder_service.dart';
 import '../../widgets/common_widgets.dart';
 import '../../theme/app_theme.dart';
 import 'organization_form_screen.dart';
@@ -20,29 +23,41 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   final _db = DatabaseHelper();
+  StreamSubscription<Map<String, int>>? _countsSub;
   Map<String, int> _counts = {};
   bool _loadingCounts = true;
+  String _appVersion = 'v1.2.0+7';
   final _companyCtrl = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     widget.themeService.addListener(_onThemeChanged);
-    _loadCounts();
+    _countsSub = _db.watchCounts().listen((c) {
+      if (mounted) {
+        setState(() {
+          _counts = c;
+          _loadingCounts = false;
+        });
+      }
+    });
+    _loadAppVersion();
     _companyCtrl.text = CompanyService().name;
+  }
+
+  Future<void> _loadAppVersion() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      if (mounted && info.version.isNotEmpty) {
+        setState(() => _appVersion = 'v${info.version}+${info.buildNumber}');
+      }
+    } catch (_) {}
   }
 
   void _onThemeChanged() {
     if (mounted) {
       setState(() {});
     }
-  }
-
-  @override
-  void dispose() {
-    widget.themeService.removeListener(_onThemeChanged);
-    _companyCtrl.dispose();
-    super.dispose();
   }
 
   Future<void> _loadCounts() async {
@@ -53,6 +68,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _loadingCounts = false;
       });
     }
+  }
+
+  @override
+  void dispose() {
+    _countsSub?.cancel();
+    widget.themeService.removeListener(_onThemeChanged);
+    _companyCtrl.dispose();
+    super.dispose();
   }
 
   Future<void> _saveCompany() async {
@@ -73,9 +96,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
         final src = File(res.first.path!);
         final ext = res.first.extension ?? 'png';
         final dir = await getApplicationDocumentsDirectory();
-        final dest = File('${dir.path}/company_logo_${DateTime.now().millisecondsSinceEpoch}.$ext');
+        final safeOrg = CompanyService().activeOrganizationId.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
+        final oldPath = CompanyService().logoPath;
+        final dest = File('${dir.path}/company_logo_${safeOrg}_${DateTime.now().millisecondsSinceEpoch}.$ext');
         await src.copy(dest.path);
         await CompanyService().setCompanyLogo(dest.path);
+        if (oldPath.isNotEmpty && oldPath != dest.path) {
+          final oldFile = File(oldPath);
+          if (await oldFile.exists()) {
+            try {
+              await oldFile.delete();
+            } catch (_) {}
+          }
+        }
         if (mounted) {
           setState(() {});
           showSnack(context, 'Company logo updated');
@@ -210,6 +243,48 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  Future<void> _addTicketReminderTime() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.now(),
+      initialEntryMode: TimePickerEntryMode.input,
+      helpText: 'Enter Reminder Time',
+    );
+    if (picked == null || !mounted) {
+      return;
+    }
+    final added = await TicketReminderService().addTime(picked);
+    if (!mounted) {
+      return;
+    }
+    if (!added) {
+      showSnack(context, 'That reminder time is already added', error: true);
+    } else {
+      showSnack(context, 'Added reminder at ${picked.format(context)}');
+    }
+  }
+
+  String _formatReminderSummary(TicketReminderService svc) {
+    if (!svc.enabled) {
+      return 'Reminders are currently paused';
+    }
+    if (svc.days.isEmpty || svc.times.isEmpty) {
+      return 'Select at least one day and one time to activate';
+    }
+    const dayLabels = {
+      DateTime.sunday: 'Sun',
+      DateTime.monday: 'Mon',
+      DateTime.tuesday: 'Tue',
+      DateTime.wednesday: 'Wed',
+      DateTime.thursday: 'Thu',
+      DateTime.friday: 'Fri',
+      DateTime.saturday: 'Sat',
+    };
+    final activeDays = svc.days.map((d) => dayLabels[d] ?? '').where((s) => s.isNotEmpty).join(', ');
+    final count = svc.times.length;
+    return 'Active on $activeDays • $count ${count == 1 ? 'reminder' : 'reminders'}/day';
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -242,6 +317,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   _StatMetricCard(icon: Icons.swap_horiz_outlined, label: 'Borrows', count: _counts['active_borrows'] ?? 0, color: AppColors.borrowed),
                   _StatMetricCard(icon: Icons.confirmation_number_outlined, label: 'Tickets', count: _counts['log_entries'] ?? 0, color: const Color(0xFF6366F1)),
                   _StatMetricCard(icon: Icons.subscriptions_outlined, label: 'Subs', count: _counts['subscriptions'] ?? 0, color: const Color(0xFFE11D48)),
+                  _StatMetricCard(icon: Icons.devices_outlined, label: 'Others', count: _counts['other_devices'] ?? 0, color: const Color(0xFF0D9488)),
+                  _StatMetricCard(icon: Icons.wifi_password_rounded, label: 'Wi-Fi', count: _counts['wifi_networks'] ?? 0, color: const Color(0xFF059669)),
+                  _StatMetricCard(icon: Icons.vpn_key_outlined, label: 'Vault', count: _counts['account_passwords'] ?? 0, color: const Color(0xFFF59E0B)),
+                  _StatMetricCard(icon: Icons.contact_phone_outlined, label: 'Vendors', count: _counts['vendor_contacts'] ?? 0, color: AppColors.vendorColor),
+                  _StatMetricCard(icon: Icons.assignment_turned_in_outlined, label: 'Custody', count: _counts['custody_documents'] ?? 0, color: const Color(0xFF6366F1)),
+                  _StatMetricCard(icon: Icons.document_scanner_outlined, label: 'Docs', count: _counts['vault_documents'] ?? 0, color: const Color(0xFF0EA5E9)),
                 ],
               ),
             ),
@@ -489,6 +570,128 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const SizedBox(height: 18),
 
+          const SectionLabel('TICKET LOGGING REMINDERS'),
+          ListenableBuilder(
+            listenable: TicketReminderService(),
+            builder: (ctx, _) {
+              final svc = TicketReminderService();
+              const weekdays = [
+                (DateTime.sunday, 'Sun'),
+                (DateTime.monday, 'Mon'),
+                (DateTime.tuesday, 'Tue'),
+                (DateTime.wednesday, 'Wed'),
+                (DateTime.thursday, 'Thu'),
+                (DateTime.friday, 'Fri'),
+                (DateTime.saturday, 'Sat'),
+              ];
+
+              return FintechGroupedCard(
+                title: 'Ticket Reminders',
+                icon: Icons.notifications_active_outlined,
+                children: [
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    secondary: IconBox(
+                      icon: Icons.confirmation_number_outlined,
+                      color: theme.colorScheme.primary,
+                      size: 36,
+                    ),
+                    title: const Text(
+                      'Enable Ticket Reminders',
+                      style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                    ),
+                    subtitle: Text(
+                      'Notify to log IT support tickets on chosen days & times',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+                      ),
+                    ),
+                    value: svc.enabled,
+                    onChanged: (v) => svc.setEnabled(v),
+                  ),
+                  const Divider(height: 18),
+                  Text(
+                    'Reminder Days',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                      color: theme.colorScheme.onSurface,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: weekdays.map((entry) {
+                      final isSelected = svc.days.contains(entry.$1);
+                      return FintechFilterPill(
+                        label: entry.$2,
+                        selected: isSelected,
+                        onTap: () => svc.toggleDay(entry.$1),
+                      );
+                    }).toList(),
+                  ),
+                  const Divider(height: 22),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Clock Times (${svc.times.length})',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                          color: theme.colorScheme.onSurface,
+                        ),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: _addTicketReminderTime,
+                        icon: const Icon(Icons.add_alarm_rounded, size: 17),
+                        label: const Text('Add Time'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  if (svc.times.isEmpty)
+                    Text(
+                      'No reminder times configured. Tap Add Time to enter a clock time.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+                      ),
+                    )
+                  else
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: svc.times.map((hhmm) {
+                        final parsed = TicketReminderService.parseTime(hhmm);
+                        final display = parsed != null ? parsed.format(context) : hhmm;
+                        return FintechFilterPill(
+                          label: display,
+                          selected: svc.enabled,
+                          icon: Icons.access_time_rounded,
+                          onDeleted: () => svc.removeTime(hhmm),
+                        );
+                      }).toList(),
+                    ),
+                  const SizedBox(height: 12),
+                  Text(
+                    _formatReminderSummary(svc),
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w600,
+                      color: svc.enabled && svc.days.isNotEmpty && svc.times.isNotEmpty
+                          ? theme.colorScheme.primary
+                          : theme.colorScheme.onSurface.withValues(alpha: 0.55),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: 18),
+
           const SectionLabel('APPEARANCE & THEME'),
           FintechGroupedCard(
             title: 'Visual Theme',
@@ -678,9 +881,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: 'About IT Box',
             icon: Icons.info_outline_rounded,
             children: [
-              const DetailRow(
+              DetailRow(
                 label: 'Software Version',
-                value: 'v1.1.1',
+                value: _appVersion,
                 icon: Icons.verified_outlined,
               ),
               const DetailRow(
@@ -753,7 +956,7 @@ class _StatMetricCard extends StatelessWidget {
       margin: const EdgeInsets.only(right: 8),
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: isDark ? AppColors.darkCard : Colors.white,
+        color: AppColors.cardSurface(context),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
         boxShadow: [

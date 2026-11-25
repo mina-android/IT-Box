@@ -50,26 +50,28 @@ flowchart TD
         F5 --> I15[UnitConverterScreen: IT Unit Converter]
         F5 --> I17[NetworkDiagnosticsScreen: DNS, Ping, Port Probe]
         F5 --> I18[MaintenanceCalendarScreen: Service Calendar]
+        F5 --> I19[CustodyDocumentsScreen: Custody Documents Hub]
+        F5 --> I20[DocumentsVaultScreen: ML Kit Scanner & Vault]
     end
 
     subgraph Service_Layer ["Core Services (Singletons & Isolates)"]
         S1[ThemeService: ChangeNotifier]
         S2[CompanyService: Multi-Organization DB & Branding]
-        S3[NotificationService: Local Notifications + Timezone]
+        S3[NotificationService: Overdue Borrow & Weekly Ticket Reminders]
+        S3b[TicketReminderService: Multi-day & Multi-time Schedules]
         S4[PdfReportService: pdf + share_plus]
         S5[LabelService: pdf + share_plus]
         S6[ExcelService: compute isolate + excel]
         S7[ExcelImportService: compute isolate + file_picker]
         S8[NetworkScannerService: Hybrid Win32 SendARP FFI + Android ICMP/ARP + NetBIOS + mDNS + SSDP + WoL]
-        S9[CustodyPdfService: pdf + signature + native mail launcher]
+        S9[CustodyPdfService: pdf + signature + bulk multi-page export]
         S10[WifiPdfService: pdf + qr - Standard 3/page & Portable 7x4cm]
         S11[ExecutiveHealthPdfService: pdf infographic]
-        S12[AutoBackupService: rolling 7-snapshot background engine]
-        S13[BackupCryptoService: AES-256-GCM + SHA-256]
+        S12[AutoBackupService & WorkmanagerService: SAF + 02:00 AM + Keystore + Full Binaries]
+        S13[BackupCryptoService: AES-256-GCM + SHA-256 + Random.secure]
         S14[GlobalSearchService: cross-table async search on Home]
         S15[NetworkDiagnosticsService: DNS, TCP port prober, HTTP speed]
-        S16[TopologyPdfService: multi-page vector network diagram]
-        S17[ConfigParserService: Cisco IOS parser]
+        S16[DocumentStorageService: Org-scoped custody, vault & receipt files]
         S18[CurrencyService: 62 currencies & picker]
         S19[ExchangeRateService: open.er-api & offline fallback]
         S20[AuditExportService: CSV & PDF audit trail exporter]
@@ -196,6 +198,7 @@ erDiagram
         int employee_id "FK to employees.id"
         string employee_name "Snapshot copy"
         string reason "DEFAULT ''"
+        string notes "DEFAULT ''"
         string out_date "NOT NULL (YYYY-MM-DD)"
         string back_date "Nullable (YYYY-MM-DD)"
         string due_date "Nullable (YYYY-MM-DD)"

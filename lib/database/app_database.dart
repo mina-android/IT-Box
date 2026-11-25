@@ -4,14 +4,27 @@ import 'package:flutter/foundation.dart';
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:path/path.dart' as p;
-import 'package:sqflite/sqflite.dart' as sqflite show getDatabasesPath;
+import 'package:path_provider/path_provider.dart';
 import 'tables.dart';
 
 part 'app_database.g.dart';
 
+Future<String> _resolveDatabasesPath() async {
+  if (Platform.isAndroid) {
+    final supportDir = await getApplicationSupportDirectory();
+    final dbDir = Directory(p.join(supportDir.parent.path, 'databases'));
+    if (!await dbDir.exists()) {
+      await dbDir.create(recursive: true);
+    }
+    return dbDir.path;
+  }
+  final docsDir = await getApplicationDocumentsDirectory();
+  return docsDir.path;
+}
+
 LazyDatabase openDatabaseConnection([String dbFileName = 'itbox.db']) {
   return LazyDatabase(() async {
-    final dbFolder = await sqflite.getDatabasesPath();
+    final dbFolder = await _resolveDatabasesPath();
     final file = File(p.join(dbFolder, dbFileName));
     return NativeDatabase.createInBackground(file);
   });
@@ -39,6 +52,8 @@ LazyDatabase openDatabaseConnection([String dbFileName = 'itbox.db']) {
   AccountPasswords,
   OtherDevices,
   VendorContacts,
+  CustodyDocuments,
+  VaultDocuments,
 ])
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? openDatabaseConnection());
@@ -65,7 +80,7 @@ class AppDatabase extends _$AppDatabase {
       return;
     }
     try {
-      final dbFolder = await sqflite.getDatabasesPath();
+      final dbFolder = await _resolveDatabasesPath();
       for (final suffix in ['', '-wal', '-shm', '-journal']) {
         final f = File(p.join(dbFolder, '$dbFileName$suffix'));
         if (await f.exists()) {
@@ -75,7 +90,7 @@ class AppDatabase extends _$AppDatabase {
     } catch (_) {}
   }
 
-  static const int currentVersion = 15;
+  static const int currentVersion = 17;
 
   @override
   int get schemaVersion => currentVersion;
@@ -327,6 +342,59 @@ class AppDatabase extends _$AppDatabase {
             // Add planned maintenance columns
             await addColIfMissing('device_maintenance_logs', 'is_planned', 'is_planned INTEGER DEFAULT 0');
             await addColIfMissing('device_maintenance_logs', 'planned_date', "planned_date TEXT DEFAULT ''");
+          }
+
+          if (from < 16) {
+            await addColIfMissing('expenses', 'receipt_path', "receipt_path TEXT DEFAULT ''");
+            await addColIfMissing('vendor_contacts', 'sla_tier', "sla_tier TEXT DEFAULT ''");
+
+            await customStatement('''CREATE TABLE IF NOT EXISTS custody_documents (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              document_number TEXT NOT NULL,
+              title TEXT DEFAULT 'Equipment Custody Receipt',
+              source_type TEXT NOT NULL,
+              source_id INTEGER,
+              employee_name TEXT NOT NULL,
+              employee_phone TEXT DEFAULT '',
+              employee_email TEXT DEFAULT '',
+              handover_date TEXT NOT NULL,
+              due_date TEXT DEFAULT '',
+              items_json TEXT NOT NULL,
+              agreement_text TEXT DEFAULT '',
+              admin_notes TEXT DEFAULT '',
+              signature_base64 TEXT DEFAULT '',
+              pdf_path TEXT DEFAULT '',
+              created_at TEXT
+            )''');
+
+            await customStatement('''CREATE TABLE IF NOT EXISTS vault_documents (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              title TEXT NOT NULL,
+              category TEXT NOT NULL,
+              file_path TEXT NOT NULL,
+              file_type TEXT NOT NULL,
+              file_size_bytes INTEGER DEFAULT 0,
+              page_count INTEGER DEFAULT 1,
+              linked_employee_name TEXT DEFAULT '',
+              linked_asset_type TEXT DEFAULT '',
+              linked_asset_label TEXT DEFAULT '',
+              notes TEXT DEFAULT '',
+              created_at TEXT
+            )''');
+
+            await customStatement('CREATE INDEX IF NOT EXISTS idx_custody_docs_emp ON custody_documents(employee_name)');
+            await customStatement('CREATE INDEX IF NOT EXISTS idx_custody_docs_created ON custody_documents(created_at)');
+            await customStatement('CREATE INDEX IF NOT EXISTS idx_vault_docs_cat ON vault_documents(category)');
+            await customStatement('CREATE INDEX IF NOT EXISTS idx_vault_docs_emp ON vault_documents(linked_employee_name)');
+            await customStatement('CREATE INDEX IF NOT EXISTS idx_maint_logs_dev ON device_maintenance_logs(device_type, device_id)');
+            await customStatement('CREATE INDEX IF NOT EXISTS idx_emails_emp ON email_accounts(employee_id)');
+            await customStatement('CREATE INDEX IF NOT EXISTS idx_logs_emp ON log_entries(employee_id)');
+            await customStatement('CREATE INDEX IF NOT EXISTS idx_borrows_emp ON borrow_logs(employee_id, is_returned)');
+            await customStatement('CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit_activities(timestamp)');
+          }
+
+          if (from < 17) {
+            await addColIfMissing('borrow_logs', 'notes', "notes TEXT DEFAULT ''");
           }
         },
         beforeOpen: (details) async {

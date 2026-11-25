@@ -8,7 +8,8 @@ import '../../theme/app_theme.dart';
 import 'electronic_form_screen.dart';
 
 class ElectronicsScreen extends StatefulWidget {
-  const ElectronicsScreen({super.key});
+  final int? initialItemId;
+  const ElectronicsScreen({super.key, this.initialItemId});
   @override
   State<ElectronicsScreen> createState() => _ElectronicsScreenState();
 }
@@ -20,6 +21,7 @@ class _ElectronicsScreenState extends State<ElectronicsScreen> with AutomaticKee
   List<Electronic> _all = [];
   List<Electronic> _filtered = [];
   bool _loading = true;
+  bool _handledInitial = false;
   final Set<int> _selectedIds = <int>{};
   bool get _isSelectionMode => _selectedIds.isNotEmpty;
 
@@ -36,6 +38,17 @@ class _ElectronicsScreenState extends State<ElectronicsScreen> with AutomaticKee
           _applyFilter();
           _loading = false;
         });
+        if (!_handledInitial && widget.initialItemId != null) {
+          final match = list.where((e) => e.id == widget.initialItemId).firstOrNull;
+          if (match != null) {
+            _handledInitial = true;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) {
+                _showDetail(match);
+              }
+            });
+          }
+        }
       }
     });
     _search.addListener(_applyFilter);
@@ -214,7 +227,6 @@ class _ElectronicsScreenState extends State<ElectronicsScreen> with AutomaticKee
                         subtitle: _search.text.isEmpty
                             ? 'Tap + to register other electronics'
                             : 'Try a different search',
-                        onRefresh: _load,
                       )
                     : GridView.builder(
                         padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
@@ -268,6 +280,13 @@ class _ElectronicsScreenState extends State<ElectronicsScreen> with AutomaticKee
       bottomNavigationBar: _isSelectionMode
           ? SelectionBottomBar(
               selectedCount: _selectedIds.length,
+              totalCount: _filtered.length,
+              onSelectAll: () {
+                setState(() {
+                  _selectedIds.addAll(_filtered.where((e) => e.id != null).map((e) => e.id!));
+                });
+              },
+              onDeselectAll: () => setState(() => _selectedIds.clear()),
               onClose: () => setState(() => _selectedIds.clear()),
               onDelete: _bulkDelete,
             )

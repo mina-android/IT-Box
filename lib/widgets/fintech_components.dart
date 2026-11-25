@@ -1,5 +1,9 @@
 // lib/widgets/fintech_components.dart
 import 'package:flutter/material.dart';
+import '../models/employee.dart';
+import '../theme/app_theme.dart';
+import 'app_text_field.dart';
+import 'common_widgets.dart' show IconBox, showFintechBottomSheet;
 
 /// Modern edge-to-edge transparent top header that respects system status bar padding.
 class FintechHeader extends StatelessWidget {
@@ -741,5 +745,275 @@ class FintechActionButton extends StatelessWidget {
     }
     return btn;
   }
+}
+
+/// Fintech squircle filter pill matching the Subscriptions/Bills pill standard.
+class FintechFilterPill extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback? onTap;
+  final Color? color;
+  final IconData? icon;
+  final VoidCallback? onDeleted;
+
+  const FintechFilterPill({
+    super.key,
+    required this.label,
+    this.selected = false,
+    this.onTap,
+    this.color,
+    this.icon,
+    this.onDeleted,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final accent = color ?? theme.colorScheme.primary;
+    final isDark = theme.brightness == Brightness.dark;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        decoration: BoxDecoration(
+          color: selected
+              ? accent.withValues(alpha: 0.15)
+              : AppColors.cardSurface(context),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: selected
+                ? accent
+                : (isDark
+                    ? Colors.white.withValues(alpha: 0.08)
+                    : theme.colorScheme.outlineVariant.withValues(alpha: 0.25)),
+            width: selected ? 1.5 : 1,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icon != null) ...[
+              Icon(
+                icon,
+                size: 14,
+                color: selected
+                    ? accent
+                    : theme.colorScheme.onSurface.withValues(alpha: 0.7),
+              ),
+              const SizedBox(width: 6),
+            ],
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11.5,
+                fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                color: selected
+                    ? accent
+                    : theme.colorScheme.onSurface.withValues(alpha: 0.75),
+              ),
+            ),
+            if (onDeleted != null) ...[
+              const SizedBox(width: 6),
+              GestureDetector(
+                onTap: onDeleted,
+                child: Icon(
+                  Icons.close_rounded,
+                  size: 14,
+                  color: selected
+                      ? accent
+                      : theme.colorScheme.onSurface.withValues(alpha: 0.65),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Horizontal scrollable bar of [FintechFilterPill] items.
+class FintechFilterBar extends StatelessWidget {
+  final List<Widget> children;
+  final EdgeInsetsGeometry padding;
+
+  const FintechFilterBar({
+    super.key,
+    required this.children,
+    this.padding = const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 48,
+      child: ListView.separated(
+        padding: padding,
+        scrollDirection: Axis.horizontal,
+        itemCount: children.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (_, i) => Center(child: children[i]),
+      ),
+    );
+  }
+}
+
+/// Result returned from [showFintechEmployeePicker].
+class FintechEmployeeSelection {
+  final Employee? employee;
+  final bool cleared;
+  const FintechEmployeeSelection({this.employee, this.cleared = false});
+}
+
+/// Reusable searchable employee picker modal built on [showFintechBottomSheet].
+/// Returns `null` if dismissed, `FintechEmployeeSelection(cleared: true)` if
+/// "None (Unlinked)" was tapped, or `FintechEmployeeSelection(employee: emp)`.
+Future<FintechEmployeeSelection?> showFintechEmployeePicker({
+  required BuildContext context,
+  required List<Employee> employees,
+  int? selectedEmployeeId,
+  String? selectedEmployeeName,
+  String title = 'Select Employee',
+  String? subtitle,
+  bool allowNone = false,
+  Color? accentColor,
+}) async {
+  final searchCtrl = TextEditingController();
+  final accent = accentColor ?? Theme.of(context).colorScheme.primary;
+  List<Employee> filtered = List.from(employees);
+
+  final result = await showFintechBottomSheet<FintechEmployeeSelection>(
+    context: context,
+    title: title,
+    subtitle: subtitle,
+    child: StatefulBuilder(
+      builder: (ctx, setModalState) {
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              AppTextField(
+                controller: searchCtrl,
+                decoration: const InputDecoration(
+                  hintText: 'Search employee name or phone...',
+                  prefixIcon: Icon(Icons.search_rounded),
+                  contentPadding:
+                      EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                ),
+                onChanged: (q) {
+                  final query = q.toLowerCase().trim();
+                  setModalState(() {
+                    filtered = employees.where((e) {
+                      return e.name.toLowerCase().contains(query) ||
+                          e.phoneNumber.toLowerCase().contains(query);
+                    }).toList();
+                  });
+                },
+              ),
+              const SizedBox(height: 12),
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(ctx).size.height * 0.45,
+                ),
+                child: (filtered.isEmpty && !allowNone)
+                    ? const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 24),
+                        child: Center(
+                          child: Text(
+                            'No matching employees found.',
+                            style: TextStyle(
+                                fontSize: 13, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      )
+                    : ListView.separated(
+                        shrinkWrap: true,
+                        itemCount: filtered.length + (allowNone ? 1 : 0),
+                        separatorBuilder: (_, __) => const Divider(height: 1),
+                        itemBuilder: (_, i) {
+                          if (allowNone && i == 0) {
+                            final isNoneSel = selectedEmployeeId == null &&
+                                (selectedEmployeeName == null ||
+                                    selectedEmployeeName.isEmpty);
+                            return ListTile(
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 4),
+                              leading: IconBox(
+                                icon: Icons.person_off_outlined,
+                                color: isNoneSel ? accent : Colors.grey,
+                                size: 36,
+                              ),
+                              title: Text(
+                                'None (Unlinked)',
+                                style: TextStyle(
+                                  fontWeight: isNoneSel
+                                      ? FontWeight.w800
+                                      : FontWeight.w600,
+                                  fontSize: 14.5,
+                                ),
+                              ),
+                              trailing: isNoneSel
+                                  ? Icon(Icons.check_circle_rounded,
+                                      color: accent)
+                                  : null,
+                              onTap: () => Navigator.pop(
+                                  ctx,
+                                  const FintechEmployeeSelection(
+                                      cleared: true)),
+                            );
+                          }
+                          final emp = filtered[allowNone ? i - 1 : i];
+                          final isSel = (selectedEmployeeId != null &&
+                                  emp.id == selectedEmployeeId) ||
+                              (selectedEmployeeId == null &&
+                                  selectedEmployeeName != null &&
+                                  selectedEmployeeName.isNotEmpty &&
+                                  emp.name == selectedEmployeeName);
+                          return ListTile(
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            leading: IconBox(
+                              icon: Icons.badge_outlined,
+                              color: isSel ? accent : AppColors.employeeColor,
+                              size: 36,
+                            ),
+                            title: Text(
+                              emp.name,
+                              style: TextStyle(
+                                fontWeight:
+                                    isSel ? FontWeight.w800 : FontWeight.w600,
+                                fontSize: 14.5,
+                              ),
+                            ),
+                            subtitle: emp.phoneNumber.isNotEmpty
+                                ? Text(emp.phoneNumber,
+                                    style: const TextStyle(fontSize: 12))
+                                : null,
+                            trailing: isSel
+                                ? Icon(Icons.check_circle_rounded,
+                                    color: accent)
+                                : null,
+                            onTap: () => Navigator.pop(
+                                ctx, FintechEmployeeSelection(employee: emp)),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        );
+      },
+    ),
+  );
+
+  Future.delayed(const Duration(milliseconds: 350), searchCtrl.dispose);
+  return result;
 }
 

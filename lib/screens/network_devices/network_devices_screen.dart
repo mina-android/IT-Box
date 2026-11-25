@@ -8,7 +8,8 @@ import '../maintenance/device_maintenance_screen.dart';
 import 'network_device_form_screen.dart';
 
 class NetworkDevicesScreen extends StatefulWidget {
-  const NetworkDevicesScreen({super.key});
+  final int? initialItemId;
+  const NetworkDevicesScreen({super.key, this.initialItemId});
   @override
   State<NetworkDevicesScreen> createState() => _NetworkDevicesScreenState();
 }
@@ -20,6 +21,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen> with Automa
   List<NetworkDevice> _all = [];
   List<NetworkDevice> _filtered = [];
   bool _loading = true;
+  bool _handledInitial = false;
   final Set<int> _selectedIds = <int>{};
   bool get _isSelectionMode => _selectedIds.isNotEmpty;
 
@@ -61,6 +63,17 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen> with Automa
         _all = list;
         _applyFilter();
       });
+      if (!_handledInitial && widget.initialItemId != null) {
+        final match = list.where((d) => d.id == widget.initialItemId).firstOrNull;
+        if (match != null) {
+          _handledInitial = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              _showDetail(match);
+            }
+          });
+        }
+      }
     } catch (e) {
       if (mounted) {
         showSnack(context, 'Failed to load network devices: $e', error: true);
@@ -187,7 +200,6 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen> with Automa
                         subtitle: _search.text.isEmpty
                             ? 'Tap + to add a router or device'
                             : 'Try a different search',
-                        onRefresh: _load,
                       )
                     : GridView.builder(
                         padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
@@ -215,7 +227,6 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen> with Automa
                                 color: AppColors.networkColor,
                                 size: 36,
                               ),
-                              badge: StatusBadge(d.status),
                               title: d.model,
                               subtitle: '# ${d.deviceNumber}',
                               extra: d.phoneNumber.isNotEmpty
@@ -245,6 +256,13 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen> with Automa
       bottomNavigationBar: _isSelectionMode
           ? SelectionBottomBar(
               selectedCount: _selectedIds.length,
+              totalCount: _filtered.length,
+              onSelectAll: () {
+                setState(() {
+                  _selectedIds.addAll(_filtered.where((d) => d.id != null).map((d) => d.id!));
+                });
+              },
+              onDeselectAll: () => setState(() => _selectedIds.clear()),
               onClose: () => setState(() => _selectedIds.clear()),
               onDelete: _bulkDelete,
             )
@@ -266,9 +284,6 @@ class _DetailSheet extends StatefulWidget {
 }
 
 class _DetailSheetState extends State<_DetailSheet> {
-  bool _showWifi = false;
-  bool _showAdmin = false;
-
   @override
   Widget build(BuildContext context) {
     final d = widget.device;
@@ -312,7 +327,6 @@ class _DetailSheetState extends State<_DetailSheet> {
                   ],
                 ),
               ),
-              StatusBadge(d.status),
             ],
           ),
           const SizedBox(height: 16),
@@ -391,22 +405,22 @@ class _DetailSheetState extends State<_DetailSheet> {
                 copyable: true,
               ),
               if (d.wifiPassword.isNotEmpty)
-                _passwordRow(
+                SensitiveDetailRow(
                   label: 'WiFi Password',
                   value: d.wifiPassword,
-                  show: _showWifi,
-                  onToggle: () => setState(() => _showWifi = !_showWifi),
                   icon: Icons.lock_outline_rounded,
-                  theme: theme,
                 ),
               if (d.adminPassword.isNotEmpty)
-                _passwordRow(
+                SensitiveDetailRow(
                   label: 'Admin Password',
                   value: d.adminPassword,
-                  show: _showAdmin,
-                  onToggle: () => setState(() => _showAdmin = !_showAdmin),
                   icon: Icons.admin_panel_settings_outlined,
-                  theme: theme,
+                ),
+              if (d.notes.isNotEmpty)
+                DetailRow(
+                  label: 'Notes',
+                  value: d.notes,
+                  icon: Icons.notes_rounded,
                 ),
             ],
           ),
@@ -435,60 +449,6 @@ class _DetailSheetState extends State<_DetailSheet> {
                 );
               },
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _passwordRow({
-    required String label,
-    required String value,
-    required bool show,
-    required VoidCallback onToggle,
-    required IconData icon,
-    required ThemeData theme,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 7),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(6),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.primary.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(icon, size: 15, color: theme.colorScheme.primary),
-          ),
-          const SizedBox(width: 10),
-          SizedBox(
-            width: 110,
-            child: Text(
-              label,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                fontWeight: FontWeight.w600,
-                fontSize: 12,
-              ),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              show ? value : '••••••••',
-              style: const TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 13.5,
-              ),
-            ),
-          ),
-          IconButton(
-            icon: Icon(
-              show ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-              size: 18,
-              color: theme.colorScheme.primary,
-            ),
-            onPressed: onToggle,
           ),
         ],
       ),

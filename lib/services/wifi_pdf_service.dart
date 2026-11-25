@@ -28,8 +28,12 @@ class WifiNetworkInfo {
         .replaceAll(':', r'\:');
   }
 
-  String get qrString =>
-      'WIFI:S:${_escapeWifiValue(ssid)};T:$security;P:${_escapeWifiValue(password)};;';
+  String get qrString {
+    if (password.isEmpty) {
+      return 'WIFI:S:${_escapeWifiValue(ssid)};T:nopass;;';
+    }
+    return 'WIFI:S:${_escapeWifiValue(ssid)};T:$security;P:${_escapeWifiValue(password)};;';
+  }
 }
 
 class WifiPdfService {
@@ -327,6 +331,7 @@ class WifiPdfService {
             value,
             style: pw.TextStyle(
               fontSize: 10,
+              font: isMono ? pw.Font.courier() : null,
               fontWeight: isBold ? pw.FontWeight.bold : pw.FontWeight.normal,
               color: PdfColors.black,
             ),

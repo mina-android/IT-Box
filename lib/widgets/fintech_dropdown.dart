@@ -38,7 +38,7 @@ class FintechDropdown<T> extends StatelessWidget {
         ? (theme.scaffoldBackgroundColor == Colors.black ? const Color(0xFF1B1B22) : const Color(0xFF22222E))
         : cs.surfaceContainerHighest;
 
-    return InputDecorator(
+    final dropdown = InputDecorator(
       decoration: InputDecoration(
         labelText: labelText,
         hintText: hintText,
@@ -71,6 +71,32 @@ class FintechDropdown<T> extends StatelessWidget {
           onChanged: onChanged,
         ),
       ),
+    );
+
+    if (validator == null) {
+      return dropdown;
+    }
+
+    return FormField<T>(
+      initialValue: value,
+      validator: (_) => validator!(value),
+      builder: (state) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            dropdown,
+            if (state.hasError && state.errorText != null)
+              Padding(
+                padding: const EdgeInsets.only(left: 14, top: 6),
+                child: Text(
+                  state.errorText!,
+                  style: TextStyle(color: cs.error, fontSize: 12),
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 }

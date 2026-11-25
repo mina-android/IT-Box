@@ -5,7 +5,14 @@ import 'logs/logs_screen.dart';
 
 class ActivityScreen extends StatefulWidget {
   final int initialTab;
-  const ActivityScreen({super.key, this.initialTab = 0});
+  final int? focusItemId;
+  final int? focusRequestToken;
+  const ActivityScreen({
+    super.key,
+    this.initialTab = 0,
+    this.focusItemId,
+    this.focusRequestToken,
+  });
 
   @override
   State<ActivityScreen> createState() => _ActivityScreenState();
@@ -106,9 +113,17 @@ class _ActivityScreenState extends State<ActivityScreen> with SingleTickerProvid
       ),
       body: TabBarView(
         controller: _tabs,
-        children: const [
-          BorrowedScreen(embedded: true),
-          LogsScreen(embedded: true),
+        children: [
+          BorrowedScreen(
+            embedded: true,
+            initialItemId: widget.initialTab == 0 ? widget.focusItemId : null,
+            focusRequestToken: widget.initialTab == 0 ? widget.focusRequestToken : null,
+          ),
+          LogsScreen(
+            embedded: true,
+            initialItemId: widget.initialTab == 1 ? widget.focusItemId : null,
+            focusRequestToken: widget.initialTab == 1 ? widget.focusRequestToken : null,
+          ),
         ],
       ),
     );

@@ -1,7 +1,6 @@
 // lib/screens/vendor_contacts/vendor_contacts_screen.dart
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../database/database_helper.dart';
 import '../../models/vendor_contact.dart';
@@ -12,7 +11,8 @@ import '../../utils/haptics.dart';
 import 'vendor_contact_form_screen.dart';
 
 class VendorContactsScreen extends StatefulWidget {
-  const VendorContactsScreen({super.key});
+  final int? initialItemId;
+  const VendorContactsScreen({super.key, this.initialItemId});
 
   @override
   State<VendorContactsScreen> createState() => _VendorContactsScreenState();
@@ -27,6 +27,8 @@ class _VendorContactsScreenState extends State<VendorContactsScreen> {
   List<VendorContact> _filtered = [];
   String _selectedType = 'All';
   bool _loading = true;
+  bool _showSearch = false;
+  bool _handledInitial = false;
   final Set<int> _selectedIds = <int>{};
   bool get _isSelectionMode => _selectedIds.isNotEmpty;
 
@@ -69,6 +71,17 @@ class _VendorContactsScreenState extends State<VendorContactsScreen> {
       _loading = false;
       _applyFilters();
     });
+    if (!_handledInitial && widget.initialItemId != null) {
+      final match = list.where((c) => c.id == widget.initialItemId).firstOrNull;
+      if (match != null) {
+        _handledInitial = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            _openForm(match);
+          }
+        });
+      }
+    }
   }
 
   void _applyFilters() {
@@ -147,85 +160,81 @@ class _VendorContactsScreenState extends State<VendorContactsScreen> {
     final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
-      appBar: const FintechAppBar(
+      appBar: FintechAppBar(
         title: 'Vendor & Runbook Contacts',
+        subtitle: '${_all.length} saved support contacts',
+        actions: [
+          FintechCircleButton(
+            icon: _showSearch ? Icons.search_off_rounded : Icons.search_rounded,
+            tooltip: 'Search',
+            onPressed: () {
+              setState(() {
+                _showSearch = !_showSearch;
+                if (!_showSearch) {
+                  _searchCtrl.clear();
+                }
+              });
+            },
+          ),
+        ],
       ),
       floatingActionButton: _isSelectionMode
           ? null
-          : FintechFab(
-              onPressed: () => _openForm(),
-              color: AppColors.vendorColor,
-              tooltip: 'Add Contact',
-              icon: Icons.person_add_rounded,
+          : SmoothExitFab(
+              child: FintechFab(
+                onPressed: () => _openForm(),
+                color: AppColors.vendorColor,
+                tooltip: 'Add Contact',
+                icon: Icons.person_add_rounded,
+              ),
             ),
       bottomNavigationBar: _isSelectionMode
           ? SelectionBottomBar(
               selectedCount: _selectedIds.length,
+              totalCount: _filtered.length,
+              onSelectAll: () {
+                setState(() {
+                  _selectedIds.addAll(_filtered.where((c) => c.id != null).map((c) => c.id!));
+                });
+              },
+              onDeselectAll: () => setState(() => _selectedIds.clear()),
               onClose: () => setState(() => _selectedIds.clear()),
               onDelete: _bulkDelete,
             )
           : null,
       body: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: SearchBar2(
+          if (_showSearch)
+            SearchBar2(
               hint: 'Search vendor, ISP, company, CID…',
               controller: _searchCtrl,
             ),
-          ),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: Row(
-              children: _filterTypes.map((type) {
-                final isSelected = _selectedType == type;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: FilterChip(
-                    label: Text(type),
-                    selected: isSelected,
-                    onSelected: (val) {
-                      setState(() {
-                        _selectedType = type;
-                        _applyFilters();
-                      });
-                    },
-                    selectedColor: AppColors.vendorColor.withValues(alpha: 0.2),
-                    labelStyle: TextStyle(
-                      color: isSelected ? AppColors.vendorColor : cs.onSurface,
-                      fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
+          FintechFilterBar(
+            children: _filterTypes.map((type) {
+              return FintechFilterPill(
+                label: type,
+                selected: _selectedType == type,
+                color: AppColors.vendorColor,
+                onTap: () {
+                  setState(() {
+                    _selectedType = type;
+                    _applyFilters();
+                  });
+                },
+              );
+            }).toList(),
           ),
           const SizedBox(height: 8),
           Expanded(
             child: _loading
                 ? const ShimmerListLoader()
                 : _filtered.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.contact_phone_outlined,
-                              size: 64,
-                              color: cs.onSurface.withValues(alpha: 0.3),
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              _all.isEmpty
-                                  ? 'No runbook contacts added yet.'
-                                  : 'No contacts match your filters.',
-                              style: TextStyle(
-                                color: cs.onSurface.withValues(alpha: 0.6),
-                              ),
-                            ),
-                          ],
-                        ),
+                    ? EmptyState(
+                        icon: Icons.contact_phone_outlined,
+                        title: _all.isEmpty ? 'No Runbook Contacts' : 'No Matching Contacts',
+                        subtitle: _all.isEmpty
+                            ? 'Tap + to add ISP, hardware, or software vendor contacts.'
+                            : 'No contacts match your current search or filter.',
                       )
                     : ListView.builder(
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -334,13 +343,30 @@ class _VendorContactsScreenState extends State<VendorContactsScreen> {
                                             ),
                                           ),
                                         ],
+                                        if (c.slaTier.isNotEmpty) ...[
+                                          const SizedBox(height: 4),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFF10B981).withValues(alpha: 0.14),
+                                              borderRadius: BorderRadius.circular(8),
+                                            ),
+                                            child: Text(
+                                              'SLA: ${c.slaTier}',
+                                              style: const TextStyle(
+                                                fontSize: 10.5,
+                                                fontWeight: FontWeight.w700,
+                                                color: Color(0xFF10B981),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
                                         if (c.accountNumber.isNotEmpty) ...[
                                           const SizedBox(height: 4),
                                           Text(
                                             'CID / Acc: ${c.accountNumber}',
-                                            style: TextStyle(
+                                            style: credentialFont(
                                               fontSize: 12,
-                                              fontFamily: 'monospace',
                                               color: cs.onSurface.withValues(alpha: 0.6),
                                             ),
                                           ),
@@ -351,28 +377,25 @@ class _VendorContactsScreenState extends State<VendorContactsScreen> {
                                           runSpacing: 6,
                                           children: [
                                             if (c.phoneNumber.isNotEmpty)
-                                              ActionChip(
-                                                avatar: const Icon(Icons.phone_rounded, size: 14),
-                                                label: Text(c.phoneNumber, style: const TextStyle(fontSize: 12)),
-                                                onPressed: () {
-                                                  Clipboard.setData(ClipboardData(text: c.phoneNumber));
-                                                  showSnack(context, 'Phone copied');
-                                                },
+                                              FintechFilterPill(
+                                                icon: Icons.phone_rounded,
+                                                label: c.phoneNumber,
+                                                color: AppColors.vendorColor,
+                                                onTap: () => launchUrl(Uri(scheme: 'tel', path: c.phoneNumber)),
                                               ),
                                             if (c.email.isNotEmpty)
-                                              ActionChip(
-                                                avatar: const Icon(Icons.email_rounded, size: 14),
-                                                label: Text(c.email, style: const TextStyle(fontSize: 12)),
-                                                onPressed: () {
-                                                  Clipboard.setData(ClipboardData(text: c.email));
-                                                  showSnack(context, 'Email copied');
-                                                },
+                                              FintechFilterPill(
+                                                icon: Icons.email_rounded,
+                                                label: c.email,
+                                                color: AppColors.vendorColor,
+                                                onTap: () => launchUrl(Uri(scheme: 'mailto', path: c.email)),
                                               ),
                                             if (c.portalUrl.isNotEmpty)
-                                              ActionChip(
-                                                avatar: const Icon(Icons.open_in_new_rounded, size: 14),
-                                                label: const Text('Portal', style: TextStyle(fontSize: 12)),
-                                                onPressed: () => _launchUrlStr(c.portalUrl),
+                                              FintechFilterPill(
+                                                icon: Icons.open_in_new_rounded,
+                                                label: 'Portal',
+                                                color: AppColors.vendorColor,
+                                                onTap: () => _launchUrlStr(c.portalUrl),
                                               ),
                                           ],
                                         ),

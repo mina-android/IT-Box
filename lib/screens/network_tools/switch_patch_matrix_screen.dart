@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../database/database_helper.dart';
 import '../../widgets/common_widgets.dart';
-import '../../theme/app_theme.dart';
 import 'switch_patch_chassis_form_screen.dart';
+import 'switch_patch_port_form_screen.dart';
 
 class PatchPanelChassis {
   final int id;
@@ -50,7 +50,7 @@ class SwitchPatchMatrixScreen extends StatefulWidget {
 
 class _SwitchPatchMatrixScreenState extends State<SwitchPatchMatrixScreen> {
   final DatabaseHelper _db = DatabaseHelper();
-  static const String _prefKey = 'custom_switch_patch_chassis_v1';
+  String get _prefKey => DatabaseHelper.scopedSwitchChassisKey();
 
   List<PatchPanelChassis> _chassisList = [];
   PatchPanelChassis? _selectedChassis;
@@ -192,123 +192,31 @@ class _SwitchPatchMatrixScreenState extends State<SwitchPatchMatrixScreen> {
     }
   }
 
-  void _configurePort(int portNum) {
-    if (_selectedChassis == null) return;
+  Future<void> _configurePort(int portNum) async {
+    if (_selectedChassis == null) {
+      return;
+    }
     final existing = _ports.firstWhere(
       (p) => p['port_number'] == portNum,
       orElse: () => {},
     );
-
-    final deviceCtrl =
-        TextEditingController(text: existing['connected_device'] ?? '');
-    final roomCtrl =
-        TextEditingController(text: existing['destination_room'] ?? '');
-    final vlanCtrl = TextEditingController(text: existing['vlan'] ?? '1');
-    String status = existing['status'] ?? 'Active';
-
-    showFintechBottomSheet(
-      context: context,
-      child: StatefulBuilder(
-        builder: (ctx, setSheetState) => SingleChildScrollView(
-          padding: EdgeInsets.fromLTRB(
-            20,
-            8,
-            20,
-            MediaQuery.of(ctx).viewInsets.bottom + 28,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '${_selectedChassis!.name} • Port $portNum',
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
-              ),
-              const SizedBox(height: 16),
-              FintechGroupedCard(
-                children: [
-                  AppTextField(
-                    controller: deviceCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Connected Device / Host',
-                      hintText: 'e.g. AP-Floor2 / Server-01 / Workstation 14',
-                      prefixIcon: Icon(Icons.devices_rounded),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  AppTextField(
-                    controller: roomCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Destination Room / Patch Drop',
-                      hintText: 'e.g. Room 204 Drop A / Desk 12',
-                      prefixIcon: Icon(Icons.room_rounded),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  AppTextField(
-                    controller: vlanCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'VLAN Tag',
-                      hintText: 'e.g. 10 (Data) / 20 (Voice)',
-                      prefixIcon: Icon(Icons.tag_rounded),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  FintechDropdown<String>(
-                    labelText: 'Port Status',
-                    prefixIcon: const Icon(Icons.power_settings_new_rounded),
-                    value: status,
-                    items: const [
-                      DropdownMenuItem(value: 'Active', child: Text('Active (Up / Connected)')),
-                      DropdownMenuItem(value: 'Down', child: Text('Down (Disconnected)')),
-                      DropdownMenuItem(value: 'Disabled', child: Text('Admin Disabled (Port Off)')),
-                    ],
-                    onChanged: (v) {
-                      if (v != null) {
-                        setSheetState(() => status = v);
-                      }
-                    },
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              ElevatedButton.icon(
-                onPressed: () async {
-                  final map = {
-                    'switch_device_id': _selectedChassis!.id,
-                    'port_number': portNum,
-                    'connected_device': deviceCtrl.text.trim(),
-                    'destination_room': roomCtrl.text.trim(),
-                    'vlan': vlanCtrl.text.trim(),
-                    'status': status,
-                  };
-                  if (existing.isNotEmpty && existing['id'] != null) {
-                    await _db.updateSwitchPatchPort(map, existing['id'] as int);
-                  } else {
-                    await _db.insertSwitchPatchPort(map);
-                  }
-                  if (ctx.mounted) {
-                    Navigator.pop(ctx);
-                  }
-                  _ports = await _db.getSwitchPatchPorts(_selectedChassis!.id);
-                  if (mounted) {
-                    setState(() {});
-                  }
-                },
-                icon: const Icon(Icons.check_circle_outline_rounded),
-                label: const Text('Save Port', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size.fromHeight(52),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                ),
-              ),
-            ],
-          ),
+    final saved = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => SwitchPatchPortFormScreen(
+          switchDeviceId: _selectedChassis!.id,
+          switchName: _selectedChassis!.name,
+          portNumber: portNum,
+          existing: existing.isNotEmpty ? existing : null,
         ),
       ),
     );
+    if (saved == true && mounted) {
+      _ports = await _db.getSwitchPatchPorts(_selectedChassis!.id);
+      if (mounted) {
+        setState(() {});
+      }
+    }
   }
 
   @override
@@ -322,7 +230,7 @@ class _SwitchPatchMatrixScreenState extends State<SwitchPatchMatrixScreen> {
           title: 'Switch & Patch Matrix',
           subtitle: 'Loading chassis & port mappings...',
         ),
-        body: Center(child: CircularProgressIndicator()),
+        body: ShimmerListLoader(),
       );
     }
 
@@ -668,10 +576,12 @@ class _SwitchPatchMatrixScreenState extends State<SwitchPatchMatrixScreen> {
           ],
         ),
       ),
-      floatingActionButton: FintechFab(
-        onPressed: () => _showAddOrEditChassisDialog(),
-        tooltip: 'Add Switch or Patch Panel',
-        icon: Icons.add_rounded,
+      floatingActionButton: SmoothExitFab(
+        child: FintechFab(
+          onPressed: () => _showAddOrEditChassisDialog(),
+          tooltip: 'Add Switch or Patch Panel',
+          icon: Icons.add_rounded,
+        ),
       ),
     );
   }

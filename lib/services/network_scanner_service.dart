@@ -497,8 +497,10 @@ class NetworkScannerService {
           ? ['-n', '1', '-w', timeoutMs.toString(), ip]
           : ['-c', '1', '-W', (timeoutMs / 1000).ceil().toString(), ip];
       process = await Process.start('ping', args);
+      process.stdout.drain<void>().catchError((_) {});
+      process.stderr.drain<void>().catchError((_) {});
       final exitCode = await process.exitCode.timeout(
-        Duration(milliseconds: timeoutMs + 150),
+        Duration(milliseconds: timeoutMs + 250),
       );
       return exitCode == 0;
     } catch (_) {
@@ -908,8 +910,10 @@ class NetworkScannerService {
   /// Fetch HTTP Web Title & Server Header
   Future<Map<String, String>> _fetchHttpDetails(String ip, int port) async {
     final details = <String, String>{};
+    final client = HttpClient()
+      ..connectionTimeout = const Duration(milliseconds: 450)
+      ..badCertificateCallback = (_, __, ___) => true;
     try {
-      final client = HttpClient()..connectionTimeout = const Duration(milliseconds: 450);
       final scheme = (port == 443 || port == 8443) ? 'https' : 'http';
       final request = await client.getUrl(Uri.parse('$scheme://$ip:$port/'));
       final response = await request.close().timeout(const Duration(milliseconds: 650));
@@ -920,13 +924,14 @@ class NetworkScannerService {
       }
 
       final body = await response.transform(const Utf8Decoder(allowMalformed: true)).take(1).join();
-      client.close();
 
       final match = RegExp(r'<title>(.*?)</title>', caseSensitive: false).firstMatch(body);
       if (match != null && match.group(1) != null) {
         details['title'] = match.group(1)!.trim();
       }
-    } catch (_) {}
+    } catch (_) {} finally {
+      client.close(force: true);
+    }
     return details;
   }
 
@@ -958,7 +963,7 @@ class NetworkScannerService {
     }
   }
 
-  /// Deep scan across full port list for a specific host
+  /// Deep scan across full port list for a specific host (batched concurrency)
   Future<List<int>> scanHostPorts(
     String ip, {
     List<int> ports = fullPortList,
@@ -968,16 +973,21 @@ class NetworkScannerService {
     final open = <int>[];
     int scanned = 0;
     final total = ports.length;
+    const batchSize = 8;
 
-    for (final port in ports) {
-      try {
-        final s = await Socket.connect(ip, port, timeout: Duration(milliseconds: timeoutMs));
-        open.add(port);
-        s.destroy();
-      } catch (_) {}
-      scanned++;
-      onProgress?.call(scanned, total);
+    for (int i = 0; i < total; i += batchSize) {
+      final batch = ports.sublist(i, (i + batchSize) > total ? total : (i + batchSize));
+      await Future.wait(batch.map((port) async {
+        try {
+          final s = await Socket.connect(ip, port, timeout: Duration(milliseconds: timeoutMs));
+          open.add(port);
+          s.destroy();
+        } catch (_) {}
+        scanned++;
+        onProgress?.call(scanned, total);
+      }));
     }
+    open.sort();
     return open;
   }
 

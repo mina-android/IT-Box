@@ -44,12 +44,25 @@ class _PrinterFormScreenState extends State<PrinterFormScreen> {
     }
     setState(() => _saving = true);
     try {
+      final tag = _num.text.trim();
+      final existing = await _db.getPrinters();
+      if (existing.any((e) => e.id != widget.printer?.id && e.printerNumber.trim().toLowerCase() == tag.toLowerCase())) {
+        if (!mounted) {
+          return;
+        }
+        _shakeKey.currentState?.shake();
+        showSnack(context, 'Printer "$tag" already exists.', error: true);
+        setState(() => _saving = false);
+        return;
+      }
+
       final p = Printer(
         id: widget.printer?.id,
-        printerNumber: _num.text.trim(),
+        printerNumber: tag,
         model: _model.text.trim(),
         condition: _condition,
         location: _loc.text.trim(),
+        notes: widget.printer?.notes ?? '',
       );
       if (widget.printer == null) {
         await _db.insertPrinter(p);
@@ -199,7 +212,7 @@ class _PrinterFormScreenState extends State<PrinterFormScreen> {
                     style: FilledButton.styleFrom(
                       backgroundColor: AppColors.printerColor,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(26),
+                        borderRadius: BorderRadius.circular(16),
                       ),
                     ),
                   ),

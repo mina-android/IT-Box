@@ -4,8 +4,11 @@ import 'package:flutter/material.dart';
 /// Reusable multi-select bottom action bar used across list screens.
 class SelectionBottomBar extends StatelessWidget {
   final int selectedCount;
+  final int? totalCount;
   final VoidCallback onDelete;
   final VoidCallback onClose;
+  final VoidCallback? onSelectAll;
+  final VoidCallback? onDeselectAll;
   final String? actionLabel;
   final List<Widget>? leadingActions;
   final List<Widget>? trailingActions;
@@ -13,8 +16,11 @@ class SelectionBottomBar extends StatelessWidget {
   const SelectionBottomBar({
     super.key,
     required this.selectedCount,
+    this.totalCount,
     required this.onDelete,
     required this.onClose,
+    this.onSelectAll,
+    this.onDeselectAll,
     this.actionLabel,
     this.leadingActions,
     this.trailingActions,
@@ -57,6 +63,16 @@ class SelectionBottomBar extends StatelessWidget {
               '$selectedCount selected',
               style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
             ),
+            if (onSelectAll != null && onDeselectAll != null && totalCount != null) ...[
+              const SizedBox(width: 4),
+              TextButton(
+                onPressed: selectedCount >= totalCount! ? onDeselectAll : onSelectAll,
+                child: Text(
+                  selectedCount >= totalCount! ? 'Deselect All' : 'Select All',
+                  style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
+                ),
+              ),
+            ],
             if (leadingActions != null) ...leadingActions!,
             const Spacer(),
             if (trailingActions != null) ...trailingActions!,

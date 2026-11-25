@@ -71,6 +71,7 @@ class BorrowLogs extends Table {
   IntColumn get employeeId => integer().named('employee_id')();
   TextColumn get employeeName => text().named('employee_name')();
   TextColumn get reason => text().named('reason').withDefault(const Constant(''))();
+  TextColumn get notes => text().named('notes').withDefault(const Constant(''))();
   TextColumn get outDate => text().named('out_date')();
   TextColumn get backDate => text().named('back_date').nullable()();
   TextColumn get dueDate => text().named('due_date').nullable()();
@@ -103,6 +104,7 @@ class Expenses extends Table {
   TextColumn get item => text().named('item')();
   RealColumn get price => real().named('price').withDefault(const Constant(0.0))();
   TextColumn get details => text().named('details').withDefault(const Constant(''))();
+  TextColumn get receiptPath => text().named('receipt_path').withDefault(const Constant(''))();
 }
 
 @DataClassName('BillEntry')
@@ -245,6 +247,43 @@ class VendorContacts extends Table {
   TextColumn get email => text().named('email').withDefault(const Constant(''))();
   TextColumn get portalUrl => text().named('portal_url').withDefault(const Constant(''))();
   TextColumn get accountNumber => text().named('account_number').withDefault(const Constant(''))();
+  TextColumn get slaTier => text().named('sla_tier').withDefault(const Constant(''))();
   TextColumn get notes => text().named('notes').withDefault(const Constant(''))();
+  TextColumn get createdAt => text().named('created_at').nullable()();
+}
+
+@DataClassName('CustodyDocumentEntry')
+class CustodyDocuments extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get documentNumber => text().named('document_number')();
+  TextColumn get title => text().withDefault(const Constant('Equipment Custody Receipt'))();
+  TextColumn get sourceType => text().named('source_type')(); // 'borrow', 'laptop', 'custom'
+  IntColumn get sourceId => integer().named('source_id').nullable()();
+  TextColumn get employeeName => text().named('employee_name')();
+  TextColumn get employeePhone => text().named('employee_phone').withDefault(const Constant(''))();
+  TextColumn get employeeEmail => text().named('employee_email').withDefault(const Constant(''))();
+  TextColumn get handoverDate => text().named('handover_date')();
+  TextColumn get dueDate => text().named('due_date').withDefault(const Constant(''))();
+  TextColumn get itemsJson => text().named('items_json')();
+  TextColumn get agreementText => text().named('agreement_text').withDefault(const Constant(''))();
+  TextColumn get adminNotes => text().named('admin_notes').withDefault(const Constant(''))();
+  TextColumn get signatureBase64 => text().named('signature_base64').withDefault(const Constant(''))();
+  TextColumn get pdfPath => text().named('pdf_path').withDefault(const Constant(''))();
+  TextColumn get createdAt => text().named('created_at').nullable()();
+}
+
+@DataClassName('VaultDocumentEntry')
+class VaultDocuments extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get title => text()();
+  TextColumn get category => text()(); // 'Contract', 'Invoice', 'Warranty', 'Signed Custody', 'ID/Compliance', 'Other'
+  TextColumn get filePath => text().named('file_path')();
+  TextColumn get fileType => text().named('file_type')(); // 'pdf', 'image'
+  IntColumn get fileSizeBytes => integer().named('file_size_bytes').withDefault(const Constant(0))();
+  IntColumn get pageCount => integer().named('page_count').withDefault(const Constant(1))();
+  TextColumn get linkedEmployeeName => text().named('linked_employee_name').withDefault(const Constant(''))();
+  TextColumn get linkedAssetType => text().named('linked_asset_type').withDefault(const Constant(''))();
+  TextColumn get linkedAssetLabel => text().named('linked_asset_label').withDefault(const Constant(''))();
+  TextColumn get notes => text().withDefault(const Constant(''))();
   TextColumn get createdAt => text().named('created_at').nullable()();
 }

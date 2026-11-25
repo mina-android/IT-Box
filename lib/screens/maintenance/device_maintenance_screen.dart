@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import '../../database/database_helper.dart';
 import '../../services/currency_service.dart';
+import '../../theme/app_theme.dart';
 import '../../widgets/common_widgets.dart';
 import 'device_maintenance_form_screen.dart';
 
@@ -85,11 +86,14 @@ class _DeviceMaintenanceScreenState extends State<DeviceMaintenanceScreen> {
     return Scaffold(
       appBar: FintechAppBar(
         title: '${widget.deviceName} — Maintenance',
+        subtitle: '${_logs.length} service interventions • #${widget.deviceNumber}',
       ),
-      floatingActionButton: FintechFab(
-        onPressed: _openAddLogForm,
-        tooltip: 'Log Service',
-        icon: Icons.build_rounded,
+      floatingActionButton: SmoothExitFab(
+        child: FintechFab(
+          onPressed: _openAddLogForm,
+          tooltip: 'Log Service',
+          icon: Icons.build_rounded,
+        ),
       ),
       body: Column(
         children: [
@@ -99,11 +103,11 @@ class _DeviceMaintenanceScreenState extends State<DeviceMaintenanceScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('TOTAL MAINTENANCE EXPENSE', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white70)),
+                  Text('TOTAL MAINTENANCE EXPENSE', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: cs.primary)),
                   const SizedBox(height: 6),
-                  Text(CurrencyService().format(totalCost), style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: Colors.white)),
+                  Text(CurrencyService().format(totalCost), style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: cs.onSurface)),
                   const SizedBox(height: 4),
-                  Text('${_logs.length} Service interventions recorded for #${widget.deviceNumber}', style: const TextStyle(fontSize: 12, color: Colors.white60)),
+                  Text('${_logs.length} Service interventions recorded for #${widget.deviceNumber}', style: TextStyle(fontSize: 12, color: cs.onSurface.withValues(alpha: 0.65))),
                 ],
               ),
             ),
@@ -112,18 +116,10 @@ class _DeviceMaintenanceScreenState extends State<DeviceMaintenanceScreen> {
             child: _loading
                 ? const ShimmerListLoader()
                 : _logs.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.handyman_outlined, size: 64, color: cs.primary.withValues(alpha: 0.3)),
-                            const SizedBox(height: 12),
-                            Text(
-                              'No maintenance or repairs logged for this device.',
-                              style: TextStyle(color: cs.onSurface.withValues(alpha: 0.5)),
-                            ),
-                          ],
-                        ),
+                    ? const EmptyState(
+                        icon: Icons.handyman_outlined,
+                        title: 'No Maintenance Logs',
+                        subtitle: 'Tap + to record a service or repair intervention.',
                       )
                     : ListView.builder(
                         padding: const EdgeInsets.all(16),
@@ -137,11 +133,12 @@ class _DeviceMaintenanceScreenState extends State<DeviceMaintenanceScreen> {
                           final date = log['date'] as String? ?? '';
                           final isPlanned = (log['is_planned'] as int? ?? 0) == 1;
 
-                          return Card(
+                          return Container(
                             margin: const EdgeInsets.only(bottom: 8),
-                            shape: RoundedRectangleBorder(
+                            decoration: BoxDecoration(
+                              color: AppColors.cardSurface(context),
                               borderRadius: BorderRadius.circular(14),
-                              side: BorderSide(color: cs.outline.withValues(alpha: 0.15)),
+                              border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.25)),
                             ),
                             child: Padding(
                               padding: const EdgeInsets.all(12),

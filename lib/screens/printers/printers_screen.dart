@@ -8,7 +8,8 @@ import '../maintenance/device_maintenance_screen.dart';
 import 'printer_form_screen.dart';
 
 class PrintersScreen extends StatefulWidget {
-  const PrintersScreen({super.key});
+  final int? initialItemId;
+  const PrintersScreen({super.key, this.initialItemId});
   @override
   State<PrintersScreen> createState() => _PrintersScreenState();
 }
@@ -20,6 +21,7 @@ class _PrintersScreenState extends State<PrintersScreen> with AutomaticKeepAlive
   List<Printer> _all = [];
   List<Printer> _filtered = [];
   bool _loading = true;
+  bool _handledInitial = false;
   final Set<int> _selectedIds = <int>{};
   bool get _isSelectionMode => _selectedIds.isNotEmpty;
 
@@ -61,6 +63,17 @@ class _PrintersScreenState extends State<PrintersScreen> with AutomaticKeepAlive
         _all = list;
         _applyFilter();
       });
+      if (!_handledInitial && widget.initialItemId != null) {
+        final match = list.where((p) => p.id == widget.initialItemId).firstOrNull;
+        if (match != null) {
+          _handledInitial = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              _showDetail(match);
+            }
+          });
+        }
+      }
     } catch (e) {
       if (mounted) {
         showSnack(context, 'Failed to load printers: $e', error: true);
@@ -204,7 +217,6 @@ class _PrintersScreenState extends State<PrintersScreen> with AutomaticKeepAlive
                         subtitle: _search.text.isEmpty
                             ? 'Tap + to register a printer'
                             : 'Try a different search',
-                        onRefresh: _load,
                       )
                     : GridView.builder(
                         padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
@@ -258,6 +270,13 @@ class _PrintersScreenState extends State<PrintersScreen> with AutomaticKeepAlive
       bottomNavigationBar: _isSelectionMode
           ? SelectionBottomBar(
               selectedCount: _selectedIds.length,
+              totalCount: _filtered.length,
+              onSelectAll: () {
+                setState(() {
+                  _selectedIds.addAll(_filtered.where((p) => p.id != null).map((p) => p.id!));
+                });
+              },
+              onDeselectAll: () => setState(() => _selectedIds.clear()),
               onClose: () => setState(() => _selectedIds.clear()),
               onDelete: _bulkDelete,
               trailingActions: [

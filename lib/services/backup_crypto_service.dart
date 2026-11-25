@@ -1,7 +1,10 @@
 // lib/services/backup_crypto_service.dart
 import 'dart:convert';
+import 'dart:math';
 import 'package:crypto/crypto.dart' as crypto;
 import 'package:cryptography/cryptography.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import '../database/app_database.dart';
 
 /// Service providing SHA-256 payload integrity hashing and
 /// opt-in AES-256-GCM authenticated encryption for backups.
@@ -17,12 +20,6 @@ class BackupCryptoService {
   String computeSha256(String content) {
     final bytes = utf8.encode(content);
     return crypto.sha256.convert(bytes).toString();
-  }
-
-  /// Verifies whether the provided SHA-256 hex digest matches the content.
-  bool verifySha256(String content, String expectedHash) {
-    final calculated = computeSha256(content);
-    return calculated.toLowerCase() == expectedHash.trim().toLowerCase();
   }
 
   /// Checks if the raw JSON string is an AES-encrypted backup envelope.
@@ -45,8 +42,9 @@ class BackupCryptoService {
       bits: 256,
     );
 
-    // Generate random 16-byte salt
-    final saltBytes = List<int>.generate(16, (i) => (DateTime.now().microsecondsSinceEpoch + i * 31) % 256);
+    // Generate cryptographically secure random 16-byte salt
+    final rng = Random.secure();
+    final saltBytes = List<int>.generate(16, (_) => rng.nextInt(256));
     final nonce = algorithm.newNonce();
 
     final derivedKey = await pbkdf2.deriveKey(
@@ -60,10 +58,18 @@ class BackupCryptoService {
       nonce: nonce,
     );
 
+    String appVer = '1.2.0+7';
+    try {
+      final info = await PackageInfo.fromPlatform();
+      if (info.version.isNotEmpty) {
+        appVer = '${info.version}+${info.buildNumber}';
+      }
+    } catch (_) {}
+
     final envelope = <String, dynamic>{
       'format': encryptedFormatIdentifier,
-      'schema_version': 15,
-      'app_version': '1.1.0+5',
+      'schema_version': AppDatabase.currentVersion,
+      'app_version': appVer,
       'kdf': 'PBKDF2-HMAC-SHA256',
       'iterations': pbkdf2Iterations,
       'salt': base64Encode(saltBytes),

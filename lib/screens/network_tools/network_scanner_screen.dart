@@ -146,20 +146,21 @@ class _NetworkScannerScreenState extends State<NetworkScannerScreen> {
                   const SizedBox(height: 10),
                   Wrap(
                     spacing: 8,
+                    runSpacing: 6,
                     children: [
-                      ActionChip(
-                        avatar: const Icon(Icons.tune_rounded, size: 14),
-                        label: Text('$fallbackSubnet.0/24 (Full Subnet)'),
-                        onPressed: () {
+                      FintechFilterPill(
+                        icon: Icons.tune_rounded,
+                        label: '$fallbackSubnet.0/24 (Full Subnet)',
+                        onTap: () {
                           setSheetState(() {
                             rangeCtrl.text = '$fallbackSubnet.0/24';
                           });
                         },
                       ),
-                      ActionChip(
-                        avatar: const Icon(Icons.router_rounded, size: 14),
-                        label: Text('$fallbackSubnet.1-30 (Gateway & Infra)'),
-                        onPressed: () {
+                      FintechFilterPill(
+                        icon: Icons.router_rounded,
+                        label: '$fallbackSubnet.1-30 (Gateway & Infra)',
+                        onTap: () {
                           setSheetState(() {
                             rangeCtrl.text = '$fallbackSubnet.1-30';
                           });
@@ -621,35 +622,30 @@ class _NetworkScannerScreenState extends State<NetworkScannerScreen> {
                 // Device Cards List
                 Expanded(
                   child: displayList.isEmpty
-                      ? Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.radar_rounded, size: 64, color: cs.primary.withValues(alpha: 0.35)),
-                              const SizedBox(height: 12),
-                              Text(
-                                _isScanning
-                                    ? 'Scanning network scope for active hosts…'
-                                    : (_hosts.isEmpty
-                                        ? 'Tap "Scan Network" to sweep scope'
-                                        : 'No devices match your filter criteria'),
-                                style: TextStyle(fontSize: 14, color: cs.onSurface.withValues(alpha: 0.6)),
-                              ),
-                            ],
-                          ),
+                      ? EmptyState(
+                          icon: Icons.radar_rounded,
+                          title: _isScanning
+                              ? 'Scanning Network…'
+                              : (_hosts.isEmpty ? 'Ready to Scan' : 'No Matching Devices'),
+                          subtitle: _isScanning
+                              ? 'Sweeping network scope for active hosts…'
+                              : (_hosts.isEmpty
+                                  ? 'Tap "Scan Network" to sweep scope'
+                                  : 'No devices match your filter criteria'),
                         )
                       : ListView.builder(
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                           itemCount: displayList.length,
                           itemBuilder: (context, i) {
                             final h = displayList[i];
-                            return Card(
+                            return Container(
                               key: ValueKey(h.ip),
                               margin: const EdgeInsets.only(bottom: 10),
-                              shape: RoundedRectangleBorder(
+                              decoration: BoxDecoration(
+                                color: AppColors.cardSurface(context),
                                 borderRadius: BorderRadius.circular(16),
-                                side: BorderSide(
-                                  color: cs.outline.withValues(alpha: 0.2),
+                                border: Border.all(
+                                  color: cs.outlineVariant.withValues(alpha: 0.25),
                                 ),
                               ),
                               child: InkWell(
@@ -839,21 +835,12 @@ class _NetworkScannerScreenState extends State<NetworkScannerScreen> {
 
   Widget _buildFilterChip(String label, int count) {
     final isSelected = _typeFilter == label;
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-
     return Padding(
       padding: const EdgeInsets.only(right: 8),
-      child: FilterChip(
+      child: FintechFilterPill(
+        label: '$label ($count)',
         selected: isSelected,
-        label: Text('$label ($count)'),
-        labelStyle: TextStyle(
-          fontSize: 12,
-          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-          color: isSelected ? cs.onPrimary : cs.onSurface,
-        ),
-        selectedColor: cs.primary,
-        onSelected: (val) {
+        onTap: () {
           setState(() {
             _typeFilter = label;
           });

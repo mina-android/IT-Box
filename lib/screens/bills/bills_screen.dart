@@ -9,17 +9,22 @@ import 'bill_form_screen.dart';
 const _billColor = Color(0xFF8B5CF6); // Electric Purple
 
 class BillsScreen extends StatefulWidget {
-  const BillsScreen({super.key});
+  final int? initialItemId;
+  const BillsScreen({super.key, this.initialItemId});
   @override
   State<BillsScreen> createState() => _BillsScreenState();
 }
 
 class _BillsScreenState extends State<BillsScreen> {
   final _db = DatabaseHelper();
+  final _searchCtrl = TextEditingController();
   List<Bill> _all = [];
   List<Bill> _filtered = [];
   String? _catFilter;
+  String _query = '';
   bool _loading = true;
+  bool _showSearch = false;
+  bool _handledInitial = false;
   final Set<int> _selectedIds = {};
   bool get _isSelectionMode => _selectedIds.isNotEmpty;
 
@@ -59,6 +64,7 @@ class _BillsScreenState extends State<BillsScreen> {
   @override
   void dispose() {
     _db.removeListener(_onDbChanged);
+    _searchCtrl.dispose();
     super.dispose();
   }
 
@@ -85,6 +91,17 @@ class _BillsScreenState extends State<BillsScreen> {
         _applyFilter();
         _loading = false;
       });
+      if (!_handledInitial && widget.initialItemId != null) {
+        final match = bills.where((b) => b.id == widget.initialItemId).firstOrNull;
+        if (match != null) {
+          _handledInitial = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              _showDetail(match);
+            }
+          });
+        }
+      }
     } catch (e) {
       if (!mounted) {
         return;
@@ -95,9 +112,19 @@ class _BillsScreenState extends State<BillsScreen> {
   }
 
   void _applyFilter() {
-    _filtered = _catFilter == null
-        ? List.from(_all)
-        : _all.where((b) => b.category == _catFilter).toList();
+    final q = _query.trim().toLowerCase();
+    _filtered = _all.where((b) {
+      if (_catFilter != null && b.category != _catFilter) {
+        return false;
+      }
+      if (q.isEmpty) {
+        return true;
+      }
+      return b.number.toLowerCase().contains(q) ||
+          b.category.toLowerCase().contains(q) ||
+          b.person.toLowerCase().contains(q) ||
+          b.notes.toLowerCase().contains(q);
+    }).toList();
   }
 
   void _setFilter(String? cat) {
@@ -196,62 +223,47 @@ class _BillsScreenState extends State<BillsScreen> {
         subtitle: _filtered.isEmpty
             ? 'Fixed lines & cellular services'
             : '${_filtered.length} active bills • ${CurrencyService().format(totalSum)}',
+        actions: [
+          FintechCircleButton(
+            icon: _showSearch ? Icons.search_off_rounded : Icons.search_rounded,
+            tooltip: 'Search',
+            onPressed: () {
+              setState(() {
+                _showSearch = !_showSearch;
+                if (!_showSearch) {
+                  _searchCtrl.clear();
+                  _query = '';
+                  _applyFilter();
+                }
+              });
+            },
+          ),
+        ],
       ),
       body: Column(
         children: [
-          // Filter chips
-          SizedBox(
-            height: 48,
-            child: ListView.separated(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              scrollDirection: Axis.horizontal,
-              itemCount: categories.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 8),
-              itemBuilder: (ctx, i) {
-                final cat = categories[i];
-                final isSelected = _catFilter == cat;
-                final label = cat ?? 'All Bills';
-                final color = cat != null ? _catColor(cat) : _billColor;
-
-                return InkWell(
-                  onTap: () => _setFilter(cat),
-                  borderRadius: BorderRadius.circular(16),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 180),
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: isSelected
-                          ? color.withValues(alpha: 0.15)
-                          : theme.colorScheme.surfaceContainerLow,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: isSelected
-                            ? color
-                            : theme.colorScheme.outlineVariant
-                                .withValues(alpha: 0.22),
-                        width: isSelected ? 1.5 : 1,
-                      ),
-                    ),
-                    child: Center(
-                      child: Text(
-                        label,
-                        style: TextStyle(
-                          fontSize: 11.5,
-                          fontWeight: isSelected
-                              ? FontWeight.w800
-                              : FontWeight.w600,
-                          color: isSelected
-                              ? color
-                              : theme.colorScheme.onSurface
-                                  .withValues(alpha: 0.75),
-                        ),
-                      ),
-                    ),
-                  ),
-                );
+          if (_showSearch)
+            SearchBar2(
+              controller: _searchCtrl,
+              hint: 'Search number, category, person or notes...',
+              onChanged: (v) {
+                setState(() {
+                  _query = v;
+                  _applyFilter();
+                });
               },
             ),
+          // Filter chips
+          FintechFilterBar(
+            children: [
+              for (final cat in categories)
+                FintechFilterPill(
+                  label: cat ?? 'All Bills',
+                  selected: _catFilter == cat,
+                  color: cat != null ? _catColor(cat) : _billColor,
+                  onTap: () => _setFilter(cat),
+                ),
+            ],
           ),
 
           // Total Bar
@@ -302,11 +314,10 @@ class _BillsScreenState extends State<BillsScreen> {
             child: _loading
                 ? const ShimmerListLoader()
                 : _filtered.isEmpty
-                    ? EmptyState(
+                    ? const EmptyState(
                         icon: Icons.receipt_long_rounded,
                         title: 'No Bills Logged',
                         subtitle: 'Tap + to register internet or phone bills',
-                        onRefresh: _load,
                       )
                     : GridView.builder(
                         padding: const EdgeInsets.fromLTRB(16, 8, 16, 90),
@@ -377,6 +388,13 @@ class _BillsScreenState extends State<BillsScreen> {
       bottomNavigationBar: _isSelectionMode
           ? SelectionBottomBar(
               selectedCount: _selectedIds.length,
+              totalCount: _filtered.length,
+              onSelectAll: () {
+                setState(() {
+                  _selectedIds.addAll(_filtered.where((b) => b.id != null).map((b) => b.id!));
+                });
+              },
+              onDeselectAll: () => setState(() => _selectedIds.clear()),
               onClose: () => setState(() => _selectedIds.clear()),
               onDelete: _bulkDelete,
             )

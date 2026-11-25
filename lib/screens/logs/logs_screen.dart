@@ -12,7 +12,14 @@ const _logColor = Color(0xFF6366F1);
 
 class LogsScreen extends StatefulWidget {
   final bool embedded;
-  const LogsScreen({super.key, this.embedded = false});
+  final int? initialItemId;
+  final int? focusRequestToken;
+  const LogsScreen({
+    super.key,
+    this.embedded = false,
+    this.initialItemId,
+    this.focusRequestToken,
+  });
 
   @override
   State<LogsScreen> createState() => _LogsScreenState();
@@ -34,6 +41,8 @@ class _LogsScreenState extends State<LogsScreen> {
   String? _stateFilter; // null | 'Open' | 'Closed' | 'High'
 
   bool _loading = true;
+  bool _handledInitial = false;
+  int? _lastHandledToken;
   String _sortField = 'date'; // 'date' | 'priority' | 'state'
   bool _sortAsc = false;
   final Set<int> _selectedIds = {};
@@ -87,10 +96,51 @@ class _LogsScreenState extends State<LogsScreen> {
           : now;
 
       await _fetchEntries();
+      await _tryOpenInitialItem();
     } finally {
       if (mounted) {
         setState(() => _loading = false);
       }
+    }
+  }
+
+  @override
+  void didUpdateWidget(LogsScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialItemId != null &&
+        widget.focusRequestToken != _lastHandledToken) {
+      _handledInitial = false;
+      _tryOpenInitialItem();
+    }
+  }
+
+  Future<void> _tryOpenInitialItem() async {
+    final targetId = widget.initialItemId;
+    if (targetId == null || _handledInitial) {
+      return;
+    }
+    var match = _all.where((e) => e.id == targetId).firstOrNull;
+    if (match == null) {
+      final allEntries = await _db.getLogEntries();
+      match = allEntries.where((e) => e.id == targetId).firstOrNull;
+      if (match != null) {
+        final parsedYear = DateTime.tryParse(match.date)?.year;
+        if (parsedYear != null && parsedYear != _selectedYear) {
+          _selectedYear = parsedYear;
+          _selectedMonth = null;
+          await _fetchEntries();
+        }
+      }
+    }
+    if (match != null && mounted) {
+      _handledInitial = true;
+      _lastHandledToken = widget.focusRequestToken;
+      final target = match;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _showTicketDetails(target);
+        }
+      });
     }
   }
 
@@ -133,7 +183,11 @@ class _LogsScreenState extends State<LogsScreen> {
     if (_stateFilter == 'Open') {
       result = result.where((e) => e.state.toLowerCase() == 'open').toList();
     } else if (_stateFilter == 'Closed') {
-      result = result.where((e) => e.state.toLowerCase() == 'closed').toList();
+      result = result
+          .where((e) =>
+              e.state.toLowerCase() == 'closed' ||
+              e.state.toLowerCase() == 'resolved')
+          .toList();
     } else if (_stateFilter == 'High') {
       result = result.where((e) => e.state.toLowerCase() == 'open' && e.priority == 'High').toList();
     }
@@ -198,10 +252,10 @@ class _LogsScreenState extends State<LogsScreen> {
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  ChoiceChip(
-                    label: const Text('All Years'),
+                  FintechFilterPill(
+                    label: 'All Years',
                     selected: _selectedYear == null,
-                    onSelected: (_) async {
+                    onTap: () async {
                       setState(() {
                         _selectedYear = null;
                         _selectedMonth = null;
@@ -210,10 +264,10 @@ class _LogsScreenState extends State<LogsScreen> {
                       await _fetchEntries();
                     },
                   ),
-                  ...allYears.map((y) => ChoiceChip(
-                        label: Text('$y'),
+                  ...allYears.map((y) => FintechFilterPill(
+                        label: '$y',
                         selected: _selectedYear == y,
-                        onSelected: (_) async {
+                        onTap: () async {
                           setState(() {
                             _selectedYear = y;
                             _selectedMonth = null;
@@ -230,20 +284,20 @@ class _LogsScreenState extends State<LogsScreen> {
                   spacing: 6,
                   runSpacing: 6,
                   children: [
-                    ChoiceChip(
-                      label: const Text('All Months'),
+                    FintechFilterPill(
+                      label: 'All Months',
                       selected: _selectedMonth == null,
-                      onSelected: (_) async {
+                      onTap: () async {
                         setState(() => _selectedMonth = null);
                         setS(() {});
                         await _fetchEntries();
                       },
                     ),
                     for (int m = 1; m <= 12; m++)
-                      ChoiceChip(
-                        label: Text(_monthNames[m].substring(0, 3)),
+                      FintechFilterPill(
+                        label: _monthNames[m].substring(0, 3),
                         selected: _selectedMonth == m,
-                        onSelected: (_) async {
+                        onTap: () async {
                           setState(() => _selectedMonth = m);
                           setS(() {});
                           await _fetchEntries();
@@ -548,27 +602,19 @@ class _LogsScreenState extends State<LogsScreen> {
           ? null
           : FintechAppBar(
               title: 'Tickets',
-              actions: [
-                if (_isSelectionMode)
-                  FintechCircleButton(
-                    icon: Icons.select_all_rounded,
-                    tooltip: 'Select All',
-                    onPressed: () {
-                      setState(() {
-                        if (_selectedIds.length == _filtered.length) {
-                          _selectedIds.clear();
-                        } else {
-                          _selectedIds.addAll(_filtered.map((e) => e.id!));
-                        }
-                      });
-                    },
-                  ),
-              ],
+              subtitle: '${_filtered.length} logged tickets',
             ),
       body: _loading ? const ShimmerListLoader() : content,
       bottomNavigationBar: _isSelectionMode
           ? SelectionBottomBar(
               selectedCount: _selectedIds.length,
+              totalCount: _filtered.length,
+              onSelectAll: () {
+                setState(() {
+                  _selectedIds.addAll(_filtered.where((e) => e.id != null).map((e) => e.id!));
+                });
+              },
+              onDeselectAll: () => setState(() => _selectedIds.clear()),
               onClose: () => setState(() => _selectedIds.clear()),
               onDelete: () async {
                 final ok = await showConfirmDialog(
@@ -654,7 +700,9 @@ class _LogsScreenState extends State<LogsScreen> {
                       entry: e,
                       theme: theme,
                       isSelected: isSelected,
-                      onTap: () => _showTicketDetails(e),
+                      onTap: _isSelectionMode
+                          ? () => _toggleSelection(e.id!)
+                          : () => _showTicketDetails(e),
                       onLongPress: () => _toggleSelection(e.id!),
                       onEdit: () => _openForm(e),
                       onDelete: () => _delete(e),

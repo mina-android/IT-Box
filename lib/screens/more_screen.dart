@@ -1,7 +1,10 @@
 // lib/screens/more_screen.dart
 import 'package:flutter/material.dart';
 import '../services/theme_service.dart';
+import '../theme/app_theme.dart';
 import '../utils/haptics.dart';
+import 'custody_documents/custody_documents_screen.dart';
+import 'documents_vault/documents_vault_screen.dart';
 import 'employees/employees_screen.dart';
 import 'bills/bills_screen.dart';
 import 'subscriptions/subscriptions_screen.dart';
@@ -97,6 +100,20 @@ class MoreScreen extends StatelessWidget {
             sub: 'Credentials & platform vault',
             color: Color(0xFFF59E0B),
             screen: AccountsPasswordsScreen(),
+          ),
+          _MoreItem(
+            icon: Icons.assignment_turned_in_rounded,
+            label: 'Custody Documents',
+            sub: 'Slips, custom forms & bulk PDF',
+            color: Color(0xFF6366F1),
+            screen: CustodyDocumentsScreen(),
+          ),
+          _MoreItem(
+            icon: Icons.document_scanner_rounded,
+            label: 'Documents Vault',
+            sub: 'Scan & archive PDFs/images',
+            color: Color(0xFF0EA5E9),
+            screen: DocumentsVaultScreen(),
           ),
         ],
       ),
@@ -272,7 +289,7 @@ class MoreScreen extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     return Container(
       decoration: BoxDecoration(
-        color: cs.surfaceContainer.withValues(alpha: isDark ? 0.45 : 0.65),
+        color: AppColors.cardSurface(context),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
           color: isDark

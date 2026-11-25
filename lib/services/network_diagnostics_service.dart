@@ -115,12 +115,22 @@ class NetworkDiagnosticsService {
   /// Estimate local network download throughput by requesting a known small test payload from gateway / local server.
   Future<SpeedEstimateResult> estimateSpeed(String targetUrl) async {
     final sw = Stopwatch();
-    final client = HttpClient()..connectionTimeout = const Duration(seconds: 4);
+    final client = HttpClient()
+      ..connectionTimeout = const Duration(seconds: 4)
+      ..badCertificateCallback = (_, __, ___) => true;
     try {
       final uri = Uri.parse(targetUrl);
       sw.start();
       final req = await client.getUrl(uri);
       final resp = await req.close();
+      if (resp.statusCode >= 400) {
+        sw.stop();
+        return SpeedEstimateResult(
+          downloadMbps: 0,
+          latencyMs: sw.elapsedMilliseconds,
+          error: 'HTTP ${resp.statusCode}',
+        );
+      }
       int bytesReceived = 0;
       await for (final chunk in resp) {
         bytesReceived += chunk.length;

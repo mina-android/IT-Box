@@ -118,9 +118,6 @@ const Map<String, String> kSeedLabels = {
 };
 
 Color seedColor(String key) => kSeedColors[key] ?? const Color(0xFF6750A4);
-// Backward compatibility alias
-Color seedColour(String key) => seedColor(key);
-const Map<String, Color> kSeedColours = kSeedColors;
 
 // ── Fonts ─────────────────────────────────────────────────────────────────────
 /// Key stored in AppSettings.appFont → display label shown in Settings UI.
@@ -435,6 +432,53 @@ ThemeData _base(ColorScheme cs, String appFont, {bool isAmoled = false}) {
     floatingActionButtonTheme: FloatingActionButtonThemeData(
       elevation: 3,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+    ),
+    elevatedButtonTheme: ElevatedButtonThemeData(
+      style: ElevatedButton.styleFrom(
+        elevation: 0,
+        backgroundColor: cs.primary,
+        foregroundColor: cs.onPrimary,
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        textStyle: readableTextTheme.labelLarge?.copyWith(
+          fontWeight: FontWeight.w700,
+          fontSize: 15,
+        ),
+      ),
+    ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: FilledButton.styleFrom(
+        elevation: 0,
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        textStyle: readableTextTheme.labelLarge?.copyWith(
+          fontWeight: FontWeight.w700,
+          fontSize: 15,
+        ),
+      ),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: OutlinedButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        side: BorderSide(
+          color: isAmoled
+              ? const Color(0xFF2E2E3C)
+              : cs.outlineVariant.withValues(alpha: 0.35),
+        ),
+        textStyle: readableTextTheme.labelLarge?.copyWith(
+          fontWeight: FontWeight.w700,
+          fontSize: 14,
+        ),
+      ),
+    ),
+    textButtonTheme: TextButtonThemeData(
+      style: TextButton.styleFrom(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        textStyle: readableTextTheme.labelLarge?.copyWith(
+          fontWeight: FontWeight.w700,
+        ),
+      ),
     ),
   );
 }

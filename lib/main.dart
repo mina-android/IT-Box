@@ -8,7 +8,9 @@ import 'services/theme_service.dart';
 import 'services/company_service.dart';
 import 'services/currency_service.dart';
 import 'services/notification_service.dart';
+import 'services/ticket_reminder_service.dart';
 import 'services/auto_backup_service.dart';
+import 'services/workmanager_service.dart';
 import 'database/database_helper.dart';
 import 'theme/app_theme.dart';
 import 'screens/home_screen.dart';
@@ -16,9 +18,26 @@ import 'screens/onboarding/onboarding_screen.dart';
 import 'screens/network_tools/network_scanner_screen.dart';
 import 'screens/barcode_scanner/barcode_scanner_screen.dart';
 import 'screens/borrowed/add_borrow_screen.dart';
+import 'screens/documents_vault/documents_vault_screen.dart';
+import 'screens/logs/log_form_screen.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 String? pendingQuickAction;
+String? pendingNotificationPayload;
+
+void handleNotificationPayload(String? payload) {
+  if (payload == null || payload.isEmpty) {
+    return;
+  }
+  final nav = navigatorKey.currentState;
+  if (nav == null) {
+    pendingNotificationPayload = payload;
+    return;
+  }
+  if (payload == NotificationService.ticketReminderPayload) {
+    nav.push(MaterialPageRoute(builder: (_) => const LogFormScreen()));
+  }
+}
 
 void handleQuickAction(String type) {
   final nav = navigatorKey.currentState;
@@ -35,6 +54,9 @@ void handleQuickAction(String type) {
       break;
     case 'action_new_borrow':
       nav.push(MaterialPageRoute(builder: (_) => const AddBorrowScreen()));
+      break;
+    case 'action_scan_doc':
+      nav.push(MaterialPageRoute(builder: (_) => const DocumentsVaultScreen(autoStartScan: true)));
       break;
   }
 }
@@ -68,13 +90,16 @@ void main() async {
     ThemeService().load(),
     CompanyService().load(),
     CurrencyService().load(),
-    NotificationService().init(),
+    TicketReminderService().load(),
+    NotificationService().init(onNotificationTap: handleNotificationPayload),
+    WorkmanagerService.initialize(),
   ]);
   await DatabaseHelper().init();
 
   _cleanupOldTempFiles();
-  AutoBackupService().runIfDue();
-  CurrencyService().loadRates();
+  AutoBackupService.runCatchUpIfNeeded();
+  TicketReminderService().syncNotifications();
+  pendingNotificationPayload ??= await NotificationService().getLaunchNotificationPayload();
 
   const QuickActions quickActions = QuickActions();
   quickActions.initialize((shortcutType) {
@@ -85,17 +110,18 @@ void main() async {
     const ShortcutItem(
       type: 'action_scanner',
       localizedTitle: 'Network Scanner',
-      icon: 'ic_launcher',
     ),
     const ShortcutItem(
       type: 'action_scan_tag',
       localizedTitle: 'Scan Asset Tag',
-      icon: 'ic_launcher',
     ),
     const ShortcutItem(
       type: 'action_new_borrow',
       localizedTitle: 'New Checkout',
-      icon: 'ic_launcher',
+    ),
+    const ShortcutItem(
+      type: 'action_scan_doc',
+      localizedTitle: 'Scan to Vault',
     ),
   ]);
 
@@ -121,6 +147,11 @@ class _ITBoxAppState extends State<ITBoxApp> {
         final act = pendingQuickAction!;
         pendingQuickAction = null;
         handleQuickAction(act);
+      }
+      if (pendingNotificationPayload != null) {
+        final payload = pendingNotificationPayload!;
+        pendingNotificationPayload = null;
+        handleNotificationPayload(payload);
       }
     });
   }

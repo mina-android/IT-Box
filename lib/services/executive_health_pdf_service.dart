@@ -13,23 +13,30 @@ class ExecutiveHealthPdfService {
   static Future<void> generateAndShareExecutiveReport() async {
     final pdf = pw.Document();
     final db = DatabaseHelper();
-    final counts = await db.getCounts();
-    final expenses = await db.getExpenses();
-    final subscriptions = await db.getSubscriptions();
-    final bills = await db.getBills();
-    final activities = await db.getAuditActivities(limit: 6);
+    final results = await Future.wait([
+      db.getCounts(),
+      db.getTotalExpenses(),
+      db.getSubscriptions(),
+      db.getTotalBills(),
+      db.getAuditActivities(limit: 6),
+    ]);
+    final counts = results[0] as Map<String, int>;
+    final totalExpenseCost = results[1] as double;
+    final subscriptions = results[2] as List<dynamic>;
+    final totalBills = results[3] as double;
+    final activities = results[4] as List<Map<String, dynamic>>;
 
-    final totalExpenseCost = expenses.fold(0.0, (sum, e) => sum + e.price);
-    final totalMonthlySubs = subscriptions.fold(0.0, (sum, s) => sum + s.monthlyEquivalent);
-    final totalBills = bills.fold(0.0, (sum, b) => sum + b.price);
+    final totalMonthlySubs = subscriptions.fold<double>(0.0, (sum, s) => sum + (s.monthlyEquivalent as double));
     final totalFleetCount = (counts['laptops'] ?? 0) +
         (counts['network_devices'] ?? 0) +
+        (counts['access_points'] ?? 0) +
         (counts['printers'] ?? 0) +
         (counts['electronics'] ?? 0) +
-        (counts['mifis'] ?? 0);
+        (counts['mifis'] ?? 0) +
+        (counts['other_devices'] ?? 0);
 
     final fmt = NumberFormat('#,##0.00', 'en_US');
-    final companyName = CompanyService().name;
+    final companyName = CompanyService().name.isNotEmpty ? CompanyService().name : 'IT BOX';
     final nowFormatted = DateFormat('MMMM dd, yyyy').format(DateTime.now());
 
     pdf.addPage(

@@ -40,7 +40,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   Future<void> _restoreBackup() async {
     try {
       final result = await FilePickerPlatform.instance.pickFiles(
-          type: FileType.custom, allowedExtensions: ['json']);
+          type: FileType.custom, allowedExtensions: ['json', 'enc']);
       if (result.isEmpty || !mounted) {
         return;
       }
@@ -51,7 +51,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       String? passphrase;
 
       if (summary.isEncrypted && !summary.isValid) {
-        if (!mounted) return;
+        if (!mounted) {
+          return;
+        }
         final passCtrl = TextEditingController();
         final okPass = await showDialog<bool>(
           context: context,
@@ -67,6 +69,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   controller: passCtrl,
                   obscureText: true,
                   autofocus: true,
+                  enableSuggestions: false,
+                  autocorrect: false,
                   decoration: const InputDecoration(
                     labelText: 'Passphrase',
                     prefixIcon: Icon(Icons.lock_rounded),
@@ -80,12 +84,17 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             ],
           ),
         );
-        if (okPass != true || !mounted) return;
         passphrase = passCtrl.text.trim();
+        Future.delayed(const Duration(milliseconds: 350), passCtrl.dispose);
+        if (okPass != true || !mounted) {
+          return;
+        }
         summary = await DatabaseHelper().inspectBackupJson(rawStr, passphrase: passphrase);
       }
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       if (!summary.isValid) {
         showSnack(context, summary.validationError ?? 'Invalid backup file.', error: true);
         return;
@@ -124,13 +133,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
     return Scaffold(
       appBar: _step == 1
-          ? AppBar(
+          ? FintechAppBar(
+              title: 'Workspace Setup',
               leading: IconButton(
                 icon: const Icon(Icons.arrow_back_rounded),
                 onPressed: () => setState(() => _step = 0),
               ),
-              backgroundColor: Colors.transparent,
-              elevation: 0,
             )
           : null,
       body: SafeArea(
@@ -175,7 +183,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 if (_step == 0) ...[
                   Container(
                     decoration: BoxDecoration(
-                      color: isDark ? AppColors.darkCard : Colors.white,
+                      color: AppColors.cardSurface(context),
                       borderRadius: BorderRadius.circular(22),
                       border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
                       boxShadow: [
@@ -199,7 +207,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppColors.primary,
                               foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                               elevation: 0,
                             ),
                           ),
@@ -216,7 +223,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                             label: const Text('Restore Backup (.json)', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
                             style: OutlinedButton.styleFrom(
                               side: BorderSide(color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5)),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                             ),
                           ),
                         ),
@@ -270,7 +276,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.primary,
                             foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                             elevation: 0,
                           ),
                         ),

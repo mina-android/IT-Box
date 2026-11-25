@@ -78,7 +78,9 @@ class _LaptopFormScreenState extends State<LaptopFormScreen> {
           lap.id != widget.laptop?.id &&
           lap.laptopNumber.trim().toLowerCase() == tag.toLowerCase());
       if (duplicate) {
-        if (!mounted) return;
+        if (!mounted) {
+          return;
+        }
         _shakeKey.currentState?.shake();
         AppHaptics.tap(context, HapticStrength.heavy);
         showSnack(context, 'Laptop tag "$tag" already exists. Please choose a unique identifier.', error: true);
@@ -97,6 +99,8 @@ class _LaptopFormScreenState extends State<LaptopFormScreen> {
         condition: _condition,
         user: _selEmp?.name ?? '',
         password: _pass.text,
+        notes: widget.laptop?.notes ?? '',
+        createdAt: widget.laptop?.createdAt,
       );
       if (widget.laptop == null) {
         await _db.insertLaptop(l);
@@ -246,24 +250,47 @@ class _LaptopFormScreenState extends State<LaptopFormScreen> {
                 const SectionLabel('USER ASSIGNMENT & ACCESS'),
                 FintechGroupedCard(
                   children: [
-                    FintechDropdown<Employee?>(
-                      labelText: 'Assigned Employee',
-                      hintText: 'Unassigned',
-                      prefixIcon: const Icon(Icons.person_outline_rounded, size: 20),
-                      value: _selEmp,
-                      items: [
-                        const DropdownMenuItem<Employee?>(
-                          value: null,
-                          child: Text('Unassigned'),
+                    InkWell(
+                      onTap: () async {
+                        final picked = await showFintechEmployeePicker(
+                          context: context,
+                          employees: _employees,
+                          selectedEmployeeId: _selEmp?.id,
+                          title: 'Assign Employee',
+                          allowNone: true,
+                        );
+                        if (picked == null || !mounted) {
+                          return;
+                        }
+                        setState(() {
+                          _selEmp = picked.cleared ? null : picked.employee;
+                        });
+                      },
+                      borderRadius: BorderRadius.circular(14),
+                      child: InputDecorator(
+                        decoration: const InputDecoration(
+                          labelText: 'Assigned Employee',
+                          prefixIcon: Icon(Icons.person_outline_rounded, size: 20),
+                          suffixIcon: Icon(Icons.search_rounded, size: 20),
                         ),
-                        ..._employees.map((e) => DropdownMenuItem<Employee?>(
-                              value: e,
-                              child: Text(e.name,
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.w600)),
-                            )),
-                      ],
-                      onChanged: (v) => setState(() => _selEmp = v),
+                        child: Text(
+                          _selEmp != null
+                              ? (_selEmp!.phoneNumber.isNotEmpty
+                                  ? '${_selEmp!.name} (${_selEmp!.phoneNumber})'
+                                  : _selEmp!.name)
+                              : 'Unassigned — Tap to search',
+                          style: TextStyle(
+                            fontWeight:
+                                _selEmp != null ? FontWeight.w700 : FontWeight.normal,
+                            color: _selEmp != null
+                                ? Theme.of(context).colorScheme.onSurface
+                                : Theme.of(context)
+                                    .colorScheme
+                                    .onSurface
+                                    .withValues(alpha: 0.5),
+                          ),
+                        ),
+                      ),
                     ),
                     const SizedBox(height: 12),
                     AppTextField(
@@ -309,11 +336,6 @@ class _LaptopFormScreenState extends State<LaptopFormScreen> {
                         fontSize: 16,
                         fontWeight: FontWeight.w800,
                         letterSpacing: 0.2,
-                      ),
-                    ),
-                    style: FilledButton.styleFrom(
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(26),
                       ),
                     ),
                   ),

@@ -61,9 +61,21 @@ class _NetworkDeviceFormScreenState extends State<NetworkDeviceFormScreen> {
     }
     setState(() => _saving = true);
     try {
+      final tag = _num.text.trim();
+      final existing = await _db.getNetworkDevices();
+      if (existing.any((e) => e.id != widget.device?.id && e.deviceNumber.trim().toLowerCase() == tag.toLowerCase())) {
+        if (!mounted) {
+          return;
+        }
+        _shakeKey.currentState?.shake();
+        showSnack(context, 'Router tag "$tag" already exists.', error: true);
+        setState(() => _saving = false);
+        return;
+      }
+
       final d = NetworkDevice(
         id: widget.device?.id,
-        deviceNumber: _num.text.trim(),
+        deviceNumber: tag,
         model: _model.text.trim(),
         phoneNumber: _phone.text.trim(),
         deviceLocation: _loc.text.trim(),
@@ -73,6 +85,7 @@ class _NetworkDeviceFormScreenState extends State<NetworkDeviceFormScreen> {
         gateway: _gateway.text.trim(),
         adminPassword: _adminPass.text,
         status: widget.device?.status ?? 'Available',
+        notes: widget.device?.notes ?? '',
       );
       if (widget.device == null) {
         await _db.insertNetworkDevice(d);
@@ -262,7 +275,7 @@ class _NetworkDeviceFormScreenState extends State<NetworkDeviceFormScreen> {
                     ),
                     style: FilledButton.styleFrom(
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(26),
+                        borderRadius: BorderRadius.circular(16),
                       ),
                     ),
                   ),

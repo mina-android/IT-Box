@@ -6,7 +6,8 @@ import '../../widgets/common_widgets.dart';
 import 'account_password_form_screen.dart';
 
 class AccountsPasswordsScreen extends StatefulWidget {
-  const AccountsPasswordsScreen({super.key});
+  final int? initialItemId;
+  const AccountsPasswordsScreen({super.key, this.initialItemId});
 
   @override
   State<AccountsPasswordsScreen> createState() => _AccountsPasswordsScreenState();
@@ -16,6 +17,8 @@ class _AccountsPasswordsScreenState extends State<AccountsPasswordsScreen> {
   final DatabaseHelper _db = DatabaseHelper();
   final TextEditingController _searchCtrl = TextEditingController();
   bool _loading = true;
+  bool _showSearch = false;
+  bool _handledInitial = false;
   List<AccountPassword> _accounts = [];
   final Set<int> _revealedPasswords = {};
 
@@ -44,6 +47,17 @@ class _AccountsPasswordsScreenState extends State<AccountsPasswordsScreen> {
         _accounts = items;
         _loading = false;
       });
+      if (!_handledInitial && widget.initialItemId != null) {
+        final match = items.where((a) => a.id == widget.initialItemId).firstOrNull;
+        if (match != null) {
+          _handledInitial = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              _openForm(match);
+            }
+          });
+        }
+      }
     }
   }
 
@@ -99,41 +113,47 @@ class _AccountsPasswordsScreenState extends State<AccountsPasswordsScreen> {
       appBar: FintechAppBar(
         title: 'Accounts & Passwords Vault',
         subtitle: '${_accounts.length} credentials stored securely offline',
+        actions: [
+          FintechCircleButton(
+            icon: _showSearch ? Icons.search_off_rounded : Icons.search_rounded,
+            tooltip: 'Search',
+            onPressed: () {
+              setState(() {
+                _showSearch = !_showSearch;
+                if (!_showSearch) {
+                  _searchCtrl.clear();
+                }
+              });
+            },
+          ),
+        ],
       ),
-      floatingActionButton: FintechFab(
-        onPressed: () => _openForm(),
-        tooltip: 'Add Account',
-        icon: Icons.add_rounded,
+      floatingActionButton: SmoothExitFab(
+        child: FintechFab(
+          onPressed: () => _openForm(),
+          tooltip: 'Add Account',
+          icon: Icons.add_rounded,
+        ),
       ),
       body: Column(
         children: [
-          SearchBar2(
-            controller: _searchCtrl,
-            hint: 'Search platform, email, or username...',
-          ),
+          if (_showSearch)
+            SearchBar2(
+              controller: _searchCtrl,
+              hint: 'Search platform, email, or username...',
+            ),
 
           // Accounts List
           Expanded(
             child: _loading
                 ? const ShimmerListLoader()
                 : filtered.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.vpn_key_off_outlined, size: 64, color: cs.outlineVariant),
-                            const SizedBox(height: 12),
-                            Text(
-                              _searchCtrl.text.isEmpty ? 'No accounts stored yet' : 'No accounts match "${_searchCtrl.text}"',
-                              style: TextStyle(fontWeight: FontWeight.w700, color: cs.onSurfaceVariant),
-                            ),
-                            const SizedBox(height: 6),
-                            const Text(
-                              'Tap "+ Add Account" to save platform logins and passwords',
-                              style: TextStyle(fontSize: 12, color: Colors.grey),
-                            ),
-                          ],
-                        ),
+                    ? EmptyState(
+                        icon: Icons.vpn_key_off_outlined,
+                        title: _searchCtrl.text.isEmpty ? 'No Accounts Stored Yet' : 'No Matching Accounts',
+                        subtitle: _searchCtrl.text.isEmpty
+                            ? 'Tap + to save platform logins and passwords'
+                            : 'No accounts match "${_searchCtrl.text}"',
                       )
                     : ListView.separated(
                         padding: const EdgeInsets.fromLTRB(16, 8, 16, 90),

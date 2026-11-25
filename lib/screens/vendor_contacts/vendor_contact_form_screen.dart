@@ -21,6 +21,7 @@ class _VendorContactFormScreenState extends State<VendorContactFormScreen> {
   final _db = DatabaseHelper();
 
   late String _contactType;
+  late String _slaTier;
   late final TextEditingController _nameCtrl;
   late final TextEditingController _companyCtrl;
   late final TextEditingController _roleCtrl;
@@ -49,6 +50,7 @@ class _VendorContactFormScreenState extends State<VendorContactFormScreen> {
     if (!_types.contains(_contactType)) {
       _contactType = 'Vendor';
     }
+    _slaTier = VendorContact.slaTiers.contains(c?.slaTier ?? '') ? (c?.slaTier ?? '') : '';
     _nameCtrl = TextEditingController(text: c?.name ?? '');
     _companyCtrl = TextEditingController(text: c?.company ?? '');
     _roleCtrl = TextEditingController(text: c?.role ?? '');
@@ -91,6 +93,7 @@ class _VendorContactFormScreenState extends State<VendorContactFormScreen> {
         email: _emailCtrl.text.trim(),
         portalUrl: _portalCtrl.text.trim(),
         accountNumber: _accountNumberCtrl.text.trim(),
+        slaTier: _slaTier,
         notes: _notesCtrl.text.trim(),
       );
 
@@ -192,6 +195,7 @@ class _VendorContactFormScreenState extends State<VendorContactFormScreen> {
                     const SizedBox(height: 14),
                     AppTextField(
                       controller: _emailCtrl,
+                      style: credentialFont(),
                       decoration: const InputDecoration(
                         labelText: 'Support Email',
                         prefixIcon: Icon(Icons.email_rounded, size: 20),
@@ -201,10 +205,25 @@ class _VendorContactFormScreenState extends State<VendorContactFormScreen> {
                     const SizedBox(height: 14),
                     AppTextField(
                       controller: _accountNumberCtrl,
+                      style: credentialFont(),
                       decoration: const InputDecoration(
                         labelText: 'Account / Contract / CID #',
                         prefixIcon: Icon(Icons.numbers_rounded, size: 20),
                       ),
+                    ),
+                    const SizedBox(height: 14),
+                    FintechDropdown<String>(
+                      labelText: 'SLA Tier',
+                      prefixIcon: const Icon(Icons.verified_outlined, size: 20),
+                      value: _slaTier,
+                      items: VendorContact.slaTiers
+                          .map((t) => DropdownMenuItem(value: t, child: Text(t.isEmpty ? 'None' : t)))
+                          .toList(),
+                      onChanged: (val) {
+                        if (val != null) {
+                          setState(() => _slaTier = val);
+                        }
+                      },
                     ),
                     const SizedBox(height: 14),
                     AppTextField(

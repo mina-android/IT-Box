@@ -4,7 +4,6 @@ import '../../database/database_helper.dart';
 import '../../models/employee.dart';
 import '../../models/log_entry.dart';
 import '../../widgets/common_widgets.dart';
-import '../../theme/app_theme.dart';
 
 const _logColor = Color(0xFF6366F1);
 
@@ -70,161 +69,26 @@ class _LogFormScreenState extends State<LogFormScreen> {
     }
   }
 
-  static const _noneEmployee = Employee(id: -1, name: '');
-
   Future<void> _openEmployeePicker() async {
-    final theme = Theme.of(context);
-    final searchCtrl = TextEditingController();
-    List<Employee> filtered = List.from(_employees);
-
-    final selected = await showModalBottomSheet<Employee?>(
+    final picked = await showFintechEmployeePicker(
       context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setModalState) {
-          return Padding(
-            padding: EdgeInsets.only(
-              top: 16,
-              left: 20,
-              right: 20,
-              bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Container(
-                    width: 36,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  'Select Requester (Employee)',
-                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
-                ),
-                const SizedBox(height: 12),
-                AppTextField(
-                  controller: searchCtrl,
-                  decoration: const InputDecoration(
-                    hintText: 'Search employee name or phone...',
-                    prefixIcon: Icon(Icons.search_rounded),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  ),
-                  onChanged: (q) {
-                    final query = q.toLowerCase().trim();
-                    setModalState(() {
-                      filtered = _employees.where((e) {
-                        return e.name.toLowerCase().contains(query) ||
-                            e.phoneNumber.toLowerCase().contains(query);
-                      }).toList();
-                    });
-                  },
-                ),
-                const SizedBox(height: 14),
-                ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxHeight: MediaQuery.of(ctx).size.height * 0.45,
-                  ),
-                  child: ListView(
-                    shrinkWrap: true,
-                    children: [
-                      ListTile(
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        leading: Container(
-                          width: 36,
-                          height: 36,
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.surfaceContainerHighest,
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Icon(Icons.info_outline_rounded, size: 20, color: theme.colorScheme.onSurfaceVariant),
-                        ),
-                        title: const Text(
-                          'None (General IT issue)',
-                          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14.5),
-                        ),
-                        subtitle: const Text(
-                          'Issue is not tied to a specific employee',
-                          style: TextStyle(fontSize: 12, color: Colors.grey),
-                        ),
-                        trailing: _selectedEmployeeId == null
-                            ? Icon(Icons.check_circle_rounded, color: theme.colorScheme.primary)
-                            : null,
-                        onTap: () => Navigator.pop(ctx, _noneEmployee),
-                      ),
-                      const Divider(height: 1),
-                      if (filtered.isEmpty)
-                        const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 24),
-                          child: Center(
-                            child: Text(
-                              'No matching employees found.',
-                              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                            ),
-                          ),
-                        )
-                      else
-                        ...filtered.map((emp) {
-                          final isSel = _selectedEmployeeId == emp.id;
-                          return ListTile(
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            leading: IconBox(
-                              icon: Icons.badge_outlined,
-                              color: isSel ? theme.colorScheme.primary : AppColors.employeeColor,
-                              size: 36,
-                            ),
-                            title: Text(
-                              emp.name,
-                              style: TextStyle(
-                                fontWeight: isSel ? FontWeight.w800 : FontWeight.w600,
-                                fontSize: 14.5,
-                              ),
-                            ),
-                            subtitle: emp.phoneNumber.isNotEmpty
-                                ? Text(
-                                    emp.phoneNumber,
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                                    ),
-                                  )
-                                : null,
-                            trailing: isSel
-                                ? Icon(Icons.check_circle_rounded, color: theme.colorScheme.primary)
-                                : null,
-                            onTap: () => Navigator.pop(ctx, emp),
-                          );
-                        }),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
-      ),
+      employees: _employees,
+      selectedEmployeeId: _selectedEmployeeId,
+      title: 'Select Requester (Employee)',
+      allowNone: true,
     );
-
-    if (selected != null) {
-      setState(() {
-        if (selected == _noneEmployee) {
-          _selectedEmployeeId = null;
-          _selectedEmployeeName = '';
-        } else {
-          _selectedEmployeeId = selected.id;
-          _selectedEmployeeName = selected.name;
-        }
-      });
+    if (picked == null || !mounted) {
+      return;
     }
+    setState(() {
+      if (picked.cleared || picked.employee == null) {
+        _selectedEmployeeId = null;
+        _selectedEmployeeName = '';
+      } else {
+        _selectedEmployeeId = picked.employee!.id;
+        _selectedEmployeeName = picked.employee!.name;
+      }
+    });
   }
 
   Future<void> _save() async {

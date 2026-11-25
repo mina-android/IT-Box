@@ -7,6 +7,7 @@ class BorrowLog {
   final int employeeId;
   final String employeeName;
   final String reason;
+  final String notes;
   final String outDate;
   final String? backDate;
   final String? dueDate;
@@ -22,6 +23,7 @@ class BorrowLog {
     required this.employeeId,
     required this.employeeName,
     required this.reason,
+    this.notes = '',
     required this.outDate,
     this.backDate,
     this.dueDate,
@@ -38,6 +40,7 @@ class BorrowLog {
     'employee_id': employeeId,
     'employee_name': employeeName,
     'reason': reason,
+    'notes': notes,
     'out_date': outDate,
     'back_date': backDate,
     'due_date': dueDate,
@@ -54,6 +57,7 @@ class BorrowLog {
     employeeId: (m['employee_id'] ?? 0) as int,
     employeeName: (m['employee_name'] ?? '') as String,
     reason: (m['reason'] ?? '') as String,
+    notes: (m['notes'] ?? '') as String,
     outDate: (m['out_date'] ?? '') as String,
     backDate: m['back_date'] as String?,
     dueDate: m['due_date'] as String?,
@@ -63,8 +67,8 @@ class BorrowLog {
 
   BorrowLog copyWith({
     int? id, String? deviceType, int? deviceId, String? deviceName, String? deviceNumber,
-    int? employeeId, String? employeeName, String? reason, String? outDate,
-    String? backDate,    String? dueDate,
+    int? employeeId, String? employeeName, String? reason, String? notes, String? outDate,
+    String? backDate, String? dueDate,
     String? reminderTime,
     bool? isReturned,
   }) => BorrowLog(
@@ -76,6 +80,7 @@ class BorrowLog {
     employeeId: employeeId ?? this.employeeId,
     employeeName: employeeName ?? this.employeeName,
     reason: reason ?? this.reason,
+    notes: notes ?? this.notes,
     outDate: outDate ?? this.outDate,
     backDate: backDate ?? this.backDate,
     dueDate: dueDate ?? this.dueDate,

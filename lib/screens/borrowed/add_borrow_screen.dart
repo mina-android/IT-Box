@@ -35,6 +35,7 @@ class _AddBorrowScreenState extends State<AddBorrowScreen> {
   DateTime? _dueDate;
   TimeOfDay _reminderTime = const TimeOfDay(hour: 9, minute: 0);
   final _reason = TextEditingController();
+  final _notes = TextEditingController();
 
   @override
   void initState() {
@@ -45,6 +46,7 @@ class _AddBorrowScreenState extends State<AddBorrowScreen> {
   @override
   void dispose() {
     _reason.dispose();
+    _notes.dispose();
     super.dispose();
   }
 
@@ -62,6 +64,7 @@ class _AddBorrowScreenState extends State<AddBorrowScreen> {
       if (widget.logToEdit != null) {
         _deviceType = widget.logToEdit!.deviceType;
         _reason.text = widget.logToEdit!.reason;
+        _notes.text = widget.logToEdit!.notes;
         _outDate = DateTime.tryParse(widget.logToEdit!.outDate) ?? DateTime.now();
         if (widget.logToEdit!.dueDate != null) {
           _dueDate = DateTime.tryParse(widget.logToEdit!.dueDate!);
@@ -183,6 +186,7 @@ class _AddBorrowScreenState extends State<AddBorrowScreen> {
         employeeId: _selEmp!.id!,
         employeeName: _selEmp!.name,
         reason: _reason.text.trim(),
+        notes: _notes.text.trim(),
         outDate: DateFormat('yyyy-MM-dd').format(_outDate),
         backDate: old?.backDate,
         dueDate: _dueDate != null ? DateFormat('yyyy-MM-dd').format(_dueDate!) : null,
@@ -236,162 +240,36 @@ class _AddBorrowScreenState extends State<AddBorrowScreen> {
   }
 
   Future<void> _openEmployeePicker() async {
-    final theme = Theme.of(context);
-    final searchCtrl = TextEditingController();
-    List<Employee> filtered = List.from(_employees);
-
-    final selected = await showModalBottomSheet<Employee>(
+    final picked = await showFintechEmployeePicker(
       context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setModalState) {
-          return Padding(
-            padding: EdgeInsets.only(
-              top: 16,
-              left: 20,
-              right: 20,
-              bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Container(
-                    width: 36,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  'Select Borrower (Employee)',
-                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
-                ),
-                const SizedBox(height: 12),
-                AppTextField(
-                  controller: searchCtrl,
-                  decoration: const InputDecoration(
-                    hintText: 'Search employee name or phone...',
-                    prefixIcon: Icon(Icons.search_rounded),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  ),
-                  onChanged: (q) {
-                    final query = q.toLowerCase().trim();
-                    setModalState(() {
-                      filtered = _employees.where((e) {
-                        return e.name.toLowerCase().contains(query) ||
-                            e.phoneNumber.toLowerCase().contains(query);
-                      }).toList();
-                    });
-                  },
-                ),
-                const SizedBox(height: 14),
-                ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxHeight: MediaQuery.of(ctx).size.height * 0.45,
-                  ),
-                  child: filtered.isEmpty
-                      ? const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 24),
-                          child: Center(
-                            child: Text(
-                              'No matching employees found.',
-                              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                            ),
-                          ),
-                        )
-                      : ListView.separated(
-                          shrinkWrap: true,
-                          itemCount: filtered.length,
-                          separatorBuilder: (_, __) => const Divider(height: 1),
-                          itemBuilder: (_, i) {
-                            final emp = filtered[i];
-                            final isSel = _selEmp?.id == emp.id;
-                            return ListTile(
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                              leading: IconBox(
-                                icon: Icons.badge_outlined,
-                                color: isSel ? AppColors.borrowed : AppColors.employeeColor,
-                                size: 36,
-                              ),
-                              title: Text(
-                                emp.name,
-                                style: TextStyle(
-                                  fontWeight: isSel ? FontWeight.w800 : FontWeight.w600,
-                                  fontSize: 14.5,
-                                ),
-                              ),
-                              subtitle: emp.phoneNumber.isNotEmpty
-                                  ? Text(emp.phoneNumber, style: const TextStyle(fontSize: 12))
-                                  : null,
-                              trailing: isSel
-                                  ? const Icon(Icons.check_circle_rounded, color: AppColors.borrowed)
-                                  : null,
-                              onTap: () => Navigator.pop(ctx, emp),
-                            );
-                          },
-                        ),
-                ),
-              ],
-            ),
-          );
-        },
-      ),
+      employees: _employees,
+      selectedEmployeeId: _selEmp?.id,
+      title: 'Select Borrower (Employee)',
+      accentColor: AppColors.borrowed,
     );
-
-    if (selected != null && mounted) {
-      setState(() => _selEmp = selected);
+    if (picked?.employee != null && mounted) {
+      setState(() => _selEmp = picked!.employee);
     }
   }
 
   Future<void> _openDevicePicker() async {
-    final theme = Theme.of(context);
     final searchCtrl = TextEditingController();
 
     if (_deviceType == 'electronic') {
       List<Electronic> filtered = List.from(_availableEl);
-      final selected = await showModalBottomSheet<Electronic>(
+      final selected = await showFintechBottomSheet<Electronic>(
         context: context,
-        isScrollControlled: true,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-        ),
-        builder: (ctx) => StatefulBuilder(
+        title: 'Select Electronic Device',
+        child: StatefulBuilder(
           builder: (ctx, setModalState) {
             return Padding(
               padding: EdgeInsets.only(
-                top: 16,
-                left: 20,
-                right: 20,
                 bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Center(
-                    child: Container(
-                      width: 36,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Select Electronic Device',
-                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
-                  ),
-                  const SizedBox(height: 12),
                   AppTextField(
                     controller: searchCtrl,
                     decoration: const InputDecoration(
@@ -463,41 +341,19 @@ class _AddBorrowScreenState extends State<AddBorrowScreen> {
       }
     } else {
       List<MiFi> filtered = List.from(_availableMi);
-      final selected = await showModalBottomSheet<MiFi>(
+      final selected = await showFintechBottomSheet<MiFi>(
         context: context,
-        isScrollControlled: true,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-        ),
-        builder: (ctx) => StatefulBuilder(
+        title: 'Select MiFi Device',
+        child: StatefulBuilder(
           builder: (ctx, setModalState) {
             return Padding(
               padding: EdgeInsets.only(
-                top: 16,
-                left: 20,
-                right: 20,
                 bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Center(
-                    child: Container(
-                      width: 36,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Select MiFi Device',
-                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
-                  ),
-                  const SizedBox(height: 12),
                   AppTextField(
                     controller: searchCtrl,
                     decoration: const InputDecoration(
@@ -629,7 +485,7 @@ class _AddBorrowScreenState extends State<AddBorrowScreen> {
                                 padding: const EdgeInsets.symmetric(vertical: 10),
                                 decoration: BoxDecoration(
                                   color: _deviceType == 'electronic'
-                                      ? (isDark ? AppColors.darkCard : Colors.white)
+                                      ? AppColors.cardSurface(context)
                                       : Colors.transparent,
                                   borderRadius: BorderRadius.circular(10),
                                   boxShadow: _deviceType == 'electronic'
@@ -674,7 +530,7 @@ class _AddBorrowScreenState extends State<AddBorrowScreen> {
                                 padding: const EdgeInsets.symmetric(vertical: 10),
                                 decoration: BoxDecoration(
                                   color: _deviceType == 'mifi'
-                                      ? (isDark ? AppColors.darkCard : Colors.white)
+                                      ? AppColors.cardSurface(context)
                                       : Colors.transparent,
                                   borderRadius: BorderRadius.circular(10),
                                   boxShadow: _deviceType == 'mifi'
@@ -804,6 +660,16 @@ class _AddBorrowScreenState extends State<AddBorrowScreen> {
                         labelText: 'Reason for Borrowing *',
                         prefixIcon: Icon(Icons.description_outlined),
                         hintText: 'e.g. Client meeting or conference',
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    AppTextField(
+                      controller: _notes,
+                      maxLines: 3,
+                      decoration: const InputDecoration(
+                        labelText: 'Notes (Optional)',
+                        prefixIcon: Icon(Icons.notes_rounded),
+                        hintText: 'Accessories included, condition remarks, etc.',
                       ),
                     ),
                   ],

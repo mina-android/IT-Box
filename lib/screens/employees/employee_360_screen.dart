@@ -5,8 +5,13 @@ import '../../models/laptop.dart';
 import '../../models/borrow_log.dart';
 import '../../models/email_account.dart';
 import '../../models/log_entry.dart';
+import '../../models/custody_document.dart';
+import '../../models/vault_document.dart';
 import '../../database/database_helper.dart';
+import '../../services/custody_pdf_service.dart';
+import '../../theme/app_theme.dart';
 import '../../widgets/common_widgets.dart';
+import '../documents_vault/document_viewer_screen.dart';
 
 class Employee360Screen extends StatefulWidget {
   final Employee employee;
@@ -24,6 +29,8 @@ class _Employee360ScreenState extends State<Employee360Screen> {
   List<BorrowLog> _borrows = [];
   List<EmailAccount> _emails = [];
   List<LogEntry> _tickets = [];
+  List<CustodyDocument> _custodyDocs = [];
+  List<VaultDocument> _vaultDocs = [];
 
   @override
   void initState() {
@@ -33,10 +40,21 @@ class _Employee360ScreenState extends State<Employee360Screen> {
 
   Future<void> _loadDossier() async {
     setState(() => _loading = true);
-    final allLaptops = await _db.getLaptops();
-    final allBorrows = await _db.getBorrowLogs();
-    final allEmails = await _db.getEmailAccounts();
-    final allTickets = await _db.getLogEntries();
+    final results = await Future.wait([
+      _db.getLaptops(),
+      _db.getBorrowLogs(),
+      _db.getEmailAccounts(),
+      _db.getLogEntries(),
+      _db.getCustodyDocuments(),
+      _db.getVaultDocuments(),
+    ]);
+
+    final allLaptops = results[0] as List<Laptop>;
+    final allBorrows = results[1] as List<BorrowLog>;
+    final allEmails = results[2] as List<EmailAccount>;
+    final allTickets = results[3] as List<LogEntry>;
+    final allCustody = results[4] as List<CustodyDocument>;
+    final allVault = results[5] as List<VaultDocument>;
 
     final empName = widget.employee.name.toLowerCase();
 
@@ -49,6 +67,12 @@ class _Employee360ScreenState extends State<Employee360Screen> {
         .toList();
     _tickets = allTickets
         .where((t) => t.employeeId == widget.employee.id || t.employeeName.toLowerCase() == empName)
+        .toList();
+    _custodyDocs = allCustody
+        .where((c) => c.employeeName.toLowerCase() == empName)
+        .toList();
+    _vaultDocs = allVault
+        .where((v) => v.linkedEmployeeName.toLowerCase() == empName)
         .toList();
 
     if (mounted) {
@@ -132,9 +156,7 @@ class _Employee360ScreenState extends State<Employee360Screen> {
                               Navigator.pop(ctx);
                             }
                             if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Offboarding clearance verified and archived.')),
-                              );
+                              showSnack(context, 'Offboarding clearance verified and archived.');
                             }
                           }
                         : null,
@@ -219,9 +241,7 @@ class _Employee360ScreenState extends State<Employee360Screen> {
                               Navigator.pop(ctx);
                             }
                             if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Employee onboarding recorded in Audit Trail.')),
-                              );
+                              showSnack(context, 'Employee onboarding recorded in Audit Trail.');
                             }
                           }
                         : null,
@@ -244,7 +264,7 @@ class _Employee360ScreenState extends State<Employee360Screen> {
         actions: [
           FintechCircleButton(
             icon: Icons.person_add_alt_1_rounded,
-            iconColor: Colors.greenAccent,
+            iconColor: AppColors.good,
             tooltip: 'Onboard Employee',
             onPressed: _startOnboardingChecklist,
           ),
@@ -257,7 +277,7 @@ class _Employee360ScreenState extends State<Employee360Screen> {
         ],
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const ShimmerListLoader()
           : SingleChildScrollView(
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -268,13 +288,30 @@ class _Employee360ScreenState extends State<Employee360Screen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('EMPLOYEE DOSSIER', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white70)),
+                        Text(
+                          'EMPLOYEE DOSSIER',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                        ),
                         const SizedBox(height: 6),
-                        Text(widget.employee.name, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: Colors.white)),
+                        Text(
+                          widget.employee.name,
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w800,
+                            color: Theme.of(context).colorScheme.onSurface,
+                          ),
+                        ),
                         const SizedBox(height: 4),
                         Text(
                           'Phone: ${widget.employee.phoneNumber.isNotEmpty ? widget.employee.phoneNumber : "No phone registered"}',
-                          style: const TextStyle(fontSize: 12, color: Colors.white60),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
+                          ),
                         ),
                       ],
                     ),
@@ -314,8 +351,67 @@ class _Employee360ScreenState extends State<Employee360Screen> {
                         ? [const Padding(padding: EdgeInsets.all(8), child: Text('No email accounts assigned.'))]
                         : _emails.map((e) => ListTile(
                               leading: const Icon(Icons.alternate_email_rounded),
-                              title: Text(e.email),
+                              title: Text(e.email, style: credentialFont(fontSize: 13.5)),
                               subtitle: const Text('Password: ••••••••'),
+                            )).toList(),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Custody Documents
+                  FintechGroupedCard(
+                    title: 'Custody Documents (${_custodyDocs.length})',
+                    children: _custodyDocs.isEmpty
+                        ? [const Padding(padding: EdgeInsets.all(8), child: Text('No custody documents recorded.'))]
+                        : _custodyDocs.map((c) => ListTile(
+                              leading: const Icon(Icons.assignment_turned_in_rounded, color: Color(0xFF6366F1)),
+                              title: Text(c.documentNumber, style: credentialFont(fontSize: 13.5)),
+                              subtitle: Text('${c.handoverDate} • ${c.items.map((i) => i.deviceName).join(', ')}'),
+                              trailing: const Icon(Icons.chevron_right_rounded),
+                              onTap: () async {
+                                final nav = Navigator.of(context);
+                                final file = await CustodyPdfService.ensureCustodyPdfFile(c);
+                                if (!mounted) {
+                                  return;
+                                }
+                                nav.push(
+                                  MaterialPageRoute(
+                                    builder: (_) => DocumentViewerScreen(
+                                      title: '${c.documentNumber} • ${c.employeeName}',
+                                      filePath: file.path,
+                                      isPdf: true,
+                                    ),
+                                  ),
+                                );
+                              },
+                            )).toList(),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Vault Documents
+                  FintechGroupedCard(
+                    title: 'Vault Documents (${_vaultDocs.length})',
+                    children: _vaultDocs.isEmpty
+                        ? [const Padding(padding: EdgeInsets.all(8), child: Text('No vault documents linked.'))]
+                        : _vaultDocs.map((v) => ListTile(
+                              leading: Icon(
+                                v.isPdf ? Icons.picture_as_pdf_rounded : Icons.image_rounded,
+                                color: VaultDocument.colorForCategory(v.category),
+                              ),
+                              title: Text(v.title),
+                              subtitle: Text('${v.category} • ${v.formattedSize}'),
+                              trailing: const Icon(Icons.chevron_right_rounded),
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => DocumentViewerScreen(
+                                      title: v.title,
+                                      filePath: v.filePath,
+                                      isPdf: v.isPdf,
+                                    ),
+                                  ),
+                                );
+                              },
                             )).toList(),
                   ),
                   const SizedBox(height: 16),

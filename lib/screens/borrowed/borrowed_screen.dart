@@ -13,7 +13,14 @@ import 'package:signature/signature.dart';
 
 class BorrowedScreen extends StatefulWidget {
   final bool embedded;
-  const BorrowedScreen({super.key, this.embedded = false});
+  final int? initialItemId;
+  final int? focusRequestToken;
+  const BorrowedScreen({
+    super.key,
+    this.embedded = false,
+    this.initialItemId,
+    this.focusRequestToken,
+  });
   @override
   State<BorrowedScreen> createState() => _BorrowedScreenState();
 }
@@ -24,6 +31,8 @@ class _BorrowedScreenState extends State<BorrowedScreen>
   final _db = DatabaseHelper();
   List<BorrowLog> _all = [], _active = [], _history = [];
   bool _loading = true;
+  int? _lastHandledToken;
+  bool _handledInitial = false;
 
   String? _filterEmployee;
   bool _filterOverdueOnly = false;
@@ -50,7 +59,41 @@ class _BorrowedScreenState extends State<BorrowedScreen>
           _applyFilter();
           _loading = false;
         });
+        _tryOpenInitialItem();
       }
+    });
+  }
+
+  @override
+  void didUpdateWidget(BorrowedScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialItemId != null &&
+        widget.focusRequestToken != _lastHandledToken) {
+      _handledInitial = false;
+      _tryOpenInitialItem();
+    }
+  }
+
+  void _tryOpenInitialItem() {
+    final targetId = widget.initialItemId;
+    if (targetId == null || _loading || _handledInitial) {
+      return;
+    }
+    final match = _all.where((l) => l.id == targetId).firstOrNull;
+    if (match == null) {
+      return;
+    }
+    _handledInitial = true;
+    _lastHandledToken = widget.focusRequestToken;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      final targetTab = match.isReturned ? 1 : 0;
+      if (_tabs.index != targetTab) {
+        _tabs.animateTo(targetTab);
+      }
+      _showBorrowDetail(match);
     });
   }
 
@@ -89,8 +132,9 @@ class _BorrowedScreenState extends State<BorrowedScreen>
       if (q.isNotEmpty) {
         final matchesDevice = l.deviceName.toLowerCase().contains(q);
         final matchesEmployee = l.employeeName.toLowerCase().contains(q);
-        final matchesId = l.deviceId.toString().contains(q);
-        if (!matchesDevice && !matchesEmployee && !matchesId) {
+        final matchesTag = l.deviceNumber.toLowerCase().contains(q);
+        final matchesReason = l.reason.toLowerCase().contains(q);
+        if (!matchesDevice && !matchesEmployee && !matchesTag && !matchesReason) {
           return false;
         }
       }
@@ -130,17 +174,16 @@ class _BorrowedScreenState extends State<BorrowedScreen>
 
   void _showFilterModal() {
     final employees = _all.map((l) => l.employeeName).toSet().toList()..sort();
-    String? tempEmployee = _filterEmployee;
-    bool tempOverdueOnly = _filterOverdueOnly;
-    String tempSortField = _sortField;
-    bool tempSortAsc = _sortAsc;
 
     showFintechBottomSheet(
       context: context,
+      title: 'Filter & Sort Borrows',
+      subtitle: 'Organize active & returned checkouts',
       child: StatefulBuilder(
-        builder: (ctx, setMState) => SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
-          child: Column(
+        builder: (ctx, setMState) {
+          final theme = Theme.of(ctx);
+          const accent = AppColors.borrowed;
+          return Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -148,8 +191,8 @@ class _BorrowedScreenState extends State<BorrowedScreen>
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text(
-                    'Filter & Sort Borrows',
-                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17),
+                    'Status & Borrower',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
                   ),
                   TextButton(
                     onPressed: () {
@@ -160,131 +203,124 @@ class _BorrowedScreenState extends State<BorrowedScreen>
                         _sortAsc = false;
                         _applyFilter();
                       });
-                      Navigator.pop(ctx);
+                      setMState(() {});
                     },
-                    child: const Text('Reset All'),
+                    child: const Text('Reset', style: TextStyle(fontWeight: FontWeight.w700)),
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
-              FintechGroupedCard(
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
                 children: [
-                  CheckboxListTile(
-                    title: const Text(
-                      'Overdue only',
-                      style: TextStyle(
-                          fontSize: 14, fontWeight: FontWeight.w700),
-                    ),
-                    subtitle: const Text('Show devices past their due date',
-                        style: TextStyle(fontSize: 12)),
-                    value: tempOverdueOnly,
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    activeColor: Theme.of(context).colorScheme.error,
-                    onChanged: (v) =>
-                        setMState(() => tempOverdueOnly = v ?? false),
+                  FintechFilterPill(
+                    label: 'Overdue Only',
+                    icon: Icons.warning_amber_rounded,
+                    color: theme.colorScheme.error,
+                    selected: _filterOverdueOnly,
+                    onTap: () {
+                      setState(() {
+                        _filterOverdueOnly = !_filterOverdueOnly;
+                        _applyFilter();
+                      });
+                      setMState(() {});
+                    },
                   ),
+                  FintechFilterPill(
+                    label: 'All Employees',
+                    color: accent,
+                    selected: _filterEmployee == null,
+                    onTap: () {
+                      setState(() {
+                        _filterEmployee = null;
+                        _applyFilter();
+                      });
+                      setMState(() {});
+                    },
+                  ),
+                  ...employees.map((emp) {
+                    final selected = _filterEmployee == emp;
+                    return FintechFilterPill(
+                      label: emp,
+                      color: accent,
+                      selected: selected,
+                      onTap: () {
+                        setState(() {
+                          _filterEmployee = selected ? null : emp;
+                          _applyFilter();
+                        });
+                        setMState(() {});
+                      },
+                    );
+                  }),
                 ],
               ),
-              const SizedBox(height: 8),
-              const SectionLabel('BY EMPLOYEE'),
-              if (employees.isEmpty)
-                const Text('No employees with borrow records.',
-                    style: TextStyle(fontSize: 12, color: Colors.grey))
-              else
+              const Divider(height: 28),
+              const Text(
+                'Sort Ordering',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+              ),
+              const SizedBox(height: 10),
+              for (final entry in const [
+                ('out_date', 'Checkout Date'),
+                ('due_return_date', 'Due / Return Date'),
+                ('device_name', 'Device Name'),
+                ('employee_name', 'Employee Name'),
+              ])
                 Container(
-                  constraints: const BoxConstraints(maxHeight: 160),
-                  child: SingleChildScrollView(
-                    child: Wrap(
-                      spacing: 8,
-                      runSpacing: 6,
-                      children: employees.map((emp) {
-                        final selected = tempEmployee == emp;
-                        return FilterChip(
-                          label: Text(emp),
-                          selected: selected,
-                          onSelected: (sel) => setMState(
-                              () => tempEmployee = sel ? emp : null),
-                        );
-                      }).toList(),
+                  margin: const EdgeInsets.only(bottom: 6),
+                  decoration: BoxDecoration(
+                    color: _sortField == entry.$1
+                        ? accent.withValues(alpha: 0.08)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: _sortField == entry.$1
+                          ? accent
+                          : theme.colorScheme.outlineVariant.withValues(alpha: 0.2),
                     ),
                   ),
-                ),
-              const SizedBox(height: 16),
-              const SectionLabel('SORT ORDERING'),
-              FintechGroupedCard(
-                children: [
-                  for (final entry in const [
-                    ('out_date', 'Checkout Date', Icons.event_outlined),
-                    ('due_return_date', 'Due / Return Date', Icons.event_available_outlined),
-                    ('device_name', 'Device Name', Icons.devices_other_rounded),
-                    ('employee_name', 'Employee Name', Icons.person_outline_rounded),
-                  ])
-                    ListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      leading: Icon(
-                        entry.$3,
-                        size: 18,
-                        color: tempSortField == entry.$1
-                            ? Theme.of(ctx).colorScheme.primary
-                            : Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.5),
+                  child: ListTile(
+                    dense: true,
+                    title: Text(
+                      entry.$2,
+                      style: TextStyle(
+                        fontWeight: _sortField == entry.$1
+                            ? FontWeight.w700
+                            : FontWeight.w500,
                       ),
-                      title: Text(
-                        entry.$2,
-                        style: TextStyle(
-                          fontSize: 13.5,
-                          fontWeight: tempSortField == entry.$1 ? FontWeight.w700 : FontWeight.w500,
-                        ),
-                      ),
-                      trailing: tempSortField == entry.$1
-                          ? IconButton(
-                              icon: Icon(
-                                tempSortAsc ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
-                                size: 18,
-                                color: Theme.of(ctx).colorScheme.primary,
-                              ),
-                              tooltip: tempSortAsc ? 'Ascending' : 'Descending',
-                              onPressed: () => setMState(() => tempSortAsc = !tempSortAsc),
-                            )
-                          : null,
-                      onTap: () => setMState(() {
-                        if (tempSortField == entry.$1) {
-                          tempSortAsc = !tempSortAsc;
-                        } else {
-                          tempSortField = entry.$1;
-                        }
-                      }),
                     ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: FilledButton(
-                  onPressed: () {
-                    setState(() {
-                      _filterEmployee = tempEmployee;
-                      _filterOverdueOnly = tempOverdueOnly;
-                      _sortField = tempSortField;
-                      _sortAsc = tempSortAsc;
-                      _applyFilter();
-                    });
-                    Navigator.pop(ctx);
-                  },
-                  style: FilledButton.styleFrom(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(25),
-                    ),
+                    trailing: _sortField == entry.$1
+                        ? IconButton(
+                            icon: Icon(
+                              _sortAsc
+                                  ? Icons.arrow_upward_rounded
+                                  : Icons.arrow_downward_rounded,
+                              color: accent,
+                            ),
+                            tooltip: _sortAsc ? 'Ascending' : 'Descending',
+                            onPressed: () {
+                              setState(() {
+                                _sortAsc = !_sortAsc;
+                                _applyFilter();
+                              });
+                              setMState(() {});
+                            },
+                          )
+                        : null,
+                    onTap: () {
+                      setState(() {
+                        _sortField = entry.$1;
+                        _applyFilter();
+                      });
+                      setMState(() {});
+                    },
                   ),
-                  child: const Text('Apply Filter & Sort',
-                      style: TextStyle(fontWeight: FontWeight.w800)),
                 ),
-              ),
             ],
-          ),
-        ),
+          );
+        },
       ),
     );
   }
@@ -453,9 +489,29 @@ class _BorrowedScreenState extends State<BorrowedScreen>
                           serialNumber: log.deviceNumber,
                           handoverDate: log.outDate,
                           dueDate: log.dueDate ?? '',
+                          adminNotes: log.notes,
                           signatureBytes: sigBytes,
                         );
-                        if (ctx.mounted) Navigator.pop(ctx);
+                        await CustodyPdfService.archiveGeneratedSlip(
+                          tempPdfFile: file,
+                          sourceType: 'borrow',
+                          sourceId: log.id,
+                          employeeName: log.employeeName,
+                          employeePhone: emp?.phoneNumber ?? '',
+                          employeeEmail: empEmail,
+                          deviceType: log.deviceType,
+                          deviceName: log.deviceName,
+                          deviceNumber: log.deviceNumber,
+                          condition: selectedCondition,
+                          serialNumber: log.deviceNumber,
+                          handoverDate: log.outDate,
+                          dueDate: log.dueDate ?? '',
+                          adminNotes: log.notes,
+                          signatureBytes: sigBytes,
+                        );
+                        if (ctx.mounted) {
+                          Navigator.pop(ctx);
+                        }
                         await CustodyPdfService.shareCustodyFile(file, log.employeeName, log.deviceName);
                       },
                       icon: const Icon(Icons.share_rounded, size: 18),
@@ -478,9 +534,29 @@ class _BorrowedScreenState extends State<BorrowedScreen>
                           serialNumber: log.deviceNumber,
                           handoverDate: log.outDate,
                           dueDate: log.dueDate ?? '',
+                          adminNotes: log.notes,
                           signatureBytes: sigBytes,
                         );
-                        if (ctx.mounted) Navigator.pop(ctx);
+                        await CustodyPdfService.archiveGeneratedSlip(
+                          tempPdfFile: file,
+                          sourceType: 'borrow',
+                          sourceId: log.id,
+                          employeeName: log.employeeName,
+                          employeePhone: emp?.phoneNumber ?? '',
+                          employeeEmail: empEmail,
+                          deviceType: log.deviceType,
+                          deviceName: log.deviceName,
+                          deviceNumber: log.deviceNumber,
+                          condition: selectedCondition,
+                          serialNumber: log.deviceNumber,
+                          handoverDate: log.outDate,
+                          dueDate: log.dueDate ?? '',
+                          adminNotes: log.notes,
+                          signatureBytes: sigBytes,
+                        );
+                        if (ctx.mounted) {
+                          Navigator.pop(ctx);
+                        }
                         await CustodyPdfService.emailCustodyDirect(
                           file: file,
                           recipientEmail: empEmail,
@@ -676,6 +752,99 @@ class _BorrowedScreenState extends State<BorrowedScreen>
     );
   }
 
+  void _showBorrowDetail(BorrowLog log) {
+    final theme = Theme.of(context);
+    showFintechBottomSheet(
+      context: context,
+      title: log.deviceName,
+      subtitle: '# ${log.deviceNumber} • ${log.isReturned ? 'Returned' : (log.isOverdue() ? 'Overdue' : 'Active Borrow')}',
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () async {
+                    Navigator.pop(context);
+                    final ok = await Navigator.push<bool>(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => AddBorrowScreen(logToEdit: log),
+                      ),
+                    );
+                    if (ok == true && mounted) {
+                      _load(showLoader: false);
+                    }
+                  },
+                  icon: const Icon(Icons.edit_outlined, size: 17),
+                  label: const Text('Edit'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: theme.colorScheme.error,
+                    side: BorderSide(
+                      color: theme.colorScheme.error.withValues(alpha: 0.35),
+                    ),
+                  ),
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _delete(log);
+                  },
+                  icon: const Icon(Icons.delete_outline_rounded, size: 17),
+                  label: const Text('Delete'),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          const SectionLabel('BORROW DETAILS'),
+          FintechGroupedCard(
+            children: [
+              DetailRow(
+                label: 'Borrower',
+                value: log.employeeName,
+                icon: Icons.person_outline_rounded,
+              ),
+              DetailRow(
+                label: 'Reason',
+                value: log.reason,
+                icon: Icons.description_outlined,
+              ),
+              DetailRow(
+                label: 'Out Date',
+                value: log.outDate,
+                icon: Icons.calendar_today_rounded,
+              ),
+              if (log.dueDate != null && log.dueDate!.isNotEmpty)
+                DetailRow(
+                  label: 'Due Date',
+                  value: log.dueDate!,
+                  icon: Icons.event_available_rounded,
+                ),
+              if (log.backDate != null && log.backDate!.isNotEmpty)
+                DetailRow(
+                  label: 'Returned',
+                  value: log.backDate!,
+                  icon: Icons.assignment_turned_in_outlined,
+                ),
+              if (log.notes.isNotEmpty)
+                DetailRow(
+                  label: 'Notes',
+                  value: log.notes,
+                  icon: Icons.notes_rounded,
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildList({
     required List<BorrowLog> logs,
     required IconData emptyIcon,
@@ -688,7 +857,6 @@ class _BorrowedScreenState extends State<BorrowedScreen>
         icon: emptyIcon,
         title: emptyTitle,
         subtitle: emptySubtitle,
-        onRefresh: _load,
       );
     }
 
@@ -702,7 +870,6 @@ class _BorrowedScreenState extends State<BorrowedScreen>
               icon: emptyIcon,
               title: emptyTitle,
               subtitle: emptySubtitle,
-              onRefresh: _load,
             ),
           )
         else
@@ -714,6 +881,7 @@ class _BorrowedScreenState extends State<BorrowedScreen>
                   padding: const EdgeInsets.only(bottom: 8),
                   child: _BorrowCard(
                     log: logs[i],
+                    onTap: () => _showBorrowDetail(logs[i]),
                     onReturn: () => _markReturned(logs[i]),
                     onDelete: () => _delete(logs[i]),
                     onCustodySlip: () => _generateCustodySlip(logs[i]),
@@ -740,9 +908,10 @@ class _BorrowedScreenState extends State<BorrowedScreen>
 
 class _BorrowCard extends StatelessWidget {
   final BorrowLog log;
-  final VoidCallback onReturn, onDelete, onEdit, onCustodySlip;
+  final VoidCallback onTap, onReturn, onDelete, onEdit, onCustodySlip;
   const _BorrowCard({
     required this.log,
+    required this.onTap,
     required this.onReturn,
     required this.onDelete,
     required this.onEdit,
@@ -781,9 +950,12 @@ class _BorrowCard extends StatelessWidget {
           width: isOverdue ? 1.5 : 1,
         ),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
@@ -924,6 +1096,7 @@ class _BorrowCard extends StatelessWidget {
           ],
         ),
       ),
+    ),
     );
   }
 

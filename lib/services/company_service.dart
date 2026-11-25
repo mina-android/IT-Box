@@ -4,6 +4,9 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../database/app_database.dart';
 import '../database/database_helper.dart';
+import 'currency_service.dart';
+import 'document_storage_service.dart';
+import 'notification_service.dart';
 
 class OrganizationProfile {
   final String id;
@@ -236,6 +239,11 @@ class CompanyService extends ChangeNotifier {
 
     await AppDatabase.switchDatabaseInstance(target.dbFileName);
     await DatabaseHelper().onDatabaseSwitched();
+    await CurrencyService().reloadForActiveOrganization();
+    try {
+      final logs = await DatabaseHelper().getBorrowLogs();
+      await NotificationService().reconcileReminders(logs);
+    } catch (_) {}
     notifyListeners();
   }
 
@@ -259,6 +267,7 @@ class CompanyService extends ChangeNotifier {
     await _saveOrganizations(p);
 
     await AppDatabase.deleteDatabaseFile(target.dbFileName);
+    await DocumentStorageService.deleteOrganizationDirectories(target.id);
     if (target.logoPath.isNotEmpty) {
       final logoFile = File(target.logoPath);
       if (logoFile.existsSync()) {

@@ -64,9 +64,21 @@ class _MiFiFormScreenState extends State<MiFiFormScreen> {
     }
     setState(() => _saving = true);
     try {
+      final tag = _num.text.trim();
+      final existing = await _db.getMiFis();
+      if (existing.any((e) => e.id != widget.mifi?.id && e.deviceNumber.trim().toLowerCase() == tag.toLowerCase())) {
+        if (!mounted) {
+          return;
+        }
+        _shakeKey.currentState?.shake();
+        showSnack(context, 'MiFi number "$tag" already exists.', error: true);
+        setState(() => _saving = false);
+        return;
+      }
+
       final m = MiFi(
         id: widget.mifi?.id,
-        deviceNumber: _num.text.trim(),
+        deviceNumber: tag,
         model: _model.text.trim(),
         phoneNumber: _phone.text.trim(),
         wifiName: _wifi.text.trim(),
@@ -75,8 +87,10 @@ class _MiFiFormScreenState extends State<MiFiFormScreen> {
         serviceProvider: _provider.text.trim(),
         gateway: _gateway.text.trim(),
         adminPassword: _adminPass.text,
+        status: widget.mifi?.status ?? 'Available',
         excludeFromBorrowing: _excludeBorrowing,
         tag: _tag.text.trim(),
+        notes: widget.mifi?.notes ?? '',
       );
       if (widget.mifi == null) {
         await _db.insertMiFi(m);
@@ -292,7 +306,7 @@ class _MiFiFormScreenState extends State<MiFiFormScreen> {
                     style: FilledButton.styleFrom(
                       backgroundColor: _mifiColor,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(26),
+                        borderRadius: BorderRadius.circular(16),
                       ),
                     ),
                   ),

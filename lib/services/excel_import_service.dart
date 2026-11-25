@@ -15,6 +15,9 @@ import '../models/log_entry.dart';
 import '../models/subscription.dart';
 import '../models/access_point.dart';
 import '../models/other_device.dart';
+import '../models/vendor_contact.dart';
+import '../models/wifi_network.dart';
+import '../models/account_password.dart';
 import 'notification_service.dart';
 
 /// Result of an import operation
@@ -47,16 +50,41 @@ class ExcelImportService {
 
   // ── Cell value helper ─────────────────────────────────────────
   static String _str(Data? cell) {
-    if (cell == null || cell.value == null) return '';
+    if (cell == null || cell.value == null) {
+      return '';
+    }
     final v = cell.value;
-    if (v is TextCellValue) return v.value.toString().trim();
-    if (v is IntCellValue) return v.value.toString();
-    if (v is DoubleCellValue) return v.value.toString().trim();
-    if (v is BoolCellValue) return v.value.toString();
+    if (v is TextCellValue) {
+      return v.value.toString().trim();
+    }
+    if (v is IntCellValue) {
+      return v.value.toString();
+    }
+    if (v is DoubleCellValue) {
+      return v.value.toString().trim();
+    }
+    if (v is BoolCellValue) {
+      return v.value.toString();
+    }
+    if (v is DateCellValue) {
+      return '${v.year.toString().padLeft(4, '0')}-${v.month.toString().padLeft(2, '0')}-${v.day.toString().padLeft(2, '0')}';
+    }
+    if (v is DateTimeCellValue) {
+      return '${v.year.toString().padLeft(4, '0')}-${v.month.toString().padLeft(2, '0')}-${v.day.toString().padLeft(2, '0')}';
+    }
     return v.toString().trim();
   }
 
   static double _dbl(Data? cell) => double.tryParse(_str(cell)) ?? 0.0;
+
+  static Sheet _firstNonEmptySheet(Excel excel) {
+    for (final s in excel.sheets.values) {
+      if (s.rows.length > 1) {
+        return s;
+      }
+    }
+    return excel.sheets.values.first;
+  }
 
   // ── Get rows (skip header row 0, skip empty rows) ─────────────
   static List<List<Data?>> _rows(Sheet sheet) {
@@ -88,6 +116,19 @@ class ExcelImportService {
       );
     }
 
+    if (replace && (tableName == 'mifis' || tableName == 'electronics' || tableName == 'employees')) {
+      final activeBorrows = await _db.getBorrowLogs(activeOnly: true);
+      if (activeBorrows.isNotEmpty) {
+        return ImportResult(
+          inserted: 0,
+          skipped: skipped,
+          errors: [
+            'Cannot Replace All on $tableName while ${activeBorrows.length} active borrow(s) exist. Return active borrows or use Append mode.',
+          ],
+        );
+      }
+    }
+
     int inserted = 0;
     await _db.batchScope(() async {
       await _db.drift.transaction(() async {
@@ -114,7 +155,7 @@ class ExcelImportService {
   // ── LAPTOPS ──────────────────────────────────────────────────
   // Expected columns: #, Laptop No., Model, CPU, GPU, RAM, Storage, Condition, User
   static Future<ImportResult> importLaptops(Excel excel, {bool replace = false}) async {
-    final sheet = excel.sheets.values.first;
+    final sheet = _firstNonEmptySheet(excel);
     final rows = _rows(sheet);
     final items = <Laptop>[];
     int skipped = 0;
@@ -152,7 +193,7 @@ class ExcelImportService {
   // ── NETWORK DEVICES ──────────────────────────────────────────
   // Columns: #, Device No., Model, Phone No., Location, Provider, WiFi Name, Status
   static Future<ImportResult> importNetworkDevices(Excel excel, {bool replace = false}) async {
-    final sheet = excel.sheets.values.first;
+    final sheet = _firstNonEmptySheet(excel);
     final rows = _rows(sheet);
     final items = <NetworkDevice>[];
     int skipped = 0;
@@ -189,7 +230,7 @@ class ExcelImportService {
   // ── MIFIS ────────────────────────────────────────────────────
   // Columns: #, Device No., Model, Phone No., WiFi Name, Quota, Provider, Status
   static Future<ImportResult> importMiFis(Excel excel, {bool replace = false}) async {
-    final sheet = excel.sheets.values.first;
+    final sheet = _firstNonEmptySheet(excel);
     final rows = _rows(sheet);
     final items = <MiFi>[];
     int skipped = 0;
@@ -226,7 +267,7 @@ class ExcelImportService {
   // ── PRINTERS ─────────────────────────────────────────────────
   // Columns: #, Printer No., Model, Condition, Location
   static Future<ImportResult> importPrinters(Excel excel, {bool replace = false}) async {
-    final sheet = excel.sheets.values.first;
+    final sheet = _firstNonEmptySheet(excel);
     final rows = _rows(sheet);
     final items = <Printer>[];
     int skipped = 0;
@@ -260,7 +301,7 @@ class ExcelImportService {
   // ── ELECTRONICS ──────────────────────────────────────────────
   // Columns: #, Device No., Device Name, Details, Status
   static Future<ImportResult> importElectronics(Excel excel, {bool replace = false}) async {
-    final sheet = excel.sheets.values.first;
+    final sheet = _firstNonEmptySheet(excel);
     final rows = _rows(sheet);
     final items = <Electronic>[];
     int skipped = 0;
@@ -294,7 +335,7 @@ class ExcelImportService {
   // ── EMPLOYEES ────────────────────────────────────────────────
   // Columns: #, Name, Phone Number
   static Future<ImportResult> importEmployees(Excel excel, {bool replace = false}) async {
-    final sheet = excel.sheets.values.first;
+    final sheet = _firstNonEmptySheet(excel);
     final rows = _rows(sheet);
     final items = <Employee>[];
     int skipped = 0;
@@ -325,7 +366,7 @@ class ExcelImportService {
   // ── BILLS ─────────────────────────────────────────────────────
   // Columns: #, Person, Number, Category, Price (EGP), Notes
   static Future<ImportResult> importBills(Excel excel, {bool replace = false}) async {
-    final sheet = excel.sheets.values.first;
+    final sheet = _firstNonEmptySheet(excel);
     final rows = _rows(sheet);
     final items = <Bill>[];
     int skipped = 0;
@@ -366,7 +407,7 @@ class ExcelImportService {
   // Layout A (DataHub with index): #, Date, Item, Price (EGP), Details
   // Layout B (ExcelService without index): Date, Item, Price (EGP), Details
   static Future<ImportResult> importExpenses(Excel excel, {bool replace = false}) async {
-    final sheet = excel.sheets.values.first;
+    final sheet = _firstNonEmptySheet(excel);
     final rows = _rows(sheet);
     final items = <Expense>[];
     int skipped = 0;
@@ -427,7 +468,7 @@ class ExcelImportService {
   // ── EMAIL ACCOUNTS ───────────────────────────────────────────
   // Columns: #, Employee, Email, Password(hidden)
   static Future<ImportResult> importEmailAccounts(Excel excel, {bool replace = false}) async {
-    final sheet = excel.sheets.values.first;
+    final sheet = _firstNonEmptySheet(excel);
     final rows = _rows(sheet);
     final items = <EmailAccount>[];
     int skipped = 0;
@@ -476,7 +517,7 @@ class ExcelImportService {
   // ── SUBSCRIPTIONS ─────────────────────────────────────────────
   // Columns: #, Service Name, Billing Interval, Price (EGP), Renewal Date, Notes
   static Future<ImportResult> importSubscriptions(Excel excel, {bool replace = false}) async {
-    final sheet = excel.sheets.values.first;
+    final sheet = _firstNonEmptySheet(excel);
     final rows = _rows(sheet);
     final items = <Subscription>[];
     int skipped = 0;
@@ -493,11 +534,15 @@ class ExcelImportService {
           orElse: () => 'Monthly',
         );
         final rawDate = _str(row.length > 4 ? row[4] : null);
-        final normDate = _parseDate(rawDate);
-        if (normDate == null) {
-          errors.add('Row ${i + 2}: Invalid renewal date format "$rawDate" for subscription "$service".');
-          skipped++;
-          continue;
+        String normDate = '';
+        if (rawDate.isNotEmpty) {
+          final parsed = _parseDate(rawDate);
+          if (parsed == null) {
+            errors.add('Row ${i + 2}: Invalid renewal date format "$rawDate" for subscription "$service".');
+            skipped++;
+            continue;
+          }
+          normDate = parsed;
         }
         items.add(Subscription(
           service:     service,
@@ -522,7 +567,7 @@ class ExcelImportService {
   // ── ACCESS POINTS ─────────────────────────────────────────────
   // Columns: #, Device No., Model, Port No., Location
   static Future<ImportResult> importAccessPoints(Excel excel, {bool replace = false}) async {
-    final sheet = excel.sheets.values.first;
+    final sheet = _firstNonEmptySheet(excel);
     final rows = _rows(sheet);
     final items = <AccessPoint>[];
     int skipped = 0;
@@ -619,7 +664,7 @@ class ExcelImportService {
   // Layout A (DataHub with index): #, Date, Employee, Problem, Solution
   // Layout B (without index): Date, Employee, Problem, Solution
   static Future<ImportResult> importLogEntries(Excel excel, {bool replace = false}) async {
-    final sheet = excel.sheets.values.first;
+    final sheet = _firstNonEmptySheet(excel);
     final rows = _rows(sheet);
     final items = <LogEntry>[];
     int skipped = 0;
@@ -681,7 +726,7 @@ class ExcelImportService {
   // ── OTHER DEVICES ─────────────────────────────────────────────
   // Columns: #, Device Type, Device Name, Model, Notes
   static Future<ImportResult> importOtherDevices(Excel excel, {bool replace = false}) async {
-    final sheet = excel.sheets.values.first;
+    final sheet = _firstNonEmptySheet(excel);
     final rows = _rows(sheet);
     final items = <OtherDevice>[];
     int skipped = 0;
@@ -713,6 +758,177 @@ class ExcelImportService {
       errors: errors,
       replace: replace,
       inserter: (d) => _db.insertOtherDevice(d),
+    );
+  }
+
+  // ── VENDOR CONTACTS ───────────────────────────────────────────
+  // Columns: #, Type, Name, Company, Role, Phone, Email, Portal URL, Account No., SLA Tier, Notes
+  static Future<ImportResult> importVendorContacts(Excel excel, {bool replace = false}) async {
+    final sheet = _firstNonEmptySheet(excel);
+    final rows = _rows(sheet);
+    final items = <VendorContact>[];
+    int skipped = 0;
+    final errors = <String>[];
+
+    for (var i = 0; i < rows.length; i++) {
+      final row = rows[i];
+      try {
+        final type = _str(row.length > 1 ? row[1] : null);
+        final name = _str(row.length > 2 ? row[2] : null);
+        if (name.isEmpty) {
+          skipped++;
+          continue;
+        }
+        items.add(VendorContact(
+          contactType: type.isNotEmpty ? type : 'Vendor',
+          name: name,
+          company: _str(row.length > 3 ? row[3] : null),
+          role: _str(row.length > 4 ? row[4] : null),
+          phoneNumber: _str(row.length > 5 ? row[5] : null),
+          email: _str(row.length > 6 ? row[6] : null),
+          portalUrl: _str(row.length > 7 ? row[7] : null),
+          accountNumber: _str(row.length > 8 ? row[8] : null),
+          slaTier: _str(row.length > 9 ? row[9] : null),
+          notes: _str(row.length > 10 ? row[10] : null),
+        ));
+      } catch (e) {
+        errors.add('Row ${i + 2}: $e');
+        skipped++;
+      }
+    }
+
+    return _executeBatchImport<VendorContact>(
+      tableName: 'vendor_contacts',
+      items: items,
+      skipped: skipped,
+      errors: errors,
+      replace: replace,
+      inserter: (v) => _db.insertVendorContact(v),
+    );
+  }
+
+  // ── WIFI NETWORKS ─────────────────────────────────────────────
+  // Columns: #, Network Name, Password, Phone/Line, Location/Device, Admin User, Admin Pass, Notes
+  static Future<ImportResult> importWifiNetworks(Excel excel, {bool replace = false}) async {
+    final sheet = _firstNonEmptySheet(excel);
+    final rows = _rows(sheet);
+    final items = <WifiNetwork>[];
+    int skipped = 0;
+    final errors = <String>[];
+
+    for (var i = 0; i < rows.length; i++) {
+      final row = rows[i];
+      try {
+        final name = _str(row.length > 1 ? row[1] : null);
+        if (name.isEmpty) {
+          skipped++;
+          continue;
+        }
+        items.add(WifiNetwork(
+          networkName: name,
+          password: _str(row.length > 2 ? row[2] : null),
+          phoneNumber: _str(row.length > 3 ? row[3] : null),
+          locationDevice: _str(row.length > 4 ? row[4] : null),
+          adminUsername: _str(row.length > 5 ? row[5] : null),
+          adminPassword: _str(row.length > 6 ? row[6] : null),
+          notes: _str(row.length > 7 ? row[7] : null),
+        ));
+      } catch (e) {
+        errors.add('Row ${i + 2}: $e');
+        skipped++;
+      }
+    }
+
+    return _executeBatchImport<WifiNetwork>(
+      tableName: 'wifi_networks',
+      items: items,
+      skipped: skipped,
+      errors: errors,
+      replace: replace,
+      inserter: (w) => _db.insertWifiNetwork(w),
+    );
+  }
+
+  // ── ACCOUNTS & PASSWORDS ──────────────────────────────────────
+  // Columns: #, Platform, Email/Username, Password
+  static Future<ImportResult> importAccountPasswords(Excel excel, {bool replace = false}) async {
+    final sheet = _firstNonEmptySheet(excel);
+    final rows = _rows(sheet);
+    final items = <AccountPassword>[];
+    int skipped = 0;
+    final errors = <String>[];
+
+    for (var i = 0; i < rows.length; i++) {
+      final row = rows[i];
+      try {
+        final platform = _str(row.length > 1 ? row[1] : null);
+        if (platform.isEmpty) {
+          skipped++;
+          continue;
+        }
+        items.add(AccountPassword(
+          platform: platform,
+          emailUsername: _str(row.length > 2 ? row[2] : null),
+          password: _str(row.length > 3 ? row[3] : null),
+        ));
+      } catch (e) {
+        errors.add('Row ${i + 2}: $e');
+        skipped++;
+      }
+    }
+
+    return _executeBatchImport<AccountPassword>(
+      tableName: 'account_passwords',
+      items: items,
+      skipped: skipped,
+      errors: errors,
+      replace: replace,
+      inserter: (a) => _db.insertAccountPassword(a),
+    );
+  }
+
+  // ── STATIC IPs ────────────────────────────────────────────────
+  // Columns: #, IP Address, Subnet Mask, MAC Address, Assigned Device, Device Type, Notes
+  static Future<ImportResult> importStaticIps(Excel excel, {bool replace = false}) async {
+    final sheet = _firstNonEmptySheet(excel);
+    final rows = _rows(sheet);
+    final items = <Map<String, dynamic>>[];
+    int skipped = 0;
+    final errors = <String>[];
+
+    for (var i = 0; i < rows.length; i++) {
+      final row = rows[i];
+      try {
+        final ip = _str(row.length > 1 ? row[1] : null);
+        if (ip.isEmpty) {
+          skipped++;
+          continue;
+        }
+        items.add({
+          'ip_address': ip,
+          'subnet_mask': _str(row.length > 2 ? row[2] : null).isNotEmpty
+              ? _str(row.length > 2 ? row[2] : null)
+              : '255.255.255.0',
+          'mac_address': _str(row.length > 3 ? row[3] : null),
+          'assigned_device': _str(row.length > 4 ? row[4] : null),
+          'device_type': _str(row.length > 5 ? row[5] : null).isNotEmpty
+              ? _str(row.length > 5 ? row[5] : null)
+              : 'Other',
+          'notes': _str(row.length > 6 ? row[6] : null),
+        });
+      } catch (e) {
+        errors.add('Row ${i + 2}: $e');
+        skipped++;
+      }
+    }
+
+    return _executeBatchImport<Map<String, dynamic>>(
+      tableName: 'static_ips',
+      items: items,
+      skipped: skipped,
+      errors: errors,
+      replace: replace,
+      inserter: (m) => _db.insertStaticIp(m),
     );
   }
 }

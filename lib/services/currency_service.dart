@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'company_service.dart';
 import 'exchange_rate_service.dart';
 import '../widgets/common_widgets.dart';
 
@@ -101,6 +102,14 @@ class CurrencyService extends ChangeNotifier {
 
   static const _prefCurrencyKey = 'app_currency_code';
 
+  String get _scopedCurrencyKey {
+    final orgId = CompanyService().activeOrganizationId;
+    if (orgId.isEmpty || orgId == 'default') {
+      return _prefCurrencyKey;
+    }
+    return '${_prefCurrencyKey}_$orgId';
+  }
+
   final ExchangeRateService _erService = ExchangeRateService();
 
   String _currency = 'EGP';
@@ -127,13 +136,19 @@ class CurrencyService extends ChangeNotifier {
 
   Future<void> load() async {
     final prefs = await SharedPreferences.getInstance();
-    _currency = prefs.getString(_prefCurrencyKey) ?? 'EGP';
+    _currency = prefs.getString(_scopedCurrencyKey) ?? prefs.getString(_prefCurrencyKey) ?? 'EGP';
     final cached = await _erService.getCached();
     if (cached != null && cached.isNotEmpty) {
       _exchangeRates = cached;
       _ratesLoaded = true;
       _ratesLastFetched = await _erService.lastFetchedAt();
     }
+    notifyListeners();
+  }
+
+  Future<void> reloadForActiveOrganization() async {
+    final prefs = await SharedPreferences.getInstance();
+    _currency = prefs.getString(_scopedCurrencyKey) ?? 'EGP';
     notifyListeners();
   }
 
@@ -186,7 +201,7 @@ class CurrencyService extends ChangeNotifier {
     }
     _currency = code;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_prefCurrencyKey, _currency);
+    await prefs.setString(_scopedCurrencyKey, _currency);
     notifyListeners();
   }
 }
@@ -295,6 +310,6 @@ Future<String?> showCurrencyPicker(BuildContext context, {String? current}) asyn
       },
     ),
   );
-  ctrl.dispose();
+  Future.delayed(const Duration(milliseconds: 350), ctrl.dispose);
   return result;
 }

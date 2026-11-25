@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import '../../database/database_helper.dart';
+import '../../theme/app_theme.dart';
 import '../../widgets/common_widgets.dart';
 
 class BarcodeScannerScreen extends StatefulWidget {
@@ -20,7 +21,6 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
   );
 
   bool _isProcessing = false;
-  Map<String, dynamic>? _foundAsset;
 
   @override
   void dispose() {
@@ -29,12 +29,18 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
   }
 
   Future<void> _handleBarcode(BarcodeCapture capture) async {
-    if (_isProcessing) return;
+    if (_isProcessing) {
+      return;
+    }
     final barcodes = capture.barcodes;
-    if (barcodes.isEmpty) return;
+    if (barcodes.isEmpty) {
+      return;
+    }
 
     final rawVal = barcodes.first.rawValue;
-    if (rawVal == null || rawVal.trim().isEmpty) return;
+    if (rawVal == null || rawVal.trim().isEmpty) {
+      return;
+    }
 
     final code = rawVal.trim();
 
@@ -47,11 +53,22 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
 
     // Search asset in database
     final db = DatabaseHelper();
-    final laptops = await db.getLaptops();
-    final networkDevs = await db.getNetworkDevices();
-    final printers = await db.getPrinters();
-    final electronics = await db.getElectronics();
-    final mifis = await db.getMiFis();
+    final results = await Future.wait([
+      db.getLaptops(),
+      db.getNetworkDevices(),
+      db.getPrinters(),
+      db.getElectronics(),
+      db.getMiFis(),
+      db.getAccessPoints(),
+      db.getOtherDevices(),
+    ]);
+    final laptops = results[0] as List;
+    final networkDevs = results[1] as List;
+    final printers = results[2] as List;
+    final electronics = results[3] as List;
+    final mifis = results[4] as List;
+    final accessPoints = results[5] as List;
+    final otherDevices = results[6] as List;
 
     Map<String, dynamic>? match;
 
@@ -64,7 +81,7 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
     if (match == null) {
       for (final n in networkDevs) {
         if (n.deviceNumber.toLowerCase() == code.toLowerCase()) {
-          match = {'type': 'Router', 'number': n.deviceNumber, 'name': n.model, 'user': n.deviceLocation, 'condition': n.status};
+          match = {'type': 'Router', 'number': n.deviceNumber, 'name': n.model, 'user': n.deviceLocation, 'condition': n.serviceProvider};
           break;
         }
       }
@@ -87,90 +104,85 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
     }
     if (match == null) {
       for (final m in mifis) {
-        if (m.deviceNumber.toLowerCase() == code.toLowerCase()) {
+        if (m.deviceNumber.toLowerCase() == code.toLowerCase() || m.tag.toLowerCase() == code.toLowerCase()) {
           match = {'type': 'MiFi', 'number': m.deviceNumber, 'name': m.model, 'user': m.phoneNumber, 'condition': m.status};
+          break;
+        }
+      }
+    }
+    if (match == null) {
+      for (final ap in accessPoints) {
+        if (ap.deviceNumber.toLowerCase() == code.toLowerCase()) {
+          match = {'type': 'Access Point', 'number': ap.deviceNumber, 'name': ap.model, 'user': ap.location, 'condition': ap.portNumber};
+          break;
+        }
+      }
+    }
+    if (match == null) {
+      for (final o in otherDevices) {
+        if (o.deviceName.toLowerCase() == code.toLowerCase() || o.model.toLowerCase() == code.toLowerCase()) {
+          match = {'type': o.deviceType, 'number': o.model, 'name': o.deviceName, 'user': o.notes, 'condition': 'Registered'};
           break;
         }
       }
     }
 
     if (mounted) {
-      setState(() {
-        _foundAsset = match ?? {'type': 'Unknown', 'number': code, 'name': 'Asset not registered in IT Box', 'user': '—', 'condition': '—'};
-      });
-      _showAssetSheet(_foundAsset!);
+      final resolved = match ?? {'type': 'Unknown', 'number': code, 'name': 'Asset not registered in IT Box', 'user': '—', 'condition': '—'};
+      _showAssetSheet(resolved);
     }
   }
 
   void _showAssetSheet(Map<String, dynamic> asset) {
     showFintechBottomSheet(
       context: context,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  asset['type'] == 'Unknown' ? Icons.warning_amber_rounded : Icons.check_circle_rounded,
-                  color: asset['type'] == 'Unknown' ? Colors.amber : Colors.green,
-                  size: 28,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(asset['name'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                      Text('Tag / S/N: ${asset['number']}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const Divider(height: 24),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text('Category:'),
-                Text(asset['type'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold)),
-              ],
-            ),
-            const SizedBox(height: 6),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text('Assigned / Location:'),
-                Text(asset['user'] ?? '—', style: const TextStyle(fontWeight: FontWeight.bold)),
-              ],
-            ),
-            const SizedBox(height: 6),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text('Status:'),
-                Text(asset['condition'] ?? '—', style: const TextStyle(fontWeight: FontWeight.bold)),
-              ],
-            ),
-            const SizedBox(height: 20),
-            SizedBox(
-              width: double.infinity,
-              height: 48,
-              child: ElevatedButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  setState(() => _isProcessing = false);
-                },
-                child: const Text('Scan Next Item'),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                asset['type'] == 'Unknown' ? Icons.warning_amber_rounded : Icons.check_circle_rounded,
+                color: asset['type'] == 'Unknown' ? Colors.amber : Colors.green,
+                size: 28,
               ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(asset['name'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    Text('Tag / S/N: ${asset['number']}', style: credentialFont(fontSize: 12, color: Colors.grey)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const Divider(height: 24),
+          DetailRow(label: 'Category', value: asset['type']?.toString() ?? ''),
+          DetailRow(label: 'Assigned / Location', value: asset['user']?.toString() ?? '—'),
+          DetailRow(label: 'Status', value: asset['condition']?.toString() ?? '—'),
+          const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                if (mounted) {
+                  setState(() => _isProcessing = false);
+                }
+              },
+              child: const Text('Scan Next Item'),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     ).whenComplete(() {
-      setState(() => _isProcessing = false);
+      if (mounted) {
+        setState(() => _isProcessing = false);
+      }
     });
   }
 

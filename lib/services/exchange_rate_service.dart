@@ -13,11 +13,6 @@ class ExchangeRateService {
   static const _minRetryInterval = Duration(minutes: 15);
   static const _apiUrl = 'https://open.er-api.com/v6/latest/USD';
 
-  static const _goldApiPrimary =
-      'https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/xau.min.json';
-  static const _goldApiFallback =
-      'https://latest.currency-api.pages.dev/v1/currencies/xau.min.json';
-
   static const Map<String, double> fallbackRates = {
     'USD': 1.0,
     'EUR': 0.92,
@@ -83,27 +78,7 @@ class ExchangeRateService {
     'GEL': 2.72,
   };
 
-  Future<Map<String, double>> getRates() async {
-    return await _loadCached() ?? Map<String, double>.from(fallbackRates);
-  }
-
   Future<Map<String, double>?> forceRefresh() => _fetchAndCache();
-
-  Future<double?> fetchGoldRate() => _fetchGoldRate();
-
-  Future<void> patchCachedXau(double xauRate) async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_ratesKey);
-    if (raw == null) {
-      return;
-    }
-    try {
-      final map = (jsonDecode(raw) as Map<String, dynamic>)
-          .map((k, v) => MapEntry(k, (v as num).toDouble()));
-      map['XAU'] = xauRate;
-      await prefs.setString(_ratesKey, jsonEncode(map));
-    } catch (_) {}
-  }
 
   Future<DateTime?> lastFetchedAt() async {
     final prefs = await SharedPreferences.getInstance();
@@ -180,49 +155,12 @@ class ExchangeRateService {
         (k, v) => MapEntry(k, (v as num).toDouble()),
       );
 
-      final hasXau = rates.containsKey('XAU') && (rates['XAU'] ?? 0) > 0;
-      if (!hasXau) {
-        final xauRate = await _fetchGoldRate();
-        if (xauRate != null) {
-          rates['XAU'] = xauRate;
-        }
-      }
-
       await prefs.setString(_ratesKey, jsonEncode(rates));
       await prefs.setString(_fetchedKey, DateTime.now().toIso8601String());
       return rates;
     } catch (_) {
       return null;
     }
-  }
-
-  Future<double?> _fetchGoldRate() async {
-    for (final url in [_goldApiPrimary, _goldApiFallback]) {
-      try {
-        final body = await _httpGet(url, const Duration(seconds: 5));
-        if (body == null) {
-          continue;
-        }
-        final data = jsonDecode(body);
-        if (data is! Map) {
-          continue;
-        }
-        final xauMap = data['xau'];
-        if (xauMap is! Map) {
-          continue;
-        }
-        final usdPrice = xauMap['usd'];
-        final priceUsd = usdPrice is num
-            ? usdPrice.toDouble()
-            : double.tryParse(usdPrice?.toString() ?? '');
-        if (priceUsd != null && priceUsd > 0) {
-          return 1.0 / priceUsd;
-        }
-      } catch (_) {
-        continue;
-      }
-    }
-    return null;
   }
 
   Future<Map<String, double>?> getCached() => _loadCached();

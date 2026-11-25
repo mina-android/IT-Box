@@ -7,6 +7,85 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) co
 
 ---
 
+## [1.2.0] - 2026-11-25
+
+### Added (Borrow Notes, Ticket Reminders, Multi-Table Excel & Deep Search Navigation)
+- **Version Bump (`pubspec.yaml`, `DatabaseHelper`, `BackupCryptoService`, `SettingsScreen`)**: Bumped application version to **1.2.0+7**.
+- **Optional Borrow Notes (Schema v17 — `BorrowLog`, `AddBorrowScreen`, `BorrowedScreen`, `CustodyPdfService`, `DataHubScreen`)**:
+  - Added `borrow_logs.notes` in Drift Schema **v17** (`ALTER TABLE borrow_logs ADD COLUMN notes TEXT DEFAULT ''`).
+  - Added an optional **Notes** field in `AddBorrowScreen`, displayed in `BorrowedScreen`'s detail sheet (`_showBorrowDetail`), wired into `CustodyPdfService` (`adminNotes`), and included in `borrow_logs` Excel exports/templates.
+- **Multi-Table Excel Export (`DataHubScreen`, `ExcelService.exportMultipleTables`)**:
+  - Upgraded **Export Category Table (.xlsx)** in `DataHubScreen` to a multi-select checkbox sheet with **Select All / Deselect All**, generating separate individual `.xlsx` files and sharing them together.
+- **Universal Search Deep Navigation (`DashboardScreen`, `HomeScreen`, `ActivityScreen`, & 20 List Screens)**:
+  - Tapping any Universal Search result on `DashboardScreen` now navigates to the target screen/tab and automatically opens that exact entry's detail sheet (or `Employee360Screen` for staff, edit form for card-based screens, History/Active tab for Borrows, and past-year lookup for Expenses/Tickets).
+- **Recurring Bills & Subscriptions Search (`BillsScreen`, `SubscriptionsScreen`)**:
+  - Added expandable `FintechCircleButton` search toggles and `SearchBar2` filtering alongside category/cadence `FintechFilterPill` bars.
+- **Expenses & Filter Sheet Unification (`ExpensesScreen`, `BorrowedScreen`, `DataHubScreen`)**:
+  - Unified `BorrowedScreen` and `ExpensesScreen` Filter & Sort bottom sheets to match `LogsScreen._showFilterAndSortSheet` (`Reset`, `FintechFilterPill`s, bordered `ListTile` sort cards with ascending/descending toggle, and explicit `All Years` / `All-Time Total` support).
+  - Moved the **Executive Financial Report (PDF)** export out of `ExpensesScreen` into `DataHubScreen` with a fiscal-year / all-time period selector, and standardized `ExpensesScreen`'s `FintechAppBar` with expandable Search and Filter & Sort buttons.
+- **Complete Backup & Restore Integrity (`DatabaseHelper`, `DataHubScreen`, `AutoBackupService`, `WorkmanagerService`)**:
+  - Fixed Drift reactive stream invalidation after restore (`drift.markTablesUpdated(drift.allTables)` + `_dbSwitchController.add(null)`) and added live `CurrencyService().reloadForActiveOrganization()` reload.
+  - Added `TicketReminderService` settings (`enabled`, `days`, `times`) to backup export & restore.
+  - Updated `AutoBackupService` to always embed Vault & Receipt binaries (`includeVaultBinaries: true`), pass `inputData: {'orgId': orgId}` in WorkManager tasks, and load `ThemeService` & `TicketReminderService` in `callbackDispatcher()` with isolated target-org database switching.
+  - Fixed selective backup (`expenses` now embeds `receipt_files`), selective restore of `switch_patch_ports` (restores custom chassis), secondary-org switch chassis isolation, `BackupManifestSummary.embeddedReceiptFilesCount`, and Company Logo clear/cache-eviction on restore.
+- **Ticket Logging Notification Reminders (`TicketReminderService`, `NotificationService`, `SettingsScreen`)**:
+  - Added a dedicated **Ticket Logging Reminders** card in `SettingsScreen` with master enable/disable toggle, weekday selector (`Sun`–`Sat`), and manual clock-time entry (`TimePickerEntryMode.input`) supporting multiple daily reminder times shared across selected days.
+  - Scheduled weekly recurring local notifications (`DateTimeComponents.dayOfWeekAndTime`) in an isolated ID namespace (`0x60000000+`) so borrow overdue reminders and ticket reminders never cancel each other during reconciliation.
+  - Tapping a Ticket Reminder notification (warm or cold start) navigates directly to `LogFormScreen` via `navigatorKey`.
+- **Shared Fintech UI Primitives (`lib/widgets/fintech_components.dart`, `lib/theme/app_theme.dart`)**:
+  - Added global 16px Fintech squircle button themes (`elevatedButtonTheme`, `filledButtonTheme`, `outlinedButtonTheme`, `textButtonTheme`).
+  - Added `FintechFilterPill`, `FintechFilterBar`, and `showFintechEmployeePicker` (with `FintechEmployeeSelection`).
+
+### Changed & Fixed (App-Wide Fintech Unification & Label Export Fix)
+- **Fixed Export Asset Labels & QR Infinite Loading (`LabelExportScreen`)**: Replaced `dynamic` list casts in `_loadData()` with strongly-typed model lists (`List<Laptop>`, `List<NetworkDevice>`, `List<MiFi>`, `List<AccessPoint>`, `List<Printer>`, `List<Electronic>`, `List<WifiNetwork>`) and explicit `.map<String>` / `.map<Map<String, String>>` conversions wrapped in `try/catch`, fixing the runtime `TypeError` that left `_dataLoaded` stuck on `false`.
+- **Removed Redundant Refresh Buttons**: Removed `EmptyState(onRefresh: ...)` across all 13 reactive list screens (`AccessPointsScreen`, `BillsScreen`, `BorrowedScreen`, `ElectronicsScreen`, `EmailsScreen`, `EmployeesScreen`, `ExpensesScreen`, `LaptopsScreen`, `MiFisScreen`, `NetworkDevicesScreen`, `OtherDevicesScreen`, `PrintersScreen`, `SubscriptionsScreen`), preserving only the 2 functional refresh buttons (Settings Exchange Rates & Network Scanner).
+- **Documents Vault & Custody Improvements**:
+  - Removed the duplicate top-right Upload Document `FintechCircleButton` from `DocumentsVaultScreen` AppBar.
+  - Upgraded Custody Document Form's "Pick from Inventory" sheet to a 2-column `InventoryGridCard` grid matching `AddBorrowScreen`.
+  - Unified all 6 employee-picking forms (`VaultDocumentFormScreen`, `CustodyDocumentFormScreen`, `LaptopFormScreen`, `AddBorrowScreen`, `LogFormScreen`, `EmailFormScreen`) onto the shared searchable `showFintechEmployeePicker`.
+- **Expandable AppBar Search & Filter Pills**:
+  - Standardized standalone list screens (`VendorContactsScreen`, `WifiNetworksScreen`, `StaticIpListScreen`, `AccountsPasswordsScreen`, `EmailsScreen`, `EmployeesScreen`, `ActivityFeedScreen`) onto the expandable AppBar search toggle (`CustodyDocumentsScreen` pattern) and fixed double-padding on `VendorContactsScreen`.
+  - Replaced all raw `FilterChip`, `ChoiceChip`, `ActionChip`, and `Chip` bars across `CustodyDocumentsScreen`, `DocumentsVaultScreen`, `VendorContactsScreen`, `SubscriptionsScreen`, `BillsScreen`, `DashboardScreen`, `BorrowedScreen`, `LogsScreen`, `NetworkScannerScreen`, `NetworkDiagnosticsScreen`, `ActivityFeedScreen`, and `LabelExportScreen` with `FintechFilterPill` / `FintechFilterBar`.
+- **Deep UI Unification**:
+  - Standardized `SelectionBottomBar` (`totalCount`, `onSelectAll`, `onDeselectAll`) across all 16 multi-select list screens and removed duplicate AppBar Select-All buttons.
+  - Stripped conflicting `26px`/`25px`/`14px`/`12px` button radius overrides across forms and detail sheets, wrapped all FABs in `SmoothExitFab`, migrated all 6 raw `showModalBottomSheet` calls to `showFintechBottomSheet`, migrated 2 raw `showSnackBar` calls in `Employee360Screen` to `showSnack`, replaced raw `Card(` / `Colors.white` surfaces with `AppColors.cardSurface(context)`, replaced `OnboardingScreen` raw `AppBar` with `FintechAppBar`, and migrated all custom/plain-text empty states to `EmptyState`.
+
+### Added (Custody Documents Hub, Documents Vault & Expensy Auto-Backup)
+- **Custody Documents Hub (`CustodyDocumentsScreen`, `CustodyDocumentFormScreen`)**:
+  - Added to the `More` tab and Dashboard quick actions (`New Custody Slip`).
+  - Automatically archives every custody PDF generated from Borrowed & Laptops into `custody_documents` (Schema v16).
+  - Supports creating custom/hybrid custody documents from scratch: pick multiple existing inventory assets or add custom items, attach dynamic key-value hardware specifications (`extraSpecs`), edit compliance/agreement text, add admin notes, and capture a recipient signature.
+  - Supports `SelectionBottomBar` multi-select **Consolidated Multi-Page PDF** bulk export (`CustodyPdfService.generateBulkCustodyDocumentsPdf`).
+- **Documents Vault (`DocumentsVaultScreen`, `VaultDocumentFormScreen`, `DocumentViewerScreen`)**:
+  - Added to the `More` tab, Dashboard quick actions (`Scan Document`), and Android app icon shortcut (`Scan to Vault`).
+  - Integrates on-device ML Kit document scanning (`google_mlkit_document_scanner`) with multi-page PDF bundling and file import (`file_picker`).
+  - Supports categories (`Contract`, `Invoice`, `Warranty`, `Signed Custody`, `ID/Compliance`, `Other`), optional Employee/Asset tagging, and an embedded in-app PDF (`printing`) & zoomable image (`InteractiveViewer`) viewer.
+  - Both Custody Documents and Vault Documents are surfaced inside `Employee360Screen`.
+- **Expensy-Ported Auto-Backup, Selective Restore & Pre-Restore Undo (`DataHubScreen`, `AutoBackupService`, `WorkmanagerService`, `itbox_saf`)**:
+  - Ported `itbox_saf` (Android Storage Access Framework folder picker & persisted URI read/write) and `workmanager` for scheduled **02:00 AM** background auto-backups plus startup/resume catch-up.
+  - Added optional Android Keystore hardware-backed backup encryption for automated snapshots and per-organization isolated backup keys/files.
+  - Added **Selective Backup** (table-group checkboxes) and **Selective Restore** with manifest inspection (`inspectBackupJson`) and automatic **Pre-Restore Undo** safety snapshot (`createPreRestoreSnapshot` / `restoreFromSnapshotPath`).
+  - Full & Selective manual backups embed Base64-encoded `vault_files` & `receipt_files` (`Expenses.receiptPath`) protected by AES-256-GCM + SHA-256; scheduled auto-backups pass `includeVaultBinaries: false` to stay lightweight.
+
+### Changed & Fixed (Schema v16, Bugfixes, UI/UX Consistency & Dead Code Purge)
+- **Schema v16 (23 Lockstep Tables)**: Added `custody_documents`, `vault_documents`, `expenses.receipt_path`, `vendor_contacts.sla_tier`, and 9 performance indexes; replaced `sqflite` path lookup with `_resolveDatabasesPath()`.
+- **Correctness & Bugfixes**:
+  - Fixed `AuditExportService` reading `action_type`/`entity_type` (instead of blank `action`/`entity`).
+  - Fixed `BackupCryptoService` to use `Random.secure()` 16-byte salts and dynamic `PackageInfo`.
+  - Fixed `DatabaseHelper` null employee unlinking (`Value(ea.employeeId)`, `Value(le.employeeId)`), device maintenance cascade deletion (`_deleteMaintenanceForDevice`), single-query `getEmployeeDependentCounts`, `watchWifiNetworks`/`watchAccountPasswords` column names, and `date('now', 'localtime')` / `LOWER(state)='open'` in `watchCounts()`.
+  - Fixed `ExcelImportService` (`_firstNonEmptySheet`, `DateCellValue`/`DateTimeCellValue`, optional `renewalDate`, active-borrow `replace` guard) and added importers for Vendor Contacts, Wi-Fi Networks, Account Passwords, and Static IPs.
+  - Fixed `ExcelService` (`Sheet1` cleanup, sanitized filenames, `compute` isolate for expenses), `WifiPdfService` (`T:nopass` & `pw.Font.courier()`), `LabelService` (render `title` & `subtitle`), `ExecutiveHealthPdfService` (`Future.wait` + `access_points`/`other_devices`), and `NetworkScannerService`/`NetworkDiagnosticsService` (TLS callback + socket `finally` cleanup + batched port scans).
+  - Fixed `CurrencyService` per-organization currency isolation & `CompanyService` org switch currency/notification reconciliation.
+  - Fixed `NotificationService` per-organization IDs, single permission request, and `init()` in `cancelReminder`.
+- **UI/UX Consistency & Rule Compliance**:
+  - Removed the `'Available'` status badge from Routers (`NetworkDevicesScreen` & `NetworkDeviceFormScreen`) and expanded Borrow eligibility cleanly for MiFis & Electronics.
+  - Converted Switch Patch Port editing from a bottom sheet to full-screen `SwitchPatchPortFormScreen`.
+  - Standardized `SelectionBottomBar` (`totalCount`, `onSelectAll`, `onDeselectAll`), `FintechDropdown` validation (`FormField<T>`), `SensitiveDetailRow` (30s auto-obscure + 60s clipboard clear), and `SearchBar2` clear button (`ValueListenableBuilder`).
+- **Dead Code & Dependency Purge**:
+  - Removed unused `animations` and `sqflite` dependencies, `lib/services/config_parser_service.dart`, `lib/services/topology_pdf_service.dart`, `android/app/src/main/java/com/example/`, `android/inventorya_android.iml`, shadowed `android/*.gradle.kts` files, and dead widgets (`FintechHeader`, `FintechSegmentedControl`, `FintechContainedLedger`, `FintechExtendedFab`).
+
+---
+
 ## [1.1.1] - 2026-11-16
 
 ### Added & Changed (UI/UX Unification, Multi-Organization Hot-Switching, Currency & Exchange Rates)

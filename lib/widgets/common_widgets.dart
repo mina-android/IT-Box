@@ -117,19 +117,17 @@ class EmptyState extends StatelessWidget {
   final IconData icon;
   final String title;
   final String subtitle;
-  final Future<void> Function()? onRefresh;
   const EmptyState({
     super.key,
     required this.icon,
     required this.title,
     required this.subtitle,
-    this.onRefresh,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final content = Center(
+    return Center(
       child: Padding(
         padding: const EdgeInsets.all(40),
         child: Column(
@@ -169,8 +167,6 @@ class EmptyState extends StatelessWidget {
         ),
       ),
     );
-
-    return content;
   }
 }
 
@@ -179,12 +175,14 @@ class SearchBar2 extends StatelessWidget {
   final TextEditingController controller;
   final String hint;
   final bool noPadding;
+  final ValueChanged<String>? onChanged;
   const SearchBar2({
     super.key,
     required this.controller,
     String? hint,
     String? hintText,
     this.noPadding = false,
+    this.onChanged,
   }) : hint = hintText ?? hint ?? 'Search...';
 
   @override
@@ -207,6 +205,7 @@ class SearchBar2 extends StatelessWidget {
           controller: controller,
           enableSuggestions: false,
           autocorrect: false,
+          onChanged: onChanged,
           style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14),
           decoration: InputDecoration(
             hintText: hint,
@@ -219,14 +218,20 @@ class SearchBar2 extends StatelessWidget {
               size: 22,
               color: theme.colorScheme.primary,
             ),
-            suffixIcon: controller.text.isNotEmpty
-                ? IconButton(
-                    icon: const Icon(Icons.close_rounded, size: 18),
-                    onPressed: () => controller.clear(),
-                  )
-                : null,
+            suffixIcon: ValueListenableBuilder<TextEditingValue>(
+              valueListenable: controller,
+              builder: (_, val, __) => val.text.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.close_rounded, size: 18),
+                      onPressed: () {
+                        controller.clear();
+                        onChanged?.call('');
+                      },
+                    )
+                  : const SizedBox.shrink(),
+            ),
             filled: true,
-            fillColor: theme.colorScheme.surfaceContainerLow,
+            fillColor: AppColors.cardSurface(context),
             contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(16),
@@ -444,7 +449,9 @@ Future<T?> showFintechBottomSheet<T>({
   return showModalBottomSheet<T>(
     context: context,
     isScrollControlled: isScrollControlled,
-    backgroundColor: theme.colorScheme.surface,
+    backgroundColor: theme.brightness == Brightness.dark
+        ? const Color(0xFF131318)
+        : theme.colorScheme.surface,
     elevation: 0,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
@@ -621,9 +628,11 @@ void copySensitiveToClipboard(
   BuildContext context,
   String text,
   String label, {
-  Duration clearAfter = const Duration(seconds: 45),
+  Duration clearAfter = const Duration(seconds: 60),
 }) {
-  if (text.isEmpty) return;
+  if (text.isEmpty) {
+    return;
+  }
   Clipboard.setData(ClipboardData(text: text));
   AppHaptics.tap(context, HapticStrength.light);
   showSnack(context, '$label copied to clipboard (clears in ${clearAfter.inSeconds}s)');
@@ -635,6 +644,103 @@ void copySensitiveToClipboard(
       await Clipboard.setData(const ClipboardData(text: ''));
     }
   });
+}
+
+/// Sensitive credential row with `credentialFont()`, 30s auto-obscure timer,
+/// and 60s clipboard auto-clear copy button.
+class SensitiveDetailRow extends StatefulWidget {
+  final String label;
+  final String value;
+  final IconData icon;
+  final Duration obscureAfter;
+
+  const SensitiveDetailRow({
+    super.key,
+    required this.label,
+    required this.value,
+    this.icon = Icons.lock_outline_rounded,
+    this.obscureAfter = const Duration(seconds: 30),
+  });
+
+  @override
+  State<SensitiveDetailRow> createState() => _SensitiveDetailRowState();
+}
+
+class _SensitiveDetailRowState extends State<SensitiveDetailRow> {
+  bool _revealed = false;
+  Timer? _obscureTimer;
+
+  void _toggleReveal() {
+    _obscureTimer?.cancel();
+    setState(() => _revealed = !_revealed);
+    if (_revealed) {
+      _obscureTimer = Timer(widget.obscureAfter, () {
+        if (mounted) {
+          setState(() => _revealed = false);
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _obscureTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final hasVal = widget.value.isNotEmpty;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Icon(widget.icon, size: 16, color: cs.onSurface.withValues(alpha: 0.45)),
+          const SizedBox(width: 10),
+          SizedBox(
+            width: 112,
+            child: Text(
+              widget.label,
+              style: TextStyle(
+                fontSize: 12.5,
+                color: cs.onSurface.withValues(alpha: 0.55),
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              !hasVal ? '—' : (_revealed ? widget.value : '••••••••'),
+              style: credentialFont(
+                fontSize: 13,
+                color: cs.onSurface,
+              ),
+            ),
+          ),
+          if (hasVal) ...[
+            IconButton(
+              icon: Icon(
+                _revealed ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                size: 18,
+              ),
+              tooltip: _revealed ? 'Hide' : 'Reveal (30s)',
+              visualDensity: VisualDensity.compact,
+              onPressed: _toggleReveal,
+            ),
+            IconButton(
+              icon: const Icon(Icons.copy_rounded, size: 17),
+              tooltip: 'Copy (60s auto-clear)',
+              visualDensity: VisualDensity.compact,
+              onPressed: () => copySensitiveToClipboard(context, widget.value, widget.label),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 }
 
 // ── UX Additions: Shimmer, Animation, Shake, Undo ─────────────────
@@ -649,7 +755,7 @@ class ShimmerListLoader extends StatelessWidget {
     final isDark = theme.brightness == Brightness.dark;
     final baseColor = isDark ? (cs.surfaceContainerHighest.withValues(alpha: 0.6)) : Colors.grey[300]!;
     final highlightColor = isDark ? cs.surfaceContainerHigh : Colors.grey[100]!;
-    final cardColor = isDark ? cs.surfaceContainer : Colors.white;
+    final cardColor = AppColors.cardSurface(context);
 
     return Shimmer.fromColors(
       baseColor: baseColor,
@@ -682,14 +788,11 @@ class SlideInAndFade extends StatefulWidget {
 }
 
 class _SlideInAndFadeState extends State<SlideInAndFade>
-    with SingleTickerProviderStateMixin, AutomaticKeepAliveClientMixin {
+    with SingleTickerProviderStateMixin {
   late AnimationController _ctrl;
   late Animation<Offset> _slide;
   late Animation<double> _fade;
   Timer? _timer;
-
-  @override
-  bool get wantKeepAlive => true;
 
   @override
   void initState() {
@@ -721,7 +824,6 @@ class _SlideInAndFadeState extends State<SlideInAndFade>
 
   @override
   Widget build(BuildContext context) {
-    super.build(context);
     if (widget.index >= 8) {
       return widget.child;
     }

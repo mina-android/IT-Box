@@ -255,9 +255,10 @@ class _NetworkDiagnosticsScreenState extends State<NetworkDiagnosticsScreen> {
                       ('8080', '8080 Alt'),
                       ('9100', '9100 Print'),
                     ])
-                      ActionChip(
-                        label: Text(p.$2, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
-                        onPressed: () => setState(() => _portCtrl.text = p.$1),
+                      FintechFilterPill(
+                        label: p.$2,
+                        selected: _portCtrl.text.trim() == p.$1,
+                        onTap: () => setState(() => _portCtrl.text = p.$1),
                       ),
                   ],
                 ),
@@ -358,14 +359,14 @@ class _NetworkDiagnosticsScreenState extends State<NetworkDiagnosticsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('ESTIMATED LINK SPEED', style: TextStyle(fontSize: 11, color: Colors.white70, fontWeight: FontWeight.bold)),
+                    Text('ESTIMATED LINK SPEED', style: TextStyle(fontSize: 11, color: cs.primary, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 6),
                     Text(
                       '${_speedResult!.downloadMbps.toStringAsFixed(2)} Mbps',
-                      style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: Colors.white),
+                      style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: cs.onSurface),
                     ),
                     const SizedBox(height: 4),
-                    Text('Transfer Latency: ${_speedResult!.latencyMs} ms', style: const TextStyle(fontSize: 12, color: Colors.white70)),
+                    Text('Transfer Latency: ${_speedResult!.latencyMs} ms', style: TextStyle(fontSize: 12, color: cs.onSurface.withValues(alpha: 0.7))),
                     if (_speedResult!.error != null) ...[
                       const SizedBox(height: 6),
                       Text('Note: ${_speedResult!.error}', style: const TextStyle(fontSize: 11, color: Colors.orangeAccent)),

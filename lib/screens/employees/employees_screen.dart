@@ -10,7 +10,8 @@ import 'employee_form_screen.dart';
 import 'employee_360_screen.dart';
 
 class EmployeesScreen extends StatefulWidget {
-  const EmployeesScreen({super.key});
+  final int? initialItemId;
+  const EmployeesScreen({super.key, this.initialItemId});
 
   @override
   State<EmployeesScreen> createState() => _EmployeesScreenState();
@@ -24,6 +25,8 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
   List<Employee> _all = [];
   List<Employee> _filtered = [];
   bool _loading = true;
+  bool _showSearch = false;
+  bool _handledInitial = false;
   final Set<int> _selectedIds = {};
   bool get _isSelectionMode => _selectedIds.isNotEmpty;
 
@@ -37,6 +40,17 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
           _filter();
           _loading = false;
         });
+        if (!_handledInitial && widget.initialItemId != null) {
+          final match = list.where((e) => e.id == widget.initialItemId).firstOrNull;
+          if (match != null) {
+            _handledInitial = true;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) {
+                _showEmployeeDetails(match);
+              }
+            });
+          }
+        }
       }
     });
     _search.addListener(() {
@@ -105,24 +119,31 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
       return;
     }
     int deleted = 0;
-    int skippedBorrows = 0;
+    int skippedDeps = 0;
     for (final id in _selectedIds) {
-      if (await _db.getEmployeeActiveBorrowsCount(id) > 0) {
-        skippedBorrows++;
+      final counts = await _db.getEmployeeDependentCounts(id);
+      if ((counts['active_borrows'] ?? 0) > 0 ||
+          (counts['laptops'] ?? 0) > 0 ||
+          (counts['emails'] ?? 0) > 0) {
+        skippedDeps++;
         continue;
       }
       try {
         await _db.deleteEmployee(id);
         deleted++;
-      } catch (_) {}
+      } catch (_) {
+        skippedDeps++;
+      }
     }
     setState(() => _selectedIds.clear());
-    if (!mounted) return;
-    if (skippedBorrows > 0) {
+    if (!mounted) {
+      return;
+    }
+    if (skippedDeps > 0) {
       showSnack(
         context,
-        '$deleted employee(s) deleted. $skippedBorrows skipped because they have active borrowed devices.',
-        error: skippedBorrows > 0 && deleted == 0,
+        '$deleted employee(s) deleted. $skippedDeps skipped due to active borrows, assigned laptops, or linked emails.',
+        error: deleted == 0,
       );
     } else {
       showSnack(context, '$deleted employee(s) deleted');
@@ -142,25 +163,31 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
 
   Future<void> _delete(Employee e) async {
     final counts = await _db.getEmployeeDependentCounts(e.id!);
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
     final activeBorrows = counts['active_borrows'] ?? 0;
-    if (activeBorrows > 0) {
+    final laptops = counts['laptops'] ?? 0;
+    final emails = counts['emails'] ?? 0;
+    final tickets = counts['tickets'] ?? 0;
+
+    if (activeBorrows > 0 || laptops > 0 || emails > 0) {
+      final blockers = <String>[
+        if (activeBorrows > 0) '$activeBorrows active borrow(s)',
+        if (laptops > 0) '$laptops assigned laptop(s)',
+        if (emails > 0) '$emails linked email(s)',
+      ];
       showSnack(
         context,
-        'Cannot delete "${e.name}" while they have $activeBorrows actively borrowed device(s). Return all equipment first.',
+        'Cannot delete "${e.name}" while linked to ${blockers.join(', ')}. Unassign them first.',
         error: true,
       );
       return;
     }
 
-    final emails = counts['emails'] ?? 0;
-    final tickets = counts['tickets'] ?? 0;
     String confirmMessage = 'Delete "${e.name}" from your employee directory?';
-    if (emails > 0 || tickets > 0) {
-      final deps = <String>[];
-      if (emails > 0) deps.add('$emails email account(s)');
-      if (tickets > 0) deps.add('$tickets ticket(s)');
-      confirmMessage = 'Delete "${e.name}"?\n\nWarning: Associated with ${deps.join(' and ')}.';
+    if (tickets > 0) {
+      confirmMessage = 'Delete "${e.name}"?\n\nWarning: Associated with $tickets ticket(s).';
     }
 
     final ok = await showConfirmDialog(
@@ -307,25 +334,24 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
         title: 'Employees Directory',
         subtitle: '${_all.length} registered personnel',
         actions: [
-          if (_isSelectionMode)
-            FintechCircleButton(
-              icon: Icons.select_all_rounded,
-              tooltip: 'Select All',
-              onTap: () {
-                setState(() {
-                  if (_selectedIds.length == _filtered.length) {
-                    _selectedIds.clear();
-                  } else {
-                    _selectedIds.addAll(_filtered.map((e) => e.id!));
-                  }
-                });
-              },
-            ),
+          FintechCircleButton(
+            icon: _showSearch ? Icons.search_off_rounded : Icons.search_rounded,
+            tooltip: 'Search',
+            onPressed: () {
+              setState(() {
+                _showSearch = !_showSearch;
+                if (!_showSearch) {
+                  _search.clear();
+                }
+              });
+            },
+          ),
         ],
       ),
       body: Column(
         children: [
-          SearchBar2(controller: _search, hintText: 'Search by employee name or phone…'),
+          if (_showSearch)
+            SearchBar2(controller: _search, hintText: 'Search by employee name or phone…'),
           Expanded(
             child: _loading
                 ? const ShimmerListLoader()
@@ -336,7 +362,6 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                         subtitle: _search.text.isEmpty
                             ? 'Create staff profiles to assign borrowed devices & equipment.'
                             : 'Try adjusting your search criteria.',
-                        onRefresh: _load,
                       )
                     : ListView.builder(
                         padding: const EdgeInsets.fromLTRB(16, 8, 16, 90),
@@ -351,7 +376,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                                 decoration: BoxDecoration(
                                   color: isSelected
                                       ? AppColors.primary.withValues(alpha: 0.08)
-                                      : (isDark ? AppColors.darkCard : Colors.white),
+                                      : AppColors.cardSurface(context),
                                   borderRadius: BorderRadius.circular(18),
                                   border: Border.all(
                                     color: isSelected
@@ -494,6 +519,13 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
       bottomNavigationBar: _isSelectionMode
           ? SelectionBottomBar(
               selectedCount: _selectedIds.length,
+              totalCount: _filtered.length,
+              onSelectAll: () {
+                setState(() {
+                  _selectedIds.addAll(_filtered.where((e) => e.id != null).map((e) => e.id!));
+                });
+              },
+              onDeselectAll: () => setState(() => _selectedIds.clear()),
               onClose: () => setState(() => _selectedIds.clear()),
               onDelete: _bulkDelete,
             )

@@ -216,7 +216,7 @@ class _BillFormScreenState extends State<BillFormScreen> {
                     style: FilledButton.styleFrom(
                       backgroundColor: _billColor,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(26),
+                        borderRadius: BorderRadius.circular(16),
                       ),
                     ),
                   ),

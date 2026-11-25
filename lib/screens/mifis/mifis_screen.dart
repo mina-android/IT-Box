@@ -9,7 +9,8 @@ import 'mifi_form_screen.dart';
 const Color _mifiColor = Color(0xFFD97706); // Warm Amber
 
 class MiFisScreen extends StatefulWidget {
-  const MiFisScreen({super.key});
+  final int? initialItemId;
+  const MiFisScreen({super.key, this.initialItemId});
   @override
   State<MiFisScreen> createState() => _MiFisScreenState();
 }
@@ -21,6 +22,7 @@ class _MiFisScreenState extends State<MiFisScreen> with AutomaticKeepAliveClient
   List<MiFi> _all = [];
   List<MiFi> _filtered = [];
   bool _loading = true;
+  bool _handledInitial = false;
   final Set<int> _selectedIds = <int>{};
   bool get _isSelectionMode => _selectedIds.isNotEmpty;
 
@@ -37,6 +39,17 @@ class _MiFisScreenState extends State<MiFisScreen> with AutomaticKeepAliveClient
           _applyFilter();
           _loading = false;
         });
+        if (!_handledInitial && widget.initialItemId != null) {
+          final match = list.where((m) => m.id == widget.initialItemId).firstOrNull;
+          if (match != null) {
+            _handledInitial = true;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) {
+                _showDetail(match);
+              }
+            });
+          }
+        }
       }
     });
     _search.addListener(_applyFilter);
@@ -247,7 +260,6 @@ class _MiFisScreenState extends State<MiFisScreen> with AutomaticKeepAliveClient
                         subtitle: _search.text.isEmpty
                             ? 'Tap + to add a portable MiFi'
                             : 'Try a different search',
-                        onRefresh: _load,
                       )
                     : GridView.builder(
                         padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
@@ -326,6 +338,13 @@ class _MiFisScreenState extends State<MiFisScreen> with AutomaticKeepAliveClient
       bottomNavigationBar: _isSelectionMode
           ? SelectionBottomBar(
               selectedCount: _selectedIds.length,
+              totalCount: _filtered.length,
+              onSelectAll: () {
+                setState(() {
+                  _selectedIds.addAll(_filtered.where((m) => m.id != null).map((m) => m.id!));
+                });
+              },
+              onDeselectAll: () => setState(() => _selectedIds.clear()),
               onClose: () => setState(() => _selectedIds.clear()),
               onDelete: _bulkDelete,
               trailingActions: [

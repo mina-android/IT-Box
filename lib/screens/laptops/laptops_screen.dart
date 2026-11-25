@@ -12,7 +12,8 @@ import 'laptop_form_screen.dart';
 import '../maintenance/device_maintenance_screen.dart';
 
 class LaptopsScreen extends StatefulWidget {
-  const LaptopsScreen({super.key});
+  final int? initialItemId;
+  const LaptopsScreen({super.key, this.initialItemId});
   @override
   State<LaptopsScreen> createState() => _LaptopsScreenState();
 }
@@ -24,6 +25,7 @@ class _LaptopsScreenState extends State<LaptopsScreen> with AutomaticKeepAliveCl
   List<Laptop> _all = [];
   List<Laptop> _filtered = [];
   bool _loading = true;
+  bool _handledInitial = false;
   final Set<int> _selectedIds = <int>{};
   bool get _isSelectionMode => _selectedIds.isNotEmpty;
 
@@ -40,6 +42,17 @@ class _LaptopsScreenState extends State<LaptopsScreen> with AutomaticKeepAliveCl
           _applyFilter();
           _loading = false;
         });
+        if (!_handledInitial && widget.initialItemId != null) {
+          final match = list.where((l) => l.id == widget.initialItemId).firstOrNull;
+          if (match != null) {
+            _handledInitial = true;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) {
+                _showDetail(match);
+              }
+            });
+          }
+        }
       }
     });
     _search.addListener(_applyFilter);
@@ -196,7 +209,6 @@ class _LaptopsScreenState extends State<LaptopsScreen> with AutomaticKeepAliveCl
                         subtitle: _search.text.isEmpty
                             ? 'Tap + to add a laptop'
                             : 'Try a different search',
-                        onRefresh: _load,
                       )
                     : GridView.builder(
                         padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
@@ -252,6 +264,13 @@ class _LaptopsScreenState extends State<LaptopsScreen> with AutomaticKeepAliveCl
       bottomNavigationBar: _isSelectionMode
           ? SelectionBottomBar(
               selectedCount: _selectedIds.length,
+              totalCount: _filtered.length,
+              onSelectAll: () {
+                setState(() {
+                  _selectedIds.addAll(_filtered.where((l) => l.id != null).map((l) => l.id!));
+                });
+              },
+              onDeselectAll: () => setState(() => _selectedIds.clear()),
               onClose: () => setState(() => _selectedIds.clear()),
               onDelete: _bulkDelete,
             )
@@ -533,7 +552,7 @@ class _LaptopDetailSheetState extends State<_LaptopDetailSheet> {
 
     if (!context.mounted) return;
 
-    showFintechBottomSheet(
+    await showFintechBottomSheet(
       context: context,
       title: 'Custody Slip Signature',
       subtitle: '${l.model} (#${l.laptopNumber})',
@@ -591,6 +610,12 @@ class _LaptopDetailSheetState extends State<_LaptopDetailSheet> {
                     onPressed: () async {
                       final sigBytes = await sigCtrl.toPngBytes();
                       final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+                      final specs = {
+                        'Processor (CPU)': l.cpu,
+                        'Graphics (GPU)': l.gpu,
+                        'Memory (RAM)': l.ram,
+                        'Storage': l.storage,
+                      };
                       final file = await CustodyPdfService.generateCustodyPdf(
                         employeeName: empName,
                         employeePhone: empPhone,
@@ -603,14 +628,28 @@ class _LaptopDetailSheetState extends State<_LaptopDetailSheet> {
                         handoverDate: today,
                         dueDate: 'Indefinite / Employment Duration',
                         signatureBytes: sigBytes,
-                        extraSpecs: {
-                          'Processor (CPU)': l.cpu,
-                          'Graphics (GPU)': l.gpu,
-                          'Memory (RAM)': l.ram,
-                          'Storage': l.storage,
-                        },
+                        extraSpecs: specs,
                       );
-                      if (ctx.mounted) Navigator.pop(ctx);
+                      await CustodyPdfService.archiveGeneratedSlip(
+                        tempPdfFile: file,
+                        sourceType: 'laptop',
+                        sourceId: l.id,
+                        employeeName: empName,
+                        employeePhone: empPhone,
+                        employeeEmail: empEmail,
+                        deviceType: 'Laptop',
+                        deviceName: l.model,
+                        deviceNumber: l.laptopNumber,
+                        condition: l.condition,
+                        serialNumber: l.laptopNumber,
+                        handoverDate: today,
+                        dueDate: 'Indefinite / Employment Duration',
+                        signatureBytes: sigBytes,
+                        extraSpecs: specs,
+                      );
+                      if (ctx.mounted) {
+                        Navigator.pop(ctx);
+                      }
                       await CustodyPdfService.shareCustodyFile(file, empName, l.model);
                     },
                     icon: const Icon(Icons.share_rounded, size: 18),
@@ -623,6 +662,12 @@ class _LaptopDetailSheetState extends State<_LaptopDetailSheet> {
                     onPressed: () async {
                       final sigBytes = await sigCtrl.toPngBytes();
                       final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+                      final specs = {
+                        'Processor (CPU)': l.cpu,
+                        'Graphics (GPU)': l.gpu,
+                        'Memory (RAM)': l.ram,
+                        'Storage': l.storage,
+                      };
                       final file = await CustodyPdfService.generateCustodyPdf(
                         employeeName: empName,
                         employeePhone: empPhone,
@@ -635,14 +680,28 @@ class _LaptopDetailSheetState extends State<_LaptopDetailSheet> {
                         handoverDate: today,
                         dueDate: 'Indefinite / Employment Duration',
                         signatureBytes: sigBytes,
-                        extraSpecs: {
-                          'Processor (CPU)': l.cpu,
-                          'Graphics (GPU)': l.gpu,
-                          'Memory (RAM)': l.ram,
-                          'Storage': l.storage,
-                        },
+                        extraSpecs: specs,
                       );
-                      if (ctx.mounted) Navigator.pop(ctx);
+                      await CustodyPdfService.archiveGeneratedSlip(
+                        tempPdfFile: file,
+                        sourceType: 'laptop',
+                        sourceId: l.id,
+                        employeeName: empName,
+                        employeePhone: empPhone,
+                        employeeEmail: empEmail,
+                        deviceType: 'Laptop',
+                        deviceName: l.model,
+                        deviceNumber: l.laptopNumber,
+                        condition: l.condition,
+                        serialNumber: l.laptopNumber,
+                        handoverDate: today,
+                        dueDate: 'Indefinite / Employment Duration',
+                        signatureBytes: sigBytes,
+                        extraSpecs: specs,
+                      );
+                      if (ctx.mounted) {
+                        Navigator.pop(ctx);
+                      }
                       await CustodyPdfService.emailCustodyDirect(
                         file: file,
                         recipientEmail: empEmail,
@@ -660,5 +719,6 @@ class _LaptopDetailSheetState extends State<_LaptopDetailSheet> {
         ),
       ),
     );
+    sigCtrl.dispose();
   }
 }

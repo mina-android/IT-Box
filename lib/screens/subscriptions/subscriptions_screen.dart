@@ -9,17 +9,22 @@ import 'subscription_form_screen.dart';
 const _subColor = Color(0xFFF43F5E); // Electric Rose
 
 class SubscriptionsScreen extends StatefulWidget {
-  const SubscriptionsScreen({super.key});
+  final int? initialItemId;
+  const SubscriptionsScreen({super.key, this.initialItemId});
   @override
   State<SubscriptionsScreen> createState() => _SubscriptionsScreenState();
 }
 
 class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
   final _db = DatabaseHelper();
+  final _searchCtrl = TextEditingController();
   List<Subscription> _all = [];
   List<Subscription> _filtered = [];
   String? _typeFilter;
+  String _query = '';
   bool _loading = true;
+  bool _showSearch = false;
+  bool _handledInitial = false;
   final Set<int> _selectedIds = {};
   bool get _isSelectionMode => _selectedIds.isNotEmpty;
 
@@ -59,6 +64,7 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
   @override
   void dispose() {
     _db.removeListener(_onDbChanged);
+    _searchCtrl.dispose();
     super.dispose();
   }
 
@@ -85,6 +91,17 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
         _applyFilter();
         _loading = false;
       });
+      if (!_handledInitial && widget.initialItemId != null) {
+        final match = subs.where((s) => s.id == widget.initialItemId).firstOrNull;
+        if (match != null) {
+          _handledInitial = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              _showDetail(match);
+            }
+          });
+        }
+      }
     } catch (e) {
       if (!mounted) {
         return;
@@ -95,9 +112,19 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
   }
 
   void _applyFilter() {
-    _filtered = _typeFilter == null
-        ? List.from(_all)
-        : _all.where((s) => s.type == _typeFilter).toList();
+    final q = _query.trim().toLowerCase();
+    _filtered = _all.where((s) {
+      if (_typeFilter != null && s.type != _typeFilter) {
+        return false;
+      }
+      if (q.isEmpty) {
+        return true;
+      }
+      return s.service.toLowerCase().contains(q) ||
+          s.type.toLowerCase().contains(q) ||
+          s.renewalDate.toLowerCase().contains(q) ||
+          s.notes.toLowerCase().contains(q);
+    }).toList();
   }
 
   void _setFilter(String? type) {
@@ -188,63 +215,47 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
         subtitle: _filtered.isEmpty
             ? 'Software licenses & memberships'
             : '${_filtered.length} active • ${CurrencyService().format(_totalMonthlyEquivalent)}/mo',
+        actions: [
+          FintechCircleButton(
+            icon: _showSearch ? Icons.search_off_rounded : Icons.search_rounded,
+            tooltip: 'Search',
+            onPressed: () {
+              setState(() {
+                _showSearch = !_showSearch;
+                if (!_showSearch) {
+                  _searchCtrl.clear();
+                  _query = '';
+                  _applyFilter();
+                }
+              });
+            },
+          ),
+        ],
       ),
       body: Column(
         children: [
-          // Filter chips
-          SizedBox(
-            height: 48,
-            child: ListView.separated(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              scrollDirection: Axis.horizontal,
-              itemCount: intervals.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 8),
-              itemBuilder: (ctx, i) {
-                final interval = intervals[i];
-                final isSelected = _typeFilter == interval;
-                final label = interval ?? 'All Cadences';
-                final color =
-                    interval != null ? _typeColor(interval) : _subColor;
-
-                return InkWell(
-                  onTap: () => _setFilter(interval),
-                  borderRadius: BorderRadius.circular(16),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 180),
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: isSelected
-                          ? color.withValues(alpha: 0.15)
-                          : theme.colorScheme.surfaceContainerLow,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: isSelected
-                            ? color
-                            : theme.colorScheme.outlineVariant
-                                .withValues(alpha: 0.22),
-                        width: isSelected ? 1.5 : 1,
-                      ),
-                    ),
-                    child: Center(
-                      child: Text(
-                        label,
-                        style: TextStyle(
-                          fontSize: 11.5,
-                          fontWeight: isSelected
-                              ? FontWeight.w800
-                              : FontWeight.w600,
-                          color: isSelected
-                              ? color
-                              : theme.colorScheme.onSurface
-                                  .withValues(alpha: 0.75),
-                        ),
-                      ),
-                    ),
-                  ),
-                );
+          if (_showSearch)
+            SearchBar2(
+              controller: _searchCtrl,
+              hint: 'Search service, cadence, renewal or notes...',
+              onChanged: (v) {
+                setState(() {
+                  _query = v;
+                  _applyFilter();
+                });
               },
             ),
+          // Filter chips
+          FintechFilterBar(
+            children: [
+              for (final interval in intervals)
+                FintechFilterPill(
+                  label: interval ?? 'All Cadences',
+                  selected: _typeFilter == interval,
+                  color: interval != null ? _typeColor(interval) : _subColor,
+                  onTap: () => _setFilter(interval),
+                ),
+            ],
           ),
 
           // Total Metric Card
@@ -323,12 +334,11 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
             child: _loading
                 ? const ShimmerListLoader()
                 : _filtered.isEmpty
-                    ? EmptyState(
+                    ? const EmptyState(
                         icon: Icons.all_inclusive_rounded,
                         title: 'No Subscriptions Logged',
                         subtitle:
                             'Tap + to add software or service subscriptions',
-                        onRefresh: _load,
                       )
                     : GridView.builder(
                         padding: const EdgeInsets.fromLTRB(16, 8, 16, 90),
@@ -400,6 +410,13 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
       bottomNavigationBar: _isSelectionMode
           ? SelectionBottomBar(
               selectedCount: _selectedIds.length,
+              totalCount: _filtered.length,
+              onSelectAll: () {
+                setState(() {
+                  _selectedIds.addAll(_filtered.where((s) => s.id != null).map((s) => s.id!));
+                });
+              },
+              onDeselectAll: () => setState(() => _selectedIds.clear()),
               onClose: () => setState(() => _selectedIds.clear()),
               onDelete: _bulkDelete,
             )

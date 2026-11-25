@@ -6,7 +6,8 @@ import '../../widgets/selection_bottom_bar.dart';
 import 'access_point_form_screen.dart';
 
 class AccessPointsScreen extends StatefulWidget {
-  const AccessPointsScreen({super.key});
+  final int? initialItemId;
+  const AccessPointsScreen({super.key, this.initialItemId});
   @override
   State<AccessPointsScreen> createState() => _AccessPointsScreenState();
 }
@@ -18,6 +19,7 @@ class _AccessPointsScreenState extends State<AccessPointsScreen> with AutomaticK
   List<AccessPoint> _all = [];
   List<AccessPoint> _filtered = [];
   bool _loading = true;
+  bool _handledInitial = false;
   final Set<int> _selectedIds = <int>{};
   bool get _isSelectionMode => _selectedIds.isNotEmpty;
 
@@ -59,6 +61,17 @@ class _AccessPointsScreenState extends State<AccessPointsScreen> with AutomaticK
         _all = list;
         _applyFilter();
       });
+      if (!_handledInitial && widget.initialItemId != null) {
+        final match = list.where((d) => d.id == widget.initialItemId).firstOrNull;
+        if (match != null) {
+          _handledInitial = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              _showDetail(match);
+            }
+          });
+        }
+      }
     } catch (e) {
       if (mounted) {
         showSnack(context, 'Failed to load access points: $e', error: true);
@@ -203,7 +216,6 @@ class _AccessPointsScreenState extends State<AccessPointsScreen> with AutomaticK
                         subtitle: _search.text.isEmpty
                             ? 'Tap + to add an access point'
                             : 'Try a different search',
-                        onRefresh: _load,
                       )
                     : GridView.builder(
                         padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
@@ -258,6 +270,13 @@ class _AccessPointsScreenState extends State<AccessPointsScreen> with AutomaticK
       bottomNavigationBar: _isSelectionMode
           ? SelectionBottomBar(
               selectedCount: _selectedIds.length,
+              totalCount: _filtered.length,
+              onSelectAll: () {
+                setState(() {
+                  _selectedIds.addAll(_filtered.where((d) => d.id != null).map((d) => d.id!));
+                });
+              },
+              onDeselectAll: () => setState(() => _selectedIds.clear()),
               onClose: () => setState(() => _selectedIds.clear()),
               onDelete: _bulkDelete,
               trailingActions: [

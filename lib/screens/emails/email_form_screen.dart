@@ -52,141 +52,20 @@ class _EmailFormScreenState extends State<EmailFormScreen> {
   }
 
   Future<void> _openEmployeePicker() async {
-    final theme = Theme.of(context);
-    final searchCtrl = TextEditingController();
-    List<Employee> filtered = List.from(_employees);
-
-    final selected = await showModalBottomSheet<Employee?>(
+    final picked = await showFintechEmployeePicker(
       context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setModalState) {
-          return Padding(
-            padding: EdgeInsets.only(
-              top: 16,
-              left: 20,
-              right: 20,
-              bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Container(
-                    width: 36,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  'Select Assigned Employee',
-                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
-                ),
-                const SizedBox(height: 12),
-                AppTextField(
-                  controller: searchCtrl,
-                  decoration: const InputDecoration(
-                    hintText: 'Search employee name or phone...',
-                    prefixIcon: Icon(Icons.search_rounded),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  ),
-                  onChanged: (q) {
-                    final query = q.toLowerCase().trim();
-                    setModalState(() {
-                      filtered = _employees.where((e) {
-                        return e.name.toLowerCase().contains(query) ||
-                            e.phoneNumber.toLowerCase().contains(query);
-                      }).toList();
-                    });
-                  },
-                ),
-                const SizedBox(height: 14),
-                ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxHeight: MediaQuery.of(ctx).size.height * 0.45,
-                  ),
-                  child: ListView(
-                    shrinkWrap: true,
-                    children: [
-                      ListTile(
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        leading: IconBox(
-                          icon: Icons.person_off_outlined,
-                          color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
-                          size: 36,
-                        ),
-                        title: const Text(
-                          'None (Unassigned)',
-                          style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14.5),
-                        ),
-                        trailing: _selEmp == null
-                            ? const Icon(Icons.check_circle_rounded, color: _emailColor)
-                            : null,
-                        onTap: () => Navigator.pop(ctx, null),
-                      ),
-                      const Divider(height: 1),
-                      if (filtered.isEmpty && searchCtrl.text.isNotEmpty)
-                        const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 24),
-                          child: Center(
-                            child: Text(
-                              'No matching employees found.',
-                              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                            ),
-                          ),
-                        )
-                      else
-                        ...filtered.map((emp) {
-                          final isSel = _selEmp?.id == emp.id;
-                          return Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              ListTile(
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                leading: IconBox(
-                                  icon: Icons.badge_outlined,
-                                  color: isSel ? _emailColor : AppColors.employeeColor,
-                                  size: 36,
-                                ),
-                                title: Text(
-                                  emp.name,
-                                  style: TextStyle(
-                                    fontWeight: isSel ? FontWeight.w800 : FontWeight.w600,
-                                    fontSize: 14.5,
-                                  ),
-                                ),
-                                subtitle: emp.phoneNumber.isNotEmpty
-                                    ? Text(emp.phoneNumber, style: const TextStyle(fontSize: 12))
-                                    : null,
-                                trailing: isSel
-                                    ? const Icon(Icons.check_circle_rounded, color: _emailColor)
-                                    : null,
-                                onTap: () => Navigator.pop(ctx, emp),
-                              ),
-                              const Divider(height: 1),
-                            ],
-                          );
-                        }),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
-      ),
+      employees: _employees,
+      selectedEmployeeId: _selEmp?.id,
+      title: 'Select Assigned Employee',
+      allowNone: true,
+      accentColor: _emailColor,
     );
-
-    // If modal dismissed with an employee or null
-    setState(() => _selEmp = selected);
+    if (picked == null || !mounted) {
+      return;
+    }
+    setState(() {
+      _selEmp = picked.cleared ? null : picked.employee;
+    });
   }
 
   @override

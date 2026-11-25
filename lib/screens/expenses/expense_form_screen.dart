@@ -1,8 +1,13 @@
+import 'dart:io';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:google_mlkit_document_scanner/google_mlkit_document_scanner.dart';
 import 'package:intl/intl.dart';
+import 'package:path/path.dart' as p;
 import '../../database/database_helper.dart';
 import '../../models/expense.dart';
 import '../../services/currency_service.dart';
+import '../../services/document_storage_service.dart';
 import '../../widgets/common_widgets.dart';
 
 const Color _expenseColor = Color(0xFF10B981);
@@ -20,6 +25,8 @@ class _ExpenseFormScreenState extends State<ExpenseFormScreen> {
   final _db = DatabaseHelper();
   bool _saving = false;
   DateTime _date = DateTime.now();
+  String _receiptPath = '';
+  bool _receiptNeedsCopy = false;
 
   late final _item = TextEditingController(text: widget.expense?.item ?? '');
   late final _price = TextEditingController(
@@ -34,6 +41,7 @@ class _ExpenseFormScreenState extends State<ExpenseFormScreen> {
     super.initState();
     if (widget.expense != null) {
       _date = DateTime.tryParse(widget.expense!.date) ?? DateTime.now();
+      _receiptPath = widget.expense!.receiptPath;
     }
   }
 
@@ -46,14 +54,63 @@ class _ExpenseFormScreenState extends State<ExpenseFormScreen> {
   }
 
   Future<void> _pickDate() async {
+    final now = DateTime.now();
     final picked = await showDatePicker(
       context: context,
-      initialDate: _date,
+      initialDate: _date.isAfter(now) ? now : _date,
       firstDate: DateTime(2020),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
+      lastDate: now,
     );
     if (picked != null && mounted) {
       setState(() => _date = picked);
+    }
+  }
+
+  Future<void> _scanReceipt() async {
+    DocumentScanner? scanner;
+    try {
+      scanner = DocumentScanner(
+        options: DocumentScannerOptions(
+          documentFormats: const {DocumentFormat.jpeg},
+          mode: ScannerMode.base,
+          pageLimit: 1,
+          isGalleryImport: true,
+        ),
+      );
+      final res = await scanner.scanDocument();
+      if (!mounted) {
+        return;
+      }
+      final images = res.images ?? const <String>[];
+      if (images.isNotEmpty) {
+        setState(() {
+          _receiptPath = images.first;
+          _receiptNeedsCopy = true;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        showSnack(context, 'Scanner unavailable ($e). Pick an image file instead.', error: true);
+      }
+    } finally {
+      scanner?.close();
+    }
+  }
+
+  Future<void> _pickReceiptFile() async {
+    final res = await FilePickerPlatform.instance.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['jpg', 'jpeg', 'png', 'webp', 'pdf'],
+    );
+    if (res.isEmpty || !mounted) {
+      return;
+    }
+    final path = res.first.path;
+    if (path != null && path.isNotEmpty) {
+      setState(() {
+        _receiptPath = path;
+        _receiptNeedsCopy = true;
+      });
     }
   }
 
@@ -64,6 +121,20 @@ class _ExpenseFormScreenState extends State<ExpenseFormScreen> {
     }
     setState(() => _saving = true);
     try {
+      String finalReceipt = _receiptPath;
+      if (_receiptNeedsCopy && _receiptPath.isNotEmpty && File(_receiptPath).existsSync()) {
+        finalReceipt = await DocumentStorageService.saveReceiptFileFromPath(_receiptPath);
+        if (widget.expense != null &&
+            widget.expense!.receiptPath.isNotEmpty &&
+            widget.expense!.receiptPath != finalReceipt) {
+          await DocumentStorageService.deleteFileIfExists(widget.expense!.receiptPath);
+        }
+      } else if (_receiptPath.isEmpty &&
+          widget.expense != null &&
+          widget.expense!.receiptPath.isNotEmpty) {
+        await DocumentStorageService.deleteFileIfExists(widget.expense!.receiptPath);
+      }
+
       final price = double.tryParse(_price.text.trim()) ?? 0.0;
       final e = Expense(
         id: widget.expense?.id,
@@ -71,6 +142,7 @@ class _ExpenseFormScreenState extends State<ExpenseFormScreen> {
         item: _item.text.trim(),
         price: price,
         details: _details.text.trim(),
+        receiptPath: finalReceipt,
       );
       if (widget.expense == null) {
         await _db.insertExpense(e);
@@ -234,7 +306,56 @@ class _ExpenseFormScreenState extends State<ExpenseFormScreen> {
                   ],
                 ),
 
-                const SizedBox(height: 16),
+                const SizedBox(height: 18),
+                const SectionLabel('RECEIPT ATTACHMENT (OPTIONAL)'),
+                FintechGroupedCard(
+                  children: [
+                    if (_receiptPath.isNotEmpty) ...[
+                      Row(
+                        children: [
+                          const Icon(Icons.attach_file_rounded, color: _expenseColor, size: 20),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              p.basename(_receiptPath),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.close_rounded, size: 18, color: Colors.red),
+                            onPressed: () => setState(() {
+                              _receiptPath = '';
+                              _receiptNeedsCopy = false;
+                            }),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: _scanReceipt,
+                            icon: const Icon(Icons.document_scanner_rounded, size: 17),
+                            label: const Text('Scan Receipt'),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: _pickReceiptFile,
+                            icon: const Icon(Icons.upload_file_rounded, size: 17),
+                            label: const Text('Attach File'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 28),
                 SizedBox(
                   height: 52,
                   child: FilledButton.icon(
@@ -260,7 +381,7 @@ class _ExpenseFormScreenState extends State<ExpenseFormScreen> {
                     style: FilledButton.styleFrom(
                       backgroundColor: _expenseColor,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(26),
+                        borderRadius: BorderRadius.circular(16),
                       ),
                     ),
                   ),

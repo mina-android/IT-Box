@@ -1,14 +1,14 @@
 // lib/screens/wifi_networks/wifi_networks_screen.dart
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import '../../database/database_helper.dart';
 import '../../models/wifi_network.dart';
-import '../../utils/haptics.dart';
+import '../../theme/app_theme.dart';
 import '../../widgets/common_widgets.dart';
 import 'wifi_network_form_screen.dart';
 
 class WifiNetworksScreen extends StatefulWidget {
-  const WifiNetworksScreen({super.key});
+  final int? initialItemId;
+  const WifiNetworksScreen({super.key, this.initialItemId});
 
   @override
   State<WifiNetworksScreen> createState() => _WifiNetworksScreenState();
@@ -18,6 +18,8 @@ class _WifiNetworksScreenState extends State<WifiNetworksScreen> {
   final DatabaseHelper _db = DatabaseHelper();
   final TextEditingController _searchCtrl = TextEditingController();
   bool _loading = true;
+  bool _showSearch = false;
+  bool _handledInitial = false;
   List<WifiNetwork> _allNetworks = [];
   final Set<String> _revealedPasswords = {};
   final Set<String> _revealedAdminPasswords = {};
@@ -106,6 +108,19 @@ class _WifiNetworksScreenState extends State<WifiNetworksScreen> {
         _mifiCount = combined.where((n) => n.originType == 'MiFi').length;
         _loading = false;
       });
+      if (!_handledInitial && widget.initialItemId != null) {
+        final match = combined
+            .where((n) => !n.isLinkedDevice && n.id == widget.initialItemId)
+            .firstOrNull;
+        if (match != null) {
+          _handledInitial = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              _openForm(match);
+            }
+          });
+        }
+      }
     }
   }
 
@@ -121,10 +136,7 @@ class _WifiNetworksScreenState extends State<WifiNetworksScreen> {
   }
 
   void _copyToClipboard(String text, String label) {
-    if (text.isEmpty) return;
-    Clipboard.setData(ClipboardData(text: text));
-    AppHaptics.tap(context, HapticStrength.light);
-    showSnack(context, '$label copied to clipboard');
+    copySensitiveToClipboard(context, text, label);
   }
 
   Future<void> _openForm([WifiNetwork? existing]) async {
@@ -166,19 +178,35 @@ class _WifiNetworksScreenState extends State<WifiNetworksScreen> {
       appBar: FintechAppBar(
         title: 'Wi-Fi Networks Registry',
         subtitle: '${_allNetworks.length} total networks across infrastructure',
+        actions: [
+          FintechCircleButton(
+            icon: _showSearch ? Icons.search_off_rounded : Icons.search_rounded,
+            tooltip: 'Search',
+            onPressed: () {
+              setState(() {
+                _showSearch = !_showSearch;
+                if (!_showSearch) {
+                  _searchCtrl.clear();
+                }
+              });
+            },
+          ),
+        ],
       ),
-      floatingActionButton: FintechFab(
-        onPressed: () => _openForm(),
-        tooltip: 'Add Network',
-        icon: Icons.add_rounded,
+      floatingActionButton: SmoothExitFab(
+        child: FintechFab(
+          onPressed: () => _openForm(),
+          tooltip: 'Add Network',
+          icon: Icons.add_rounded,
+        ),
       ),
       body: Column(
         children: [
-          // Search & Filter Header
-          SearchBar2(
-            controller: _searchCtrl,
-            hint: 'Search SSID, device, location or notes...',
-          ),
+          if (_showSearch)
+            SearchBar2(
+              controller: _searchCtrl,
+              hint: 'Search SSID, device, location or notes...',
+            ),
 
           // Overview Telemetry Bar
           Padding(
@@ -201,23 +229,12 @@ class _WifiNetworksScreenState extends State<WifiNetworksScreen> {
             child: _loading
                 ? const ShimmerListLoader()
                 : filtered.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.wifi_off_rounded, size: 64, color: cs.outlineVariant),
-                            const SizedBox(height: 12),
-                            Text(
-                              _searchCtrl.text.isEmpty ? 'No Wi-Fi networks found' : 'No networks match "${_searchCtrl.text}"',
-                              style: TextStyle(fontWeight: FontWeight.w700, color: cs.onSurfaceVariant),
-                            ),
-                            const SizedBox(height: 6),
-                            const Text(
-                              'Tap "+ Add Network" to register standalone Wi-Fi credentials',
-                              style: TextStyle(fontSize: 12, color: Colors.grey),
-                            ),
-                          ],
-                        ),
+                    ? EmptyState(
+                        icon: Icons.wifi_off_rounded,
+                        title: _searchCtrl.text.isEmpty ? 'No Wi-Fi Networks Found' : 'No Matching Networks',
+                        subtitle: _searchCtrl.text.isEmpty
+                            ? 'Tap + to register standalone Wi-Fi credentials'
+                            : 'No networks match "${_searchCtrl.text}"',
                       )
                     : ListView.separated(
                         padding: const EdgeInsets.fromLTRB(16, 8, 16, 90),
@@ -358,11 +375,9 @@ class _WifiNetworksScreenState extends State<WifiNetworksScreen> {
                                           Expanded(
                                             child: Text(
                                               isRevealed ? net.password : '••••••••••••',
-                                              style: TextStyle(
-                                                fontFamily: isRevealed ? 'monospace' : null,
-                                                fontWeight: FontWeight.w600,
+                                              style: credentialFont(
                                                 fontSize: 13,
-                                                letterSpacing: isRevealed ? 0 : 2,
+                                                fontWeight: FontWeight.w600,
                                               ),
                                             ),
                                           ),
@@ -371,13 +386,18 @@ class _WifiNetworksScreenState extends State<WifiNetworksScreen> {
                                               isRevealed ? Icons.visibility_off_outlined : Icons.visibility_outlined,
                                               size: 18,
                                             ),
-                                            tooltip: isRevealed ? 'Hide Password' : 'Show Password',
+                                            tooltip: isRevealed ? 'Hide Password' : 'Show Password (30s)',
                                             onPressed: () {
                                               setState(() {
                                                 if (isRevealed) {
                                                   _revealedPasswords.remove(key);
                                                 } else {
                                                   _revealedPasswords.add(key);
+                                                  Future.delayed(const Duration(seconds: 30), () {
+                                                    if (mounted && _revealedPasswords.contains(key)) {
+                                                      setState(() => _revealedPasswords.remove(key));
+                                                    }
+                                                  });
                                                 }
                                               });
                                             },
@@ -436,11 +456,13 @@ class _WifiNetworksScreenState extends State<WifiNetworksScreen> {
                                         children: [
                                           const Icon(Icons.admin_panel_settings_outlined, size: 15, color: Colors.amber),
                                           const SizedBox(width: 6),
-                                          Text(
-                                            'Admin: ${net.adminUsername.isNotEmpty ? net.adminUsername : "admin"} / ${isAdminRevealed ? net.adminPassword : "••••"}',
-                                            style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600),
+                                          Expanded(
+                                            child: Text(
+                                              'Admin: ${net.adminUsername.isNotEmpty ? net.adminUsername : "admin"} / ${isAdminRevealed ? net.adminPassword : "••••"}',
+                                              style: credentialFont(fontSize: 11.5, fontWeight: FontWeight.w600),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
                                           ),
-                                          const Spacer(),
                                           InkWell(
                                             onTap: () {
                                               setState(() {
@@ -448,6 +470,11 @@ class _WifiNetworksScreenState extends State<WifiNetworksScreen> {
                                                   _revealedAdminPasswords.remove(key);
                                                 } else {
                                                   _revealedAdminPasswords.add(key);
+                                                  Future.delayed(const Duration(seconds: 30), () {
+                                                    if (mounted && _revealedAdminPasswords.contains(key)) {
+                                                      setState(() => _revealedAdminPasswords.remove(key));
+                                                    }
+                                                  });
                                                 }
                                               });
                                             },

@@ -21,6 +21,9 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   int _idx = 0;
   int _activitySubTab = 0;
+  int? _activityFocusItemId;
+  int? _emailFocusItemId;
+  int _focusRequestToken = 0;
   final Set<int> _visited = {0};
 
   @override
@@ -39,7 +42,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       // Refresh UI on day/date rollover or return from background
-      AutoBackupService().runIfDue();
+      AutoBackupService.runCatchUpIfNeeded();
       setState(() {});
     }
   }
@@ -76,20 +79,35 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
 
     final screens = [
-      DashboardScreen(onSwitchTab: (i, {int subTab = 0}) {
+      DashboardScreen(onSwitchTab: (i, {int subTab = 0, int? focusItemId}) {
         setState(() {
           _idx = i;
           _visited.add(i);
+          if (focusItemId != null) {
+            _focusRequestToken++;
+          }
           if (i == 2) {
             _activitySubTab = subTab;
+            _activityFocusItemId = focusItemId;
+          } else if (i == 3) {
+            _emailFocusItemId = focusItemId;
           }
         });
       }),
       _visited.contains(1) ? const InventoryScreen() : const SizedBox.shrink(),
       _visited.contains(2)
-          ? ActivityScreen(initialTab: _activitySubTab)
+          ? ActivityScreen(
+              initialTab: _activitySubTab,
+              focusItemId: _activityFocusItemId,
+              focusRequestToken: _focusRequestToken,
+            )
           : const SizedBox.shrink(),
-      _visited.contains(3) ? const EmailsScreen() : const SizedBox.shrink(),
+      _visited.contains(3)
+          ? EmailsScreen(
+              initialItemId: _emailFocusItemId,
+              focusRequestToken: _focusRequestToken,
+            )
+          : const SizedBox.shrink(),
       _visited.contains(4)
           ? MoreScreen(themeService: widget.themeService)
           : const SizedBox.shrink(),

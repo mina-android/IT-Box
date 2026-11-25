@@ -179,6 +179,8 @@ class LabelService {
                     mainAxisSpacing: 10,
                     children: pageItems.map((item) {
                       final code = item['code'] ?? '';
+                      final title = item['title'] ?? '';
+                      final subtitle = item['subtitle'] ?? '';
 
                       return pw.Container(
                         padding: const pw.EdgeInsets.all(8),
@@ -193,19 +195,34 @@ class LabelService {
                             pw.BarcodeWidget(
                               barcode: pw.Barcode.qrCode(),
                               data: code,
-                              width: 80,
-                              height: 80,
+                              width: 72,
+                              height: 72,
                             ),
-                            pw.SizedBox(height: 6),
+                            pw.SizedBox(height: 5),
                             pw.Text(
                               code,
                               style: pw.TextStyle(
-                                fontSize: 11,
+                                fontSize: 10.5,
                                 fontWeight: pw.FontWeight.bold,
                                 color: PdfColors.black,
                               ),
                               textAlign: pw.TextAlign.center,
+                              maxLines: 1,
                             ),
+                            if (title.isNotEmpty)
+                              pw.Text(
+                                title,
+                                style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey800),
+                                textAlign: pw.TextAlign.center,
+                                maxLines: 1,
+                              ),
+                            if (subtitle.isNotEmpty)
+                              pw.Text(
+                                subtitle,
+                                style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey600),
+                                textAlign: pw.TextAlign.center,
+                                maxLines: 1,
+                              ),
                           ],
                         ),
                       );
